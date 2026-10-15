@@ -7,3 +7,15 @@
 .DS_Store
 .vscode/*
 !.vscode/extensions.json
+
+# Next.js
+/node_modules
+/.next/
+/out/
+*.tsbuildinfo
+next-env.d.ts
+npm-debug.log*
+
+# Playwright
+/test-results/
+/playwright-report/
