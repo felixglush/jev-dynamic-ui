@@ -42,6 +42,13 @@ npm run lint
 
 The fake Jev (`e2e/fake-jev.mts`) is a crude rule-based stand-in. These tests check the wiring (questions built, candidates offered, answers turned into forms) but say nothing about how accurate the real model is. First run of the browser tests needs a Chromium: `npx playwright install chromium`, or set `PW_CHROMIUM_PATH` to one you already have.
 
+## Dependency notes
+
+- TypeScript 7 (the native compiler) runs `npm run typecheck`. `typescript-eslint`, which `eslint-config-next` uses, doesn't support TS 7 yet, so `typescript` in `package.json` is aliased to Microsoft's `@typescript/typescript6` compatibility package for the tools that import it (ESLint, Next), as the TS 7 announcement recommends, and `@typescript/native` provides `tsc`. Once typescript-eslint supports TS 7, replace both with a plain `typescript@7`.
+- `@types/node` stays on 22 to match the Node 22 runtime; newer majors describe APIs Node 22 doesn't have.
+- shadcn/ui components are copied into `src/components/ui/` (not a dependency), so they only change when you re-run `npx shadcn add <name> --overwrite`.
+- `npm audit` reports a `braces` advisory in the ESLint toolchain (dev only, nothing ships). There is no patched `braces` release yet.
+
 ## Before deploying
 
 The server action is a public endpoint. Add authentication (and rate limiting, since each call spends TypeSafe credits) before exposing it. The forms don't call a banking API yet; submitting shows a demo notice.
