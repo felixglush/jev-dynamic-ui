@@ -1,7 +1,25 @@
 "use client";
 
 import { useRef } from "react";
-import { CreditCard, History, Landmark, Send, UserPlus, X, type LucideIcon } from "lucide-react";
+import {
+  ArrowLeftRight,
+  Ban,
+  CreditCard,
+  Download,
+  Eye,
+  FilePlus,
+  HandCoins,
+  History,
+  Landmark,
+  Lock,
+  Receipt,
+  Send,
+  TriangleAlert,
+  UserPen,
+  UserPlus,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { clearActions, useActionsTaken, type TakenAction } from "@/lib/actions-taken";
@@ -13,6 +31,16 @@ const ICONS: Record<ActionName, LucideIcon> = {
   send_etransfer: Send,
   pay_credit_card: CreditCard,
   open_account: Landmark,
+  transfer_between_accounts: ArrowLeftRight,
+  pay_bill: Receipt,
+  add_payee: FilePlus,
+  manage_card: Lock,
+  view_account: Eye,
+  request_etransfer: HandCoins,
+  cancel_etransfer: Ban,
+  setup_autodeposit: Download,
+  dispute_transaction: TriangleAlert,
+  update_contact_info: UserPen,
 };
 
 const time = new Intl.DateTimeFormat("en-CA", { hour: "numeric", minute: "2-digit" });

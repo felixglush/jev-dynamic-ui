@@ -24,7 +24,14 @@ import type { ActionCall, ActionName, ParamValue } from "@/lib/jev/types";
 const ACTIONS = Object.keys(CATALOG) as ActionName[];
 
 /** The <input type> for each kind of parameter. */
-const INPUT_TYPE = { name: "text", email: "email", phone: "tel", amount: "number" } as const;
+const INPUT_TYPE = {
+  name: "text",
+  email: "email",
+  phone: "tel",
+  amount: "number",
+  date: "date",
+  account_number: "text",
+} as const;
 
 const VERDICT_BADGE = {
   correct: { text: "Correct", variant: "success" },

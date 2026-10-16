@@ -67,9 +67,9 @@ test("add_etransfer_contact: fills name and email", async ({ page }) => {
 });
 
 test("a message that is not a banking action gets a helpful reply, not a form", async ({ page }) => {
-  await say(page, "what's my chequing balance?");
+  await say(page, "what time does the branch close");
 
-  await expect(page.getByText("I can add an e-Transfer contact")).toBeVisible();
+  await expect(page.getByText("I can help with e-Transfers")).toBeVisible();
   await expect(card(page).getByRole("heading", { level: 2 })).toHaveCount(0);
 });
 
@@ -331,4 +331,145 @@ test("an answer that arrives while the customer is editing the message does not 
   await expect(card(page).getByText("Send an e-Transfer")).toBeVisible();
   await expect(card(page).getByLabel("Edit message")).toBeFocused();
   await expect(card(page).getByLabel("Edit message")).toHaveValue("send $20 to somebody please");
+});
+
+test("transfer_between_accounts: fills both accounts and a start date", async ({ page }) => {
+  await say(page, "move $300 from chequing to savings every month starting 2030-01-15");
+
+  await expect(page.getByText("Transfer Between Your Accounts")).toBeVisible();
+  await expect(page.getByLabel("From account")).toHaveValue("chequing");
+  await expect(page.getByLabel("To account")).toHaveValue("savings");
+  await expect(page.getByLabel("Amount (CAD)")).toHaveValue("300.00");
+  await expect(page.getByLabel("Repeats")).toHaveValue("monthly");
+  await expect(page.getByLabel("Date (optional)")).toHaveValue("2030-01-15");
+});
+
+test("pay_bill: a scheduled bill keeps its date", async ({ page }) => {
+  await say(page, "pay my Hydro One bill $112.30 on 2030-02-01");
+
+  await expect(page.getByText("Pay a Bill")).toBeVisible();
+  await expect(page.getByLabel("Pay to")).toHaveValue("Hydro One");
+  await expect(page.getByLabel("Date (optional)")).toHaveValue("2030-02-01");
+});
+
+test("add_payee: the account number needs digits and is required", async ({ page }) => {
+  await say(page, "add Rogers as a payee, my account number is 4471-2290-88");
+  await expect(page.getByLabel("Company")).toHaveValue("Rogers");
+  await expect(page.getByLabel("Your account number with them")).toHaveValue("4471229088");
+
+  // Only one card is open at a time, so close this one before asking again.
+  await page.keyboard.press("Escape");
+  await expect(card(page)).toBeHidden();
+  await say(page, "add Rogers as a payee");
+  await expect(page.getByLabel("Your account number with them")).toHaveAttribute("aria-invalid", "true");
+});
+
+test("manage_card: the reason only appears when replacing a card", async ({ page }) => {
+  await say(page, "lock my debit card");
+  await expect(page.getByLabel("What to do")).toHaveValue("lock");
+  await expect(page.getByLabel("Why")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Lock Card" })).toBeVisible();
+
+  await page.getByLabel("What to do").selectOption("replace");
+  await expect(page.getByLabel("Why")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Order Replacement" })).toBeVisible();
+});
+
+test("manage_card: a stolen card message fills the reason", async ({ page }) => {
+  await say(page, "my debit card was stolen, please replace it");
+  await expect(page.getByLabel("Why")).toHaveValue("stolen");
+  await expect(page.getByLabel("Which card")).toHaveValue("debit");
+});
+
+test("view_account: shows sample data, and switching to transactions swaps the view", async ({ page }) => {
+  await say(page, "what's my savings balance");
+
+  await expect(page.getByText("Your Account")).toBeVisible();
+  await expect(page.getByText("savings balance", { exact: true })).toBeVisible();
+  await expect(page.getByText("sample figures")).toBeVisible();
+
+  await page.getByLabel("Show").selectOption("transactions");
+  await expect(page.getByRole("list", { name: "Recent savings transactions" })).toBeVisible();
+  await expect(page.getByText("savings balance", { exact: true })).toHaveCount(0);
+});
+
+test("request_etransfer: fills who and how much", async ({ page }) => {
+  await say(page, "request $75 from Sam");
+  await expect(page.getByText("Request Money")).toBeVisible();
+  await expect(page.getByLabel("Request from")).toHaveValue("Sam");
+  await expect(page.getByLabel("Amount (CAD)")).toHaveValue("75.00");
+});
+
+test("cancel_etransfer: fills the recipient", async ({ page }) => {
+  await say(page, "cancel the e-transfer I sent to Priya");
+  await expect(page.getByText("Cancel an e-Transfer").first()).toBeVisible();
+  await expect(page.getByLabel("Sent to")).toHaveValue("Priya");
+});
+
+test("setup_autodeposit: fills the account and email", async ({ page }) => {
+  await say(page, "turn on autodeposit for me.work@example.com into savings");
+  await expect(page.getByText("Turn On Autodeposit").first()).toBeVisible();
+  await expect(page.getByLabel("Deposit into")).toHaveValue("savings");
+  await expect(page.getByLabel("Your email")).toHaveValue("me.work@example.com");
+});
+
+test("dispute_transaction: fills merchant, amount, date and reason", async ({ page }) => {
+  await say(page, "I don't recognize a $45.20 charge from Amazon on 2026-10-02");
+  await expect(page.getByLabel("Merchant")).toHaveValue("Amazon");
+  await expect(page.getByLabel("Amount (CAD)")).toHaveValue("45.20");
+  await expect(page.getByLabel("Date of the charge")).toHaveValue("2026-10-02");
+  await expect(page.getByLabel("What went wrong")).toHaveValue("unrecognized");
+});
+
+test("update_contact_info: shows only the field being changed", async ({ page }) => {
+  await say(page, "change my email to new.me@example.com");
+  await expect(page.getByLabel("New email")).toHaveValue("new.me@example.com");
+  await expect(page.getByLabel("New mailing address")).toHaveCount(0);
+
+  await page.getByLabel("What to change").selectOption("address");
+  await expect(page.getByLabel("New mailing address")).toBeVisible();
+  await expect(page.getByLabel("New email")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Save Changes" }).click();
+  await expect(page.getByLabel("New mailing address")).toBeFocused();
+});
+
+test("send_etransfer: a scheduled e-Transfer shows its date and repeat for review", async ({ page }) => {
+  await say(page, "send $50 to Sam every week starting 2030-01-15");
+  await expect(page.getByLabel("Repeats")).toHaveValue("weekly");
+  await expect(page.getByLabel("Date (optional)")).toHaveValue("2030-01-15");
+});
+
+test("request_etransfer: an email is enough to name who to ask", async ({ page }) => {
+  await say(page, "request $75 from jordan.k@example.com");
+  await expect(page.getByLabel("Their email")).toHaveValue("jordan.k@example.com");
+  await expect(page.getByLabel("Request from")).not.toHaveAttribute("aria-invalid", "true");
+  await page.getByRole("button", { name: "Send Request" }).click();
+  await expect(page.getByRole("status")).not.toHaveText("");
+});
+
+test("setup_autodeposit: needs an email or a phone number", async ({ page }) => {
+  await say(page, "turn on autodeposit into savings");
+  await expect(page.getByLabel("Your email")).toHaveAttribute("aria-invalid", "true");
+  await page.getByLabel("Your mobile number").fill("4165550199");
+  await expect(page.getByLabel("Your email")).not.toHaveAttribute("aria-invalid", "true");
+});
+
+test("view_account: a credit card balance is understood", async ({ page }) => {
+  await say(page, "what's my credit card balance");
+  await expect(page.getByLabel("Account", { exact: true })).toHaveValue("credit_card");
+});
+
+test("a confirmed transfer between accounts is summed up in the sidebar with its schedule", async ({ page }) => {
+  await say(page, "move $300 from chequing to savings every month starting 2030-01-15");
+  await card(page).getByRole("button", { name: "Transfer" }).click();
+
+  await expect(history(page)).toContainText("Transfer Between Your Accounts");
+  await expect(history(page)).toContainText("$300.00 from chequing to savings on 2030-01-15 monthly");
+});
+
+test("view_account opens in the floating card without a second card around it", async ({ page }) => {
+  await say(page, "what's my savings balance");
+  await expect(card(page).getByText("savings balance", { exact: true })).toBeVisible();
+  await expect(card(page).getByRole("heading", { level: 2, name: "Your Account" })).toBeVisible();
 });

@@ -2,7 +2,7 @@
 
 A chat UI that picks a prebuilt UI component to carry out a banking action, filling it with context from the chat. Component selection uses [TypeSafe AI's](https://typesafe.ai) Jev decision model.
 
-Type "Send $50 to Sam for dinner" and the app opens the e-Transfer form with the recipient and amount already filled in. Anything the message doesn't say is left blank and flagged, and anything Jev is unsure about is marked "Please check".
+Type "Send $50 to Sam for dinner" and the app opens the e-Transfer form with the recipient and amount already filled in. It handles 14 actions: e-Transfers (send, request, cancel, contacts, Autodeposit), credit card and bill payments, payees, transfers between your accounts, opening accounts, card lock and replace, balances and transactions, disputes, and contact info changes. Payments can be scheduled ("every month on the 1st"). Anything the message doesn't say is left blank and flagged, and anything Jev is unsure about is marked "Please check".
 
 ## Run it
 
@@ -50,7 +50,7 @@ npm run predict                                  # data/sample-messages.txt -> p
 npm run predict -- my-messages.txt out.csv       # your own messages: one per line, `# group` lines label sections
 ```
 
-Runs every message through the real classifier (needs `TYPESAFE_API_KEY` in the environment) and writes a CSV with the predicted action, its confidence, the extracted parameters (each with its confidence), and which required parameters are missing. The empty `expected_action` column is for you to fill in, by hand in a spreadsheet or with the annotation page below. `data/sample-messages.txt` has 100 messages: clear requests for each of the four actions, vaguer "ambiguous" ones for each action (the group name says which action was meant), messages that mix actions, requests the app has no form for, and tricky values.
+Runs every message through the real classifier (needs `TYPESAFE_API_KEY` in the environment) and writes a CSV with the predicted action, its confidence, the extracted parameters (each with its confidence), and which required parameters are missing. The empty `expected_action` column is for you to fill in, by hand in a spreadsheet or with the annotation page below. `data/sample-messages.txt` has about 240 messages: clear requests for each of the 14 actions, vaguer "ambiguous" ones for each action (the group name says which action was meant), scheduled payments, messages that mix actions, requests the app has no form for, and tricky values.
 
 ### Annotating them
 

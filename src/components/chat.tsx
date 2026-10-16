@@ -245,8 +245,8 @@ function Reply({ outcome }: { outcome: ClassifyOutcome }) {
   if (result.action === null) {
     return (
       <Notice className="text-muted-foreground">
-        I can add an e-Transfer contact, send an e-Transfer, pay a credit card, or open an account. Which would you
-        like?
+        I can help with e-Transfers, bills, credit card payments, transfers between your accounts, your cards, and
+        more. What would you like to do?
       </Notice>
     );
   }
