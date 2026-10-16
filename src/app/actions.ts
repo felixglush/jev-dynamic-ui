@@ -2,10 +2,9 @@
 
 import { TypeSafeError } from "@typesafe-ai/sdk";
 
+import { MAX_MESSAGE_LENGTH } from "@/lib/jev/catalog";
 import { classify } from "@/lib/jev/classify";
 import type { ClassifyOutcome } from "@/lib/jev/types";
-
-const MAX_MESSAGE_LENGTH = 500;
 
 /**
  * Server Action: runs on the server when the chat form is submitted, so the API key never leaves it.

@@ -51,8 +51,8 @@ export function findNames(text: string): string[] {
   for (let size = 1; size <= MAX_NAME_WORDS; size++) {
     for (let start = 0; start + size <= words.length; start++) {
       const span = words.slice(start, start + size);
-      const first = span[0].toLowerCase();
-      const last = span[span.length - 1].toLowerCase();
+      const first = (span[0] ?? "").toLowerCase();
+      const last = (span[span.length - 1] ?? "").toLowerCase();
       if (EDGE_WORDS.has(last) || (first !== "my" && EDGE_WORDS.has(first))) continue;
       spans.push(span.join(" "));
     }

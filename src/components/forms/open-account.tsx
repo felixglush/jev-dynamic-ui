@@ -6,7 +6,7 @@ import type { ActionCall } from "@/lib/jev/types";
 export function OpenAccount({ call }: { call: Extract<ActionCall, { action: "open_account" }> }) {
   const { account_type, initial_deposit } = call.params;
   return (
-    <ActionForm title="Open a new account" description="Tell us what you'd like to open." submitLabel="Continue">
+    <ActionForm title="Open a New Account" description="Tell us what you’d like to open." submitLabel="Open Account">
       <ParamField
         name="account_type"
         label="Account type"

@@ -6,9 +6,9 @@ export function AddEtransferContact({ call }: { call: Extract<ActionCall, { acti
   const { name, email, phone } = call.params;
   return (
     <ActionForm
-      title="Add an e-Transfer contact"
+      title="Add an e-Transfer Contact"
       description="Save someone so you can send them money later."
-      submitLabel="Save contact"
+      submitLabel="Save Contact"
     >
       <ParamField name="name" label="Name" param={name} required />
       <ParamField name="email" label="Email" param={email} type="email" />

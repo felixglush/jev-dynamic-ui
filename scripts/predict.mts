@@ -67,8 +67,10 @@ await Promise.all(
   Array.from({ length: CONCURRENCY }, async () => {
     while (next < items.length) {
       const index = next++;
+      const item = items[index];
+      if (!item) break;
       try {
-        results[index] = await classify(items[index].message);
+        results[index] = await classify(item.message);
       } catch (error) {
         results[index] = error instanceof Error ? error : new Error(String(error));
       }
@@ -78,7 +80,7 @@ await Promise.all(
 
 const header = ["id", "group", "message", "predicted_action", "action_confidence", "params", "missing_required", "expected_action", "note"];
 const rows = items.map((item, i) => {
-  const d = describe(results[i]);
+  const d = describe(results[i] ?? new Error("No result"));
   return [item.id, item.group, item.message, d.action, d.confidence, d.params, d.missing, "", d.note];
 });
 await writeFile(outputPath, [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n") + "\n");

@@ -7,9 +7,9 @@ export function PayCreditCard({ call }: { call: Extract<ActionCall, { action: "p
   const { payment_option, amount, from_account } = call.params;
   return (
     <ActionForm
-      title="Pay your credit card"
+      title="Pay Your Credit Card"
       description="Choose how much to pay and where it comes from."
-      submitLabel="Make payment"
+      submitLabel="Make Payment"
     >
       <ParamField
         name="payment_option"

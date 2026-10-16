@@ -20,6 +20,9 @@ export type ActionSpec = {
   params: Record<string, ParamSpec>;
 };
 
+/** Longest chat message accepted. Shared so the input's maxLength and the server check agree. */
+export const MAX_MESSAGE_LENGTH = 500;
+
 /** Judgments below this confidence are flagged for the customer to double-check. */
 export const LOW_CONFIDENCE = 0.6;
 

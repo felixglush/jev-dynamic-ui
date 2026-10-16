@@ -29,7 +29,8 @@ ActionPanel picks a form  <---  typed result (action + params)  <---
 - `src/lib/jev/classify.ts` sends **one** request per message with a question for the action plus a question for every parameter of every action. Code keeps only the chosen action's answers (TypeSafe's function-calling pattern).
 - Jev picks, it never writes text. For amounts, emails, phones and names, code first finds candidates in the message (`candidates.ts`) and Jev chooses which one fills each parameter, or "none". Choice parameters (account type and so on) pick from the options in the catalog.
 - `src/lib/jev/types.ts` derives the result types from the catalog. `ActionPanel` switches on `call.action`; TypeScript narrows the params in each case and fails the build if an action has no component.
-- `src/components/ui/` is shadcn/ui style components (Tailwind + Radix).
+- `src/components/ui/` is shadcn/ui style components (Tailwind + Radix). `src/components/forms/` holds one form per banking action. `src/app/actions.ts` is the Next.js *Server Action* (server code the browser can call); it's unrelated to the banking "actions".
+- Server and client split: `page.tsx`, `layout.tsx` and `not-found.tsx` are Server Components. Only what needs state or events is a Client Component (`"use client"`): `chat.tsx`, `forms/action-form.tsx` and `app/error.tsx`. The Jev call and the API key live only in `lib/jev/classify.ts` (`server-only`).
 
 ## Tests
 

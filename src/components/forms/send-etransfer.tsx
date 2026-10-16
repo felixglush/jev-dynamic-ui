@@ -6,7 +6,7 @@ import type { ActionCall } from "@/lib/jev/types";
 export function SendEtransfer({ call }: { call: Extract<ActionCall, { action: "send_etransfer" }> }) {
   const { recipient, recipient_email, amount, from_account } = call.params;
   return (
-    <ActionForm title="Send an e-Transfer" description="Review the details before you send." submitLabel="Send money">
+    <ActionForm title="Send an e-Transfer" description="Review the details before you send." submitLabel="Send Money">
       <ParamField name="recipient" label="To" param={recipient} required />
       <ParamField name="recipient_email" label="Their email" param={recipient_email} type="email" />
       <ParamField name="amount" label="Amount (CAD)" param={amount} required type="number" placeholder="0.00" />

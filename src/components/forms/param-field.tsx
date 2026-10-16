@@ -20,21 +20,35 @@ export function ParamField({ name, label, param, required, options, type = "text
   const missing = required && param.value === null;
   const uncertain = param.value !== null && param.confidence !== null && param.confidence < LOW_CONFIDENCE;
   const id = `field-${name}`;
+  const statusId = `${id}-status`;
+  // Read out "Needed" or "Please check" together with the field, not just show it.
+  const describedBy = missing || uncertain ? statusId : undefined;
 
   return (
     <div className="grid gap-1.5">
       <div className="flex items-center gap-2">
         <Label htmlFor={id}>{label}</Label>
-        {missing && <Badge variant="destructive">Needed</Badge>}
-        {uncertain && <Badge variant="warning">Please check</Badge>}
+        {missing && (
+          <Badge id={statusId} variant="destructive">
+            Needed
+          </Badge>
+        )}
+        {uncertain && (
+          <Badge id={statusId} variant="warning">
+            Please check
+          </Badge>
+        )}
       </div>
       {options ? (
         <select
           id={id}
           name={name}
           defaultValue={param.value ?? ""}
+          required={required}
           aria-invalid={missing || undefined}
-          className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive"
+          aria-describedby={describedBy}
+          // Explicit colors: native dropdowns ignore the page theme in some browsers' dark mode.
+          className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive"
         >
           <option value="">Choose…</option>
           {Object.keys(options).map((value) => (
@@ -50,7 +64,16 @@ export function ParamField({ name, label, param, required, options, type = "text
           type={type}
           defaultValue={param.value ?? ""}
           placeholder={placeholder}
+          required={required}
           aria-invalid={missing || undefined}
+          aria-describedby={describedBy}
+          // These are other people's details, so don't let the browser autofill the user's own.
+          autoComplete="off"
+          spellCheck={type === "email" || type === "tel" ? false : undefined}
+          inputMode={type === "number" ? "decimal" : undefined}
+          step={type === "number" ? "0.01" : undefined}
+          min={type === "number" ? 0 : undefined}
+          className={type === "number" ? "tabular-nums" : undefined}
         />
       )}
     </div>
