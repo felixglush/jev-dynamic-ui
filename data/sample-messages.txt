@@ -1,0 +1,50 @@
+# send_etransfer
+Send $50 to Sam for dinner last night
+e-transfer 120 to jordan for the concert tickets
+can you etransfer my landlord $1,850 for rent from chequing
+send mom 200 bucks
+pay Alex 75.50 via interac
+transfer $300 to priya.k@example.com
+send money to Chris
+etransfer 40 to my roommate Dana from savings
+# add_etransfer_contact
+add my sister Priya, priya.k@example.com, so I can e-transfer her
+save Marcus as a contact, his number is 416-555-0199
+add a new e-transfer recipient: Lena Ortiz lena.o@mail.com
+I need to add my landlord to e-transfer
+put dave at dave99@gmail.com in my contacts
+# pay_credit_card
+pay the minimum on my credit card from savings
+can you pay off my visa, it's due tomorrow
+pay $250 toward my mastercard from chequing
+I want to pay my statement balance
+pay my credit card
+# open_account
+I want to open a TFSA and put 2k in it
+how do I open an RRSP
+open a savings account with $500
+I'd like a new chequing account
+start an FHSA
+get me a GIC
+apply for a new credit card
+# ambiguous
+send $50 to Sam and add him as a contact
+I owe Sam money
+transfer $500
+pay Sam $50 on my credit card
+move 1000 to savings
+pay my bills
+open an account and send $100 to my daughter
+# no action
+what's my chequing balance?
+hello?
+what time does the branch close
+I lost my debit card
+block my credit card
+show my last 5 transactions
+change my address
+# tricky values
+send $5,000.50 to María-José
+e-transfer 20 CAD to bob
+send two hundred dollars to Sam
+send 50 to Sam and 30 to Priya
