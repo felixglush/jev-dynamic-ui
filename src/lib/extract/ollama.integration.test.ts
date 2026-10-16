@@ -90,6 +90,12 @@ describe("extractFields", () => {
     expect(fields.name).toMatchObject({ value: "Zoë", status: "kept" });
   });
 
+  it("does not join separate numbers in the message into a phone number", async () => {
+    answer = { name: "Zoë", email: "", phone: "4165550123" };
+    const fields = await extractFields("add_etransfer_contact", "save Zoë, apartment 416, code 5550123");
+    expect(fields.phone).toMatchObject({ value: null, status: "dropped" });
+  });
+
   it("makes no request for an action with only choice parameters", async () => {
     expect(await extractFields("manage_card", "lock my debit card")).toEqual({});
     expect(requests).toHaveLength(0);

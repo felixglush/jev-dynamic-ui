@@ -3,7 +3,7 @@
  * checked against the customer's message. A value that doesn't literally appear there (after
  * normalizing) is dropped and the field is left blank for the customer to fill in.
  */
-import { findAmounts } from "@/lib/jev/candidates";
+import { findAmounts, findPhones } from "@/lib/jev/candidates";
 
 const NUMBER_WORDS: Record<string, number> = {
   one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
@@ -57,6 +57,7 @@ export function isGrounded(type: string, value: string | number, message: string
   if (type === "amount") return typeof value === "number" && value > 0 && amountsIn(message).has(value);
   const text = String(value).trim();
   if (!text) return false;
-  if (type === "phone") return digitsOf(text).length >= 7 && digitsOf(message).includes(digitsOf(text));
+  // Compare against one phone-number span at a time, so separate numbers in the message can't join into one.
+  if (type === "phone") return digitsOf(text).length >= 7 && findPhones(message).some((span) => digitsOf(span).includes(digitsOf(text)));
   return fold(message).includes(fold(text));
 }
