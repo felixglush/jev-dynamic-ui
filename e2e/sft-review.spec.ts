@@ -106,3 +106,16 @@ test("the square grid has one labeled block per group", async ({ page }) => {
   await page.getByRole("combobox", { name: "Group" }).selectOption("send_etransfer");
   await expect(nav.getByRole("group")).toHaveCount(1);
 });
+
+test("the square grid scrolls and shows three groups at a time", async ({ page }) => {
+  const nav = page.getByRole("navigation", { name: "Messages" });
+  const blocks = nav.getByRole("group");
+  expect(await blocks.count()).toBeGreaterThan(3);
+  const fits = async (i: number) => nav.evaluate((grid, n) => {
+    const b = grid.children[n] as HTMLElement;
+    return b.offsetTop - (grid as HTMLElement).offsetTop + b.offsetHeight <= grid.clientHeight + 1;
+  }, i);
+  expect(await fits(2)).toBe(true);
+  expect(await fits(3)).toBe(false);
+  expect(await nav.evaluate((g) => g.scrollHeight > g.clientHeight)).toBe(true);
+});

@@ -92,6 +92,9 @@ function FileStatusText({ status, enabled, usingDefault }: { status: FileStatus;
   );
 }
 
+/** How many group blocks of squares are visible before the grid scrolls. */
+const GROUPS_SHOWN = 3;
+
 /** Typing in a field shouldn't trigger shortcuts. */
 function isTyping(target: EventTarget | null) {
   return target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|SELECT|TEXTAREA)$/.test(target.tagName));
@@ -142,12 +145,27 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ti
   const key = useMemo(() => storageKey(dataset), [dataset]);
   const summary = useMemo(() => summarize(dataset), [dataset]);
   const current = predictions[index];
+  // The grid scrolls and is as tall as its first GROUPS_SHOWN blocks, so that many groups show at once.
+  const gridRef = useRef<HTMLElement>(null);
+  const [gridHeight, setGridHeight] = useState<number>();
   // The squares, one block per group in the order groups first appear. Numbers follow the walk order.
   const squareGroups = useMemo(() => {
     const blocks = new Map<string, { p: (typeof predictions)[number]; i: number }[]>();
     predictions.forEach((p, i) => blocks.set(p.group, [...(blocks.get(p.group) ?? []), { p, i }]));
     return [...blocks].map(([name, items]) => ({ name, items }));
   }, [predictions]);
+
+  useEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return;
+    const blocks = [...grid.children].slice(0, GROUPS_SHOWN) as HTMLElement[];
+    const last = blocks.at(-1);
+    // Blocks can be taller than the window shows; scroll their group into view when you jump to a message.
+    setGridHeight(last && grid.children.length > GROUPS_SHOWN ? last.offsetTop - grid.offsetTop + last.offsetHeight : undefined);
+  }, [squareGroups, allPredictions.length]);
+  useEffect(() => {
+    gridRef.current?.querySelector('[aria-current="true"]')?.scrollIntoView({ block: "nearest" });
+  }, [index, group, view]);
 
   // Restore saved progress once, after the first render. It can't happen during render because the
   // server has no localStorage, and the first browser render must match the server's HTML.
@@ -373,7 +391,13 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ti
         </div>
 
         {/* One square per message: green right, amber wrong values, red wrong action, grey not yet. */}
-        <nav aria-label="Messages" className="flex flex-col gap-3">
+        <nav
+          ref={gridRef}
+          aria-label="Messages"
+          tabIndex={0}
+          style={{ maxHeight: gridHeight }}
+          className="flex flex-col gap-3 overflow-y-auto overscroll-contain rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        >
           {squareGroups.map(({ name, items }) => (
             <div key={name} role="group" aria-label={name ? label(name) : "Messages"} className="flex flex-col gap-1">
               {name && squareGroups.length > 1 && (
