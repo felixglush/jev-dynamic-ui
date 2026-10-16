@@ -2,7 +2,8 @@ import { defineConfig } from "@playwright/test";
 
 import { ANNOTATIONS_FILE, SFT_REVIEW_FILE } from "./e2e/paths";
 
-const APP_PORT = 3100;
+// Something else may hold 3100 on a dev machine; PW_APP_PORT picks another.
+const APP_PORT = Number(process.env.PW_APP_PORT ?? 3100);
 const FAKE_JEV_PORT = 8787;
 
 export default defineConfig({
