@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import { ActionForm } from "./action-form";
 import { ParamField } from "./param-field";
@@ -13,6 +13,8 @@ export function UpdateContactInfo({ call }: { call: Extract<ActionCall, { action
   const { contact_type, new_email, new_phone } = call.params;
   // Only the field being changed is shown, so the form has to know which one is chosen.
   const [type, setType] = useState(contact_type.value ?? "");
+  // The chat keeps earlier forms on screen, so each form needs its own id for this field.
+  const addressId = `${useId()}-new-address`;
 
   return (
     <ActionForm
@@ -33,8 +35,8 @@ export function UpdateContactInfo({ call }: { call: Extract<ActionCall, { action
       {type === "address" && (
         // Addresses can't be picked out of the message the way an email can, so the customer types it.
         <div className="grid gap-1.5">
-          <Label htmlFor="new-address">New mailing address</Label>
-          <Input id="new-address" name="new_address" required autoComplete="street-address" />
+          <Label htmlFor={addressId}>New mailing address</Label>
+          <Input id={addressId} name="new_address" required autoComplete="street-address" />
         </div>
       )}
     </ActionForm>

@@ -202,7 +202,7 @@ test("transfer_between_accounts: fills both accounts and a start date", async ({
   await expect(page.getByLabel("To account")).toHaveValue("savings");
   await expect(page.getByLabel("Amount (CAD)")).toHaveValue("300.00");
   await expect(page.getByLabel("Repeats")).toHaveValue("monthly");
-  await expect(page.getByLabel("Date (leave blank to send now)")).toHaveValue("2030-01-15");
+  await expect(page.getByLabel("Date (optional)")).toHaveValue("2030-01-15");
 });
 
 test("pay_bill: a scheduled bill keeps its date", async ({ page }) => {
@@ -210,7 +210,7 @@ test("pay_bill: a scheduled bill keeps its date", async ({ page }) => {
 
   await expect(page.getByText("Pay a Bill")).toBeVisible();
   await expect(page.getByLabel("Pay to")).toHaveValue("Hydro One");
-  await expect(page.getByLabel("Date (leave blank to send now)")).toHaveValue("2030-02-01");
+  await expect(page.getByLabel("Date (optional)")).toHaveValue("2030-02-01");
 });
 
 test("add_payee: the account number needs digits and is required", async ({ page }) => {
@@ -290,4 +290,17 @@ test("update_contact_info: shows only the field being changed", async ({ page })
 
   await page.getByRole("button", { name: "Save Changes" }).click();
   await expect(page.getByLabel("New mailing address")).toBeFocused();
+});
+
+test("send_etransfer: a scheduled e-Transfer shows its date and repeat for review", async ({ page }) => {
+  await say(page, "send $50 to Sam every week starting 2030-01-15");
+  await expect(page.getByLabel("Repeats")).toHaveValue("weekly");
+  await expect(page.getByLabel("Date (optional)")).toHaveValue("2030-01-15");
+});
+
+test("two address forms keep separate fields: a label focuses its own input", async ({ page }) => {
+  await say(page, "change my address");
+  await say(page, "update my address");
+  await page.getByText("New mailing address").nth(1).click();
+  await expect(page.getByLabel("New mailing address").nth(1)).toBeFocused();
 });

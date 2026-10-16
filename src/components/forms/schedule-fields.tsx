@@ -6,7 +6,7 @@ import type { ParamValue } from "@/lib/jev/types";
 export function ScheduleFields({ date, frequency }: { date: ParamValue; frequency: ParamValue }) {
   return (
     <>
-      <ParamField name="date" label="Date (leave blank to send now)" param={date} type="date" />
+      <ParamField name="date" label="Date (optional)" param={date} type="date" />
       <ParamField name="frequency" label="Repeats" param={frequency} options={FREQUENCY_OPTIONS} emptyLabel="Does not repeat" />
     </>
   );
