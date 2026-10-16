@@ -10,7 +10,8 @@ import { buildSplits } from "./build";
 import type { LabeledExample } from "./batch";
 import { addExamples, applyReview, messageKey, parseExamples, reviewOf, serializeExamples } from "./examples";
 
-const rows = parseExamples(readFileSync("data/sft/examples.jsonl", "utf8"));
+// Review state changes as people work through the file, so these tests start every row from pending.
+const rows = parseExamples(readFileSync("data/sft/examples.jsonl", "utf8")).map((r) => ({ ...r, meta: { ...r.meta, status: "pending" as const } }));
 const row = (message: string) => rows.find((r) => r.messages[1].content === message)!;
 const answer = (r: { messages: [unknown, unknown, { content: string }] }) => JSON.parse(r.messages[2].content);
 
@@ -56,7 +57,7 @@ describe("reviewing a row", () => {
 
   it("a correction rewrites the answer, keeps the generator's first answer, and undo restores it", () => {
     const fixed = applyReview(target, { expectedAction: "send_etransfer", expectedParams: { recipient: "Marcus", amount: "$850", date: "tomorrow" }, note: "was 85" });
-    expect(answer(fixed)).toEqual({ recipient: "Marcus", recipient_email: "", amount: 850, date: "tomorrow" });
+    expect(answer(fixed)).toEqual({ recipient: "Marcus", recipient_email: "", amount: 850, from_account: "", date: "tomorrow" });
     expect(fixed.meta).toMatchObject({ status: "approved", note: "was 85", present: ["recipient", "amount", "date"] });
     // A second correction still remembers what the generator first wrote.
     const again = applyReview(fixed, { expectedAction: "send_etransfer", expectedParams: { recipient: "Marcus", amount: "86" } });

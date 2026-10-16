@@ -102,7 +102,7 @@ describe("fine-tuning files in the annotator", () => {
   test("reviewed answers come out as seed-file lines that the dataset build reads back", () => {
     const dataset = parseAnyDataset(sft);
     const target = dataset.predictions.find((p) => p.message === "transfer $300 to priya.k@example.com")!;
-    dataset.annotations[target.id] = { expectedAction: "send_etransfer", expectedParams: { recipient: "Priya", amount: "300", from_account: "chequing" }, note: "" };
+    dataset.annotations[target.id] = { expectedAction: "send_etransfer", expectedParams: { recipient: "Priya", amount: "300", frequency: "monthly" }, note: "" };
     const lines = serializeLabels(dataset);
     expect(lines).toBe("# send_etransfer\ntransfer $300 to priya.k@example.com => recipient=Priya; amount=300\n");
     expect(parseBatch(lines)[0]).toMatchObject({ action: "send_etransfer", fields: { recipient: "Priya", amount: 300 } });

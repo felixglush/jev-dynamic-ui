@@ -20,9 +20,9 @@ const read = (split: string) => {
 const approveAll = (list: ExampleRecord[]) => list.map((r) => ({ ...r, meta: { ...r.meta, status: "approved" as const } }));
 
 describe("the examples file", () => {
-  it("has unique ids and only pending rows until someone reviews", () => {
+  it("has unique ids and a review status on every row", () => {
     expect(new Set(rows.map((r) => r.meta.id)).size).toBe(rows.length);
-    expect(rows.every((r) => r.meta.status === "pending")).toBe(true);
+    expect(rows.every((r) => ["pending", "approved", "rejected"].includes(r.meta.status))).toBe(true);
   });
 
   it("gives every row the extractor's system prompt and an answer with every field, in schema order", () => {
@@ -40,7 +40,7 @@ describe("the examples file", () => {
 
   it("leaves fields the message doesn't state blank (empty string, 0 for amounts)", () => {
     const row = rows.find((r) => r.messages[1].content === "transfer $300 to priya.k@example.com")!;
-    expect(JSON.parse(row.messages[2].content)).toEqual({ recipient: "", recipient_email: "priya.k@example.com", amount: 300, date: "" });
+    expect(JSON.parse(row.messages[2].content)).toEqual({ recipient: "", recipient_email: "priya.k@example.com", amount: 300, from_account: "", date: "" });
   });
 });
 

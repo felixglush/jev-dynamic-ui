@@ -4,12 +4,18 @@
  */
 import { CATALOG, type ActionSpec, type ParamSpec } from "@/lib/jev/catalog";
 
-export type FreeTextSpec = Exclude<ParamSpec, { type: "choice" }>;
+/** A choice the model copies as text (`extract` in the catalog) becomes a "text" field with that hint. */
+export type FreeTextSpec =
+  | Exclude<ParamSpec, { type: "choice" }>
+  | { type: "text"; question: string; required?: boolean; hint: string };
 
-/** The parameters the model is asked for: everything except choices. */
+/** The parameters the model is asked for: everything except choices, plus choices marked `extract`. */
 export function freeTextParams(action: keyof typeof CATALOG): [string, FreeTextSpec][] {
   const spec: ActionSpec = CATALOG[action];
-  return Object.entries(spec.params).filter((entry): entry is [string, FreeTextSpec] => entry[1].type !== "choice");
+  return Object.entries(spec.params).flatMap(([name, param]): [string, FreeTextSpec][] => {
+    if (param.type !== "choice") return [[name, param]];
+    return param.extract ? [[name, { type: "text", question: param.question, required: param.required, hint: param.extract }]] : [];
+  });
 }
 
 /** The system prompt the model is given. Fine-tuning data (src/lib/sft) trains on exactly this text. */

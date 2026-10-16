@@ -36,10 +36,20 @@ describe("extractFields", () => {
     answer = { recipient: "Sam", recipient_email: "", amount: 50, date: "" };
     await extractFields("send_etransfer", "Send $50 to Sam for dinner");
     const [request] = requests;
-    // from_account and frequency are choices, which Jev answers, so they aren't asked here.
-    expect(Object.keys(request!.format.properties)).toEqual(["recipient", "recipient_email", "amount", "date"]);
-    expect(request!.format.required).toEqual(["recipient", "recipient_email", "amount", "date"]);
+    // frequency is a choice, which Jev answers, so it isn't asked here. from_account is a choice the model also copies as text.
+    const fields = ["recipient", "recipient_email", "amount", "from_account", "date"];
+    expect(Object.keys(request!.format.properties)).toEqual(fields);
+    expect(request!.format.required).toEqual(fields);
     expect(request!.messages.at(-1)!.content).toBe("Send $50 to Sam for dinner");
+  });
+
+  it("also asks for the account and the payment option as text", async () => {
+    answer = { payment_option: "minimum", amount: 0, from_account: "savings" };
+    const fields = await extractFields("pay_credit_card", "pay the minimum on my card from savings");
+    expect(Object.keys(requests.at(-1)!.format.properties)).toEqual(["payment_option", "amount", "from_account"]);
+    expect(fields.payment_option).toEqual({ value: "minimum", status: "kept" });
+    expect(fields.from_account).toEqual({ value: "savings", status: "kept" });
+    expect(fields.amount).toEqual({ value: null, status: "blank" });
   });
 
   it("passes the model's values on and marks empty ones blank", async () => {
