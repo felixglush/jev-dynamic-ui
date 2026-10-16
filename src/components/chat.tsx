@@ -45,6 +45,8 @@ export function Chat() {
   // something typed earlier can never overwrite the card for what is typed now.
   const latestId = useRef(0);
   const lastText = useRef("");
+  // The text the card's current form was made from, so a form for older text is never taken for this text's.
+  const shownText = useRef("");
   // Set when the customer pressed Return: once the answer is in, focus moves into the card.
   const wantFocus = useRef(false);
 
@@ -54,8 +56,8 @@ export function Chat() {
     if (explicit) {
       wantFocus.current = true;
       setOpen(true);
-      // Same text as the last answer: nothing new to ask, just move into the card.
-      if (unchanged && outcome) {
+      // The card already shows this text's answer: nothing new to ask, just move into it.
+      if (unchanged && outcome && shownText.current === text) {
         focusForm();
         return;
       }
@@ -78,8 +80,11 @@ export function Chat() {
       if (!isAction && !explicit) {
         // Forget that this text was asked, so pressing Return on it still gets an explanation.
         lastText.current = "";
+        // The form on screen was for earlier text, so take it away rather than leave it to be confirmed.
+        setOpen(false);
         return;
       }
+      shownText.current = text;
       setOutcome(answer);
       setOpen(true);
     });
@@ -99,6 +104,9 @@ export function Chat() {
 
   function onType(value: string) {
     clearTimeout(timer.current);
+    // Whatever is still in flight was asked about older text, so its answer must not be shown.
+    latestId.current++;
+    lastText.current = "";
     const text = value.trim();
     if (!text) {
       if (open) dismiss();

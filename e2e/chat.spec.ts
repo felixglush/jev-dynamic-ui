@@ -475,3 +475,50 @@ test("while typing, a message that is not an action stays quiet; Return explains
   await composer(page).press("Enter");
   await expect(card(page).getByText("I can help with e-Transfers")).toBeVisible();
 });
+
+test("replacing the message with a non-action takes the old form away", async ({ page }) => {
+  await composer(page).fill("Send $50 to Sam");
+  await expect(card(page).getByText("Send an e-Transfer")).toBeVisible();
+
+  await composer(page).fill("what time does the branch close");
+  await expect(card(page)).toBeHidden();
+  // Nothing is left on the page to confirm by mistake.
+  await expect(page.getByLabel("To")).toHaveCount(0);
+});
+
+test("clearing the message while an answer is on its way keeps that answer from opening a card", async ({ page }) => {
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route("**/*", async (route) => {
+    if (route.request().method() === "POST") await held;
+    await route.continue();
+  });
+  const asked = page.waitForRequest((request) => request.method() === "POST");
+  await composer(page).fill("Send $50 to Sam");
+  await asked;
+  await composer(page).fill("");
+
+  release();
+  await page.waitForTimeout(500);
+  await expect(card(page)).toBeHidden();
+});
+
+test("pressing Return before the newest answer arrives does not focus the older form", async ({ page }) => {
+  await composer(page).fill("Send $50 to Sam");
+  await expect(card(page).getByText("Send an e-Transfer")).toBeVisible();
+
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route("**/*", async (route) => {
+    if (route.request().method() === "POST") await held;
+    await route.continue();
+  });
+  const asked = page.waitForRequest((request) => request.method() === "POST");
+  await composer(page).fill("I want to open a TFSA");
+  await asked;
+  await composer(page).press("Enter");
+  await expect(card(page).getByRole("button", { name: "Send Money" })).not.toBeFocused();
+
+  release();
+  await expect(card(page).getByRole("button", { name: "Open Account" })).toBeFocused();
+});
