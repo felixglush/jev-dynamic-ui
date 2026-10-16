@@ -32,6 +32,15 @@ ActionPanel picks a form  <---  typed result (action + params)  <---
 - `src/components/ui/` is shadcn/ui style components (Tailwind + Radix). `src/components/forms/` holds one form per banking action. `src/app/actions.ts` is the Next.js *Server Action* (server code the browser can call); it's unrelated to the banking "actions".
 - Server and client split: `page.tsx`, `layout.tsx` and `not-found.tsx` are Server Components. Only what needs state or events is a Client Component (`"use client"`): `chat.tsx`, `forms/action-form.tsx`, the `annotate/` components and `app/error.tsx`. The Jev call and the API key live only in `lib/jev/classify.ts` (`server-only`).
 
+### Who fills which parameter
+
+| Kind of parameter | Examples | Filled by |
+| --- | --- | --- |
+| Free text: the value comes from what the customer typed | names, emails, phones, amounts, dates, biller account numbers | the extractor model (`src/lib/extract/`), which copies it from the message or leaves it empty |
+| Choice: the answer is one of the catalog's fixed options | which account to pay from or move money to, credit card payment option (minimum, statement balance, current balance, custom), account type to open, frequency, card, dispute reason | Jev, picking from the options in `catalog.ts` |
+
+The rule is `param.type === "choice"`. `freeTextParams()` in `src/lib/extract/prompt.ts` returns everything that isn't a choice, and that list is the extractor's output fields and its fine-tuning answers. A new choice parameter needs no training data: add it to the catalog with its options. Jev also picks the action itself. For the free-text parameters Jev still chooses among code-found candidates (`candidates.ts`), and the extractor's values are a separate proposal for the same fields.
+
 ## Tests
 
 ```bash
