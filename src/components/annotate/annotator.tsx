@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import type { LoadResult, SaveResult } from "@/app/annotate/actions";
 import { parseDataset, serializeDataset, type Annotation, type Annotations, type Dataset } from "@/lib/annotate/dataset";
 import { saveFile } from "@/lib/annotate/save-file";
 import { summarize, verdict } from "@/lib/annotate/summary";
@@ -11,7 +12,33 @@ import { cn } from "@/lib/utils";
 import { ReviewCard } from "./review-card";
 import { SummaryView } from "./summary-view";
 
-type Props = { initial: Dataset; initialSource: string };
+type Props = {
+  initial: Dataset;
+  initialSource: string;
+  /** Read annotations saved in a file on the server. Left out in the static preview. */
+  loadFromFile?: () => Promise<LoadResult>;
+  /** Write every annotation to that file. Left out in the static preview. */
+  saveToFile?: (changes: Changes) => Promise<SaveResult>;
+};
+
+/** Where the annotations last went: a file on the server, or only this browser. */
+/** A message id → its new annotation, or null when the answer was removed. */
+type Changes = Record<string, Annotation | null>;
+
+function changesBetween(before: Annotations, after: Annotations): Changes {
+  const changes: Changes = {};
+  for (const [id, annotation] of Object.entries(after)) {
+    if (JSON.stringify(before[id]) !== JSON.stringify(annotation)) changes[id] = annotation;
+  }
+  for (const id of Object.keys(before)) if (!(id in after)) changes[id] = null;
+  return changes;
+}
+
+type FileStatus =
+  | { state: "idle" }
+  | { state: "saving"; path: string }
+  | { state: "saved"; path: string }
+  | { state: "error"; message: string };
 
 /** A short fingerprint of the messages, so saved progress is only restored for the same file. */
 function storageKey(dataset: Dataset): string {
@@ -41,6 +68,24 @@ function writeSaved(key: string, annotations: Annotations) {
   }
 }
 
+function FileStatusText({ status, enabled, usingDefault }: { status: FileStatus; enabled: boolean; usingDefault: boolean }) {
+  if (!enabled) return null;
+  let text = "";
+  if (!usingDefault) text = "Imported file: saved in this browser only";
+  else if (status.state === "saving") text = "Saving…";
+  else if (status.state === "saved") text = status.path ? `Saved to ${status.path}` : "";
+  else if (status.state === "error") text = status.message;
+  return (
+    <span
+      role="status"
+      data-testid="file-status"
+      className={cn("mx-3 min-w-0 flex-1 truncate text-xs", status.state === "error" && usingDefault ? "text-destructive" : "text-muted-foreground")}
+    >
+      {text}
+    </span>
+  );
+}
+
 /** Typing in a field shouldn't trigger shortcuts. */
 function isTyping(target: EventTarget | null) {
   return target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|SELECT|TEXTAREA)$/.test(target.tagName));
@@ -50,7 +95,7 @@ function isTyping(target: EventTarget | null) {
  * The annotation screen: one message at a time, a progress strip to jump around, and a summary.
  * Annotations autosave in this browser and can be downloaded as CSV (and imported again).
  */
-export function Annotator({ initial, initialSource }: Props) {
+export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: Props) {
   const [dataset, setDataset] = useState(initial);
   const [source, setSource] = useState(initialSource);
   const [index, setIndex] = useState(0);
@@ -61,6 +106,16 @@ export function Annotator({ initial, initialSource }: Props) {
   const [interactive, setInteractive] = useState(false);
   const [confirmingClear, setConfirmingClear] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  // Autosave to the file only covers the default predictions; an imported CSV stays in the browser.
+  const [usingDefault, setUsingDefault] = useState(true);
+  const usingDefaultRef = useRef(true);
+  const [fileStatus, setFileStatus] = useState<FileStatus>({ state: "idle" });
+  // The file couldn't be read (say, edited by hand into something invalid): don't overwrite it.
+  const fileBlocked = useRef(false);
+  // Changes not yet written to the file, and the newest annotations this session has set.
+  const pending = useRef<Changes | null>(null);
+  const latest = useRef<Annotations>({});
+  const writing = useRef(false);
 
   const { predictions, annotations } = dataset;
   const key = useMemo(() => storageKey(dataset), [dataset]);
@@ -69,19 +124,78 @@ export function Annotator({ initial, initialSource }: Props) {
 
   // Restore saved progress once, after the first render. It can't happen during render because the
   // server has no localStorage, and the first browser render must match the server's HTML.
+  // Progress in this browser is newer than the file, so it wins where the two disagree.
   useEffect(() => {
-    const saved = readSaved(storageKey(initial));
-    if (saved && Object.keys(saved).length > 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing from browser storage
-      setDataset((d) => ({ ...d, annotations: { ...d.annotations, ...saved } }));
-      setRestored(true);
-    }
+    const local = readSaved(storageKey(initial)) ?? {};
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing from browser storage
     setInteractive(true);
+    void (async () => {
+      let fromFile: Annotations = {};
+      if (loadFromFile) {
+        const loaded = await loadFromFile().catch(() => null);
+        if (loaded === null || !loaded.ok) {
+          fileBlocked.current = true;
+          setFileStatus({
+            state: "error",
+            message: loaded?.ok === false ? `Couldn't read the saved file: ${loaded.error}` : "Couldn't reach the server to read the saved file.",
+          });
+        } else {
+          fromFile = loaded.annotations ?? {};
+          // No file yet: stay quiet until the first write creates it.
+          if (loaded.annotations) setFileStatus({ state: "saved", path: loaded.path });
+        }
+      }
+      const merged = { ...fromFile, ...local };
+      // If a CSV was imported while the file was loading, these answers belong to the other dataset.
+      if (usingDefaultRef.current && Object.keys(merged).length > 0) {
+        // Answers given while the file was loading are newer than anything restored, so they win.
+        setDataset((d) => ({ ...d, annotations: { ...merged, ...d.annotations } }));
+        writeSaved(storageKey(initial), { ...merged, ...latest.current });
+        setRestored(true);
+        // Anything only the browser had goes to the file too, except what was answered since.
+        const browserOnly = Object.keys(local).filter((id) => !(id in latest.current) && JSON.stringify(local[id]) !== JSON.stringify(fromFile[id]));
+        if (browserOnly.length > 0) queueFileSave(Object.fromEntries(browserOnly.map((id) => [id, local[id]!])));
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once; the props are stable
   }, [initial]);
+
+  /** Send changed answers to the file. Changes made while a save is running go out together in the next one. */
+  function queueFileSave(changes: Changes) {
+    if (!saveToFile || !usingDefaultRef.current || fileBlocked.current) return;
+    pending.current = { ...pending.current, ...changes };
+    if (writing.current) return;
+    writing.current = true;
+    void (async () => {
+      let failed = false;
+      let path = "";
+      while (pending.current) {
+        const batch = pending.current;
+        pending.current = null;
+        setFileStatus((s) => (s.state === "saved" || s.state === "saving" ? { state: "saving", path: s.path } : { state: "saving", path: "" }));
+        const result = await saveToFile(batch).catch(() => null);
+        if (result?.ok) path = result.path;
+        else {
+          // Keep these changes for the next try, under anything newer, and stop until the next edit.
+          pending.current = { ...batch, ...(pending.current as Changes | null) };
+          failed = true;
+          break;
+        }
+      }
+      writing.current = false;
+      setFileStatus(
+        failed
+          ? { state: "error", message: "Couldn't write the file. Your progress is still saved in this browser." }
+          : { state: "saved", path },
+      );
+    })();
+  }
 
   function setAnnotations(next: Annotations) {
     setDataset((d) => ({ ...d, annotations: next }));
     writeSaved(key, next);
+    latest.current = next;
+    queueFileSave(changesBetween(annotations, next));
   }
 
   function save(annotation: Annotation) {
@@ -110,6 +224,8 @@ export function Annotator({ initial, initialSource }: Props) {
       setDataset({ ...imported, annotations });
       writeSaved(key, annotations);
       setSource(file.name);
+      usingDefaultRef.current = false;
+      setUsingDefault(false);
       setIndex(0);
       setView("review");
       setImportError(null);
@@ -204,6 +320,7 @@ export function Annotator({ initial, initialSource }: Props) {
             <span className="tabular-nums" data-testid="progress">
               {done} of {predictions.length} reviewed
             </span>
+            <FileStatusText status={fileStatus} enabled={Boolean(saveToFile)} usingDefault={usingDefault} />
             <span className="text-muted-foreground tabular-nums">{percent}%</span>
           </div>
           <div
