@@ -27,7 +27,7 @@ export type LabeledExample = {
   split?: Split;
 };
 
-const isAction = (name: string): name is Action => name in CATALOG;
+const isAction = (name: string): name is Action => Object.hasOwn(CATALOG, name);
 
 export function parseBatch(text: string): LabeledExample[] {
   const examples: LabeledExample[] = [];
@@ -87,7 +87,7 @@ export function validateBatch(examples: LabeledExample[]): string[] {
       const spec = params[name];
       if (!spec) {
         problems.push(`${where}: "${name}" is not a free-text field of ${example.action}`);
-      } else if (spec.type === "amount" ? !(typeof value === "number" && value > 0) : typeof value !== "string" || !value.trim()) {
+      } else if (spec.type === "amount" ? !(typeof value === "number" && Number.isFinite(value) && value > 0) : typeof value !== "string" || !value.trim()) {
         problems.push(`${where}: "${name}" has no usable value (${JSON.stringify(value)}); leave a blank field out instead`);
       }
     }
