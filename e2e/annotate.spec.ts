@@ -1,6 +1,9 @@
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import path from "node:path";
 
 import { expect, test, type Page } from "@playwright/test";
+
+import { ANNOTATIONS_FILE } from "./paths";
 
 // These run against the real predictions.csv at the project root (100 messages from a live
 // Jev run), served by the production build. No Jev calls are made on this page.
@@ -13,9 +16,20 @@ async function open(page: Page) {
 
 const square = (page: Page, n: number) => page.getByRole("navigation", { name: "Messages" }).getByRole("button").nth(n - 1);
 
+/** What the app has saved to disk so far, or null if nothing. */
+async function savedFile() {
+  return readFile(ANNOTATIONS_FILE, "utf8").catch(() => null);
+}
+
 test.beforeEach(async ({ page }) => {
+  await rm(ANNOTATIONS_FILE, { force: true });
   await open(page);
   await expect(page.getByRole("heading", { name: "Message 1 of 100" })).toBeVisible();
+});
+
+test.afterEach(async ({ page }) => {
+  // An autosave still in flight when the page closes could write the file during the next test.
+  await expect(page.getByTestId("file-status")).not.toContainText("Saving");
 });
 
 test("renders the first prediction on the server", async ({ request }) => {
@@ -114,7 +128,9 @@ test("a downloaded CSV imports back with its annotations", async ({ page, browse
   expect(csv.split("\n")[0]).toContain("expected_action,expected_params");
   expect(csv).toContain("Send $50 to Sam for dinner last night,send_etransfer,1.000,recipient=Sam (1.00); amount=50.00 (0.98),,send_etransfer,recipient=Sam; amount=50.00");
 
-  // A fresh browser profile, so nothing comes from saved progress.
+  // A fresh browser profile and no saved file, so nothing comes from saved progress.
+  await expect(page.getByTestId("file-status")).toHaveText(/^Saved to/);
+  await rm(ANNOTATIONS_FILE, { force: true });
   const fresh = await browser.newPage();
   await open(fresh);
   await expect(fresh.getByTestId("progress")).toHaveText("0 of 100 reviewed");
@@ -166,4 +182,93 @@ test("re-importing a file keeps the progress saved in this browser", async ({ pa
 
   await expect(page.getByTestId("progress")).toHaveText("1 of 100 reviewed");
   await expect(page.getByText("restored your saved progress")).toBeVisible();
+});
+
+test.describe("autosave to a file", () => {
+  test("every saved answer is written to the file", async ({ page }) => {
+    await page.keyboard.press("y");
+    await expect(page.getByTestId("file-status")).toHaveText(`Saved to ${ANNOTATIONS_FILE}`);
+
+    const csv = (await savedFile())!;
+    expect(csv.split("\n")[0]).toContain("expected_action,expected_params");
+    expect(csv).toContain("Send $50 to Sam for dinner last night,send_etransfer,1.000,recipient=Sam (1.00); amount=50.00 (0.98),,send_etransfer,recipient=Sam; amount=50.00");
+
+    await page.getByLabel("Action", { exact: true }).selectOption("none");
+    await page.getByRole("button", { name: "Save and next" }).click();
+    await expect.poll(async () => ((await savedFile()) ?? "").match(/,none,,/g)?.length ?? 0).toBeGreaterThan(0);
+  });
+
+  test("a different browser picks the saved answers up from the file", async ({ page, browser }) => {
+    await page.keyboard.press("y");
+    await page.keyboard.press("y");
+    await expect(page.getByTestId("file-status")).toHaveText(/^Saved to/);
+
+    // A new browser profile has empty localStorage, so only the file can restore these.
+    const other = await browser.newPage();
+    await open(other);
+    await expect(other.getByTestId("progress")).toHaveText("2 of 100 reviewed");
+    await expect(other.getByText("restored your saved progress")).toBeVisible();
+    await expect(square(other, 2)).toHaveAccessibleName("Message 2, correct");
+    await other.close();
+  });
+
+  test("answers saved for different messages are not applied", async ({ browser }) => {
+    // Pretend predictions.csv was regenerated: message 1 now says something else.
+    const edited = [
+      "id,group,message,predicted_action,action_confidence,params,missing_required,expected_action,expected_params,note,annotator_note",
+      "1,send_etransfer,Send $75 to Sam,send_etransfer,1.000,recipient=Sam (1.00); amount=75.00 (0.98),,send_etransfer,recipient=Sam; amount=75,,",
+      "2,send_etransfer,e-transfer 120 to jordan for the concert tickets,send_etransfer,1.000,recipient=jordan (0.99); amount=120.00 (1.00),,send_etransfer,recipient=jordan; amount=120.00,,",
+      "",
+    ].join("\n");
+    await mkdir(path.dirname(ANNOTATIONS_FILE), { recursive: true });
+    await writeFile(ANNOTATIONS_FILE, edited);
+
+    const other = await browser.newPage();
+    await open(other);
+
+    await expect(other.getByTestId("progress")).toHaveText("1 of 100 reviewed");
+    await expect(square(other, 1)).toHaveAccessibleName("Message 1, not reviewed");
+    await expect(square(other, 2)).toHaveAccessibleName("Message 2, correct");
+    await other.close();
+  });
+
+  test("an unreadable file is left alone and the browser keeps working", async ({ browser }) => {
+    await mkdir(path.dirname(ANNOTATIONS_FILE), { recursive: true });
+    await writeFile(ANNOTATIONS_FILE, "id,message,predicted_action,expected_action\n1,hi,none,wire_money\n");
+
+    const other = await browser.newPage();
+    await open(other);
+    await expect(other.getByTestId("file-status")).toContainText("Couldn't read the saved file");
+    await other.keyboard.press("y");
+
+    await expect(other.getByTestId("progress")).toHaveText("1 of 100 reviewed");
+    expect(await savedFile()).toContain("wire_money");
+    await other.close();
+  });
+
+  test("an imported CSV stays in the browser and leaves the file alone", async ({ page }) => {
+    await page.keyboard.press("y");
+    await expect(page.getByTestId("file-status")).toHaveText(/^Saved to/);
+    const before = await savedFile();
+
+    const csv = await readFile("predictions.csv", "utf8");
+    await page.getByLabel("Import predictions CSV").setInputFiles({ name: "other.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
+    await expect(page.getByTestId("file-status")).toHaveText("Imported file: saved in this browser only");
+    await page.keyboard.press("y");
+    await page.keyboard.press("y");
+    await expect(page.getByTestId("progress")).toHaveText("2 of 100 reviewed");
+
+    expect(await savedFile()).toBe(before);
+  });
+
+  test("Clear all empties the file too", async ({ page }) => {
+    await page.keyboard.press("y");
+    await expect(page.getByTestId("file-status")).toHaveText(/^Saved to/);
+    expect(await savedFile()).toContain(",send_etransfer,recipient=Sam");
+
+    await page.getByRole("button", { name: "Clear all" }).click();
+    await page.getByRole("button", { name: "Click again to clear every answer" }).click();
+
+    await expect.poll(async () => ((await savedFile()) ?? "").includes("recipient=Sam; amount")).toBe(false);
+  });
 });

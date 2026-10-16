@@ -1,5 +1,7 @@
 import { defineConfig } from "@playwright/test";
 
+import { ANNOTATIONS_FILE } from "./e2e/paths";
+
 const APP_PORT = 3100;
 const FAKE_JEV_PORT = 8787;
 
@@ -28,7 +30,11 @@ export default defineConfig({
     {
       // The real app, built for production, pointed at the fake.
       command: `npm run build && npm run start -- -p ${APP_PORT}`,
-      env: { TYPESAFE_API_KEY: "test-key", TYPESAFE_BASE_URL: `http://localhost:${FAKE_JEV_PORT}` },
+      env: {
+        TYPESAFE_API_KEY: "test-key",
+        TYPESAFE_BASE_URL: `http://localhost:${FAKE_JEV_PORT}`,
+        ANNOTATIONS_FILE,
+      },
       url: `http://localhost:${APP_PORT}`,
       reuseExistingServer: !process.env.CI,
       timeout: 240_000,
