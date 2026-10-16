@@ -1,0 +1,4 @@
+FROM ./models/LFM2.5-230M-SFT-Q8_0.gguf
+PARAMETER temperature 0.1
+PARAMETER top_k 50
+PARAMETER repeat_penalty 1.05

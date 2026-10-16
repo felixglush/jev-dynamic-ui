@@ -78,9 +78,18 @@ Rules that keep the test honest:
 - **No message in two splits** (checked in `dataset.test.ts`).
 - At 30 test examples each field has a handful of cases, which is noisy. Grow the held-out set to 100 to 150 hand-written messages before trusting small differences between models.
 
-## 6. Training (next step, not in this PR)
+## 6. Training (LoRA on Modal)
 
-LiquidAI publishes `LiquidAI/LFM2.5-230M` (the instruct model Ollama runs) on hf.co. Fine-tune that one, with loss on the assistant answer only. At this size a full fine-tune or a LoRA both fit on one GPU. Then convert to GGUF Q8_0 and register it with `scripts/ollama/Modelfile`, replacing the base weights. The e2e check is the same `extract:eval` run.
+LoRA trains small add-on matrices next to the frozen model instead of changing all 230M weights. It is cheap, hard to overfit on a small set, and the add-on is a few MB.
+
+`training/modal_train.py` does the whole run on a Modal GPU (an L4): `modal run training/modal_train.py`.
+
+1. **Baseline.** Scores the untouched `LiquidAI/LFM2.5-230M` on val and test, so there is something to compare with.
+2. **Train.** LoRA with rank 16, alpha 32, dropout 0.05, learning rate 2e-4, 3 epochs, batch 16. It targets every linear layer type the model has, which I read from the model's safetensors header: attention `q_proj k_proj v_proj out_proj`, the convolution blocks' `in_proj out_proj`, and the feed-forward `w1 w2 w3`. The records are given as prompt (system + user) and completion (the assistant JSON), so the loss is counted on the answer only. The best epoch by validation loss is kept.
+3. **Score.** The merged model answers every val and test message with greedy decoding, and the script reports per field: *fabricated* (label blank, model filled it in), *missed*, *wrong*, plus exact-record match and invalid JSON. Fabrication rate is the number to watch. The misses are saved to `training/out/*.json` to read.
+4. **GGUF.** Converts the merged model to Q8_0 with llama.cpp. Fetch it with `modal volume get jev-sft latest/LFM2.5-230M-SFT-Q8_0.gguf scripts/ollama/models/`, run `scripts/ollama/use-tuned.sh`, and point the extractor at it with `OLLAMA_MODEL=lfm25-230m-sft`.
+
+You need a Modal account and `modal setup` once (the token stays on your machine). The scoring code has tests (`python3 -m pytest training`); the Modal run itself hasn't been run yet, so expect a library-version tweak on the first try (the image installs the latest `transformers`, `trl` and `peft`; the model was exported with transformers 5.2). Ollama does not apply the `format` schema during this training, so the tuned model is still decoded with it at run time, as before.
 
 ## Decisions (Felix, 2026-10-16)
 

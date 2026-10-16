@@ -22,3 +22,6 @@ npm-debug.log*
 annotate-preview.html
 /e2e-output/
 extractions.csv
+training/out/
+__pycache__/
+.pytest_cache/
