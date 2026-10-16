@@ -1,6 +1,6 @@
 /**
  * Integration tests: the real extractor talking real HTTP to a stand-in Ollama server that returns
- * canned model answers. They prove the request shape and the grounding. They say nothing about how
+ * canned model answers. They prove the request shape and how answers are read. They say nothing about how
  * accurate the real model is: run `npm run extract:eval` against a real Ollama for that.
  */
 import { createServer, type Server } from "node:http";
@@ -42,58 +42,22 @@ describe("extractFields", () => {
     expect(request!.messages.at(-1)!.content).toBe("Send $50 to Sam for dinner");
   });
 
-  it("keeps values that are in the message and leaves the rest blank", async () => {
+  it("passes the model's values on and marks empty ones blank", async () => {
     answer = { recipient: "Sam", recipient_email: "", amount: 50, date: "" };
     const fields = await extractFields("send_etransfer", "Send $50 to Sam for dinner");
-    expect(fields.recipient).toMatchObject({ value: "Sam", status: "kept" });
-    expect(fields.amount).toMatchObject({ value: 50, status: "kept" });
-    expect(fields.recipient_email).toMatchObject({ value: null, status: "blank" });
+    expect(fields.recipient).toEqual({ value: "Sam", status: "kept" });
+    expect(fields.amount).toEqual({ value: 50, status: "kept" });
+    expect(fields.recipient_email).toEqual({ value: null, status: "blank" });
+    expect(fields.date).toEqual({ value: null, status: "blank" });
   });
 
-  it("drops invented values instead of filling the form with them", async () => {
-    answer = { recipient: "John Doe", recipient_email: "sam@example.com", amount: 50, date: "2023-10-05" };
-    const fields = await extractFields("send_etransfer", "Send $50 to Sam");
-    expect(fields.recipient).toMatchObject({ value: null, raw: "John Doe", status: "dropped" });
-    expect(fields.recipient_email).toMatchObject({ value: null, status: "dropped" });
-    expect(fields.date).toMatchObject({ value: null, status: "dropped" });
-    expect(fields.amount).toMatchObject({ value: 50, status: "kept" });
-  });
-
-  it("accepts spelled-out and shorthand amounts, and accented names", async () => {
-    answer = { recipient: "Chloé", recipient_email: "", amount: 75, date: "" };
-    expect((await extractFields("send_etransfer", "etransfer seventy-five dollars to Chloé")).amount!.value).toBe(75);
-    answer = { recipient: "Noah", recipient_email: "", amount: 1500, date: "" };
-    expect((await extractFields("send_etransfer", "send $1.5k to Noah")).amount!.value).toBe(1500);
-    answer = { recipient: "Sam", recipient_email: "", amount: 200, date: "" };
-    expect((await extractFields("send_etransfer", "send two hundred dollars to Sam")).amount!.value).toBe(200);
-  });
-
-  it("rejects an amount the message doesn't state, even a plausible one", async () => {
-    answer = { recipient: "", recipient_email: "", amount: 200, date: "" };
-    const fields = await extractFields("send_etransfer", "send money to Chris");
-    expect(fields.amount).toMatchObject({ value: null, status: "dropped" });
-  });
-
-  it("does not mistake a date, ordinal or number phrase for the amount", async () => {
-    answer = { payee: "Bell", amount: 15, date: "the 15th" };
-    expect((await extractFields("pay_bill", "pay Bell on the 15th")).amount).toMatchObject({ value: null, status: "dropped" });
-    answer = { payee: "Sam", amount: 52, date: "" };
-    expect((await extractFields("pay_bill", "pay Sam fifty dollars in two weeks")).amount).toMatchObject({ status: "dropped" });
-    answer = { payee: "Sam", amount: 50, date: "in two weeks" };
-    expect((await extractFields("pay_bill", "pay Sam fifty dollars in two weeks")).amount).toMatchObject({ value: 50, status: "kept" });
-  });
-
-  it("matches phone numbers by digits, whatever the punctuation", async () => {
-    answer = { name: "Zoë", email: "", phone: "4165550123" };
-    const fields = await extractFields("add_etransfer_contact", "save Zoë's number (416) 555-0123");
-    expect(fields.phone).toMatchObject({ value: "4165550123", status: "kept" });
-    expect(fields.name).toMatchObject({ value: "Zoë", status: "kept" });
-  });
-
-  it("does not join separate numbers in the message into a phone number", async () => {
-    answer = { name: "Zoë", email: "", phone: "4165550123" };
-    const fields = await extractFields("add_etransfer_contact", "save Zoë, apartment 416, code 5550123");
-    expect(fields.phone).toMatchObject({ value: null, status: "dropped" });
+  it("treats a missing amount (0) and a missing field as blank", async () => {
+    answer = { payee: "Bell" };
+    const fields = await extractFields("pay_bill", "pay Bell");
+    expect(fields.payee).toEqual({ value: "Bell", status: "kept" });
+    expect(fields.amount).toEqual({ value: null, status: "blank" });
+    answer = { payee: "", amount: 0, date: "" };
+    expect((await extractFields("pay_bill", "pay my bills")).amount).toEqual({ value: null, status: "blank" });
   });
 
   it("makes no request for an action with only choice parameters", async () => {

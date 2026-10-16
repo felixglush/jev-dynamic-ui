@@ -6,7 +6,7 @@
  * Needs a running Ollama with the model from scripts/ollama/setup.sh. Groups in the messages file
  * named after an action (or "ambiguous: <action>") are asked for that action's fields; other
  * groups (mixed, no action, tricky values) have no single action and are skipped.
- * `status` says what happened: kept, blank (message doesn't say) or dropped (model made it up).
+ * `status` says what happened: kept (the model gave a value) or blank (it left the field empty).
  */
 import { readFile, writeFile } from "node:fs/promises";
 
@@ -20,7 +20,7 @@ const csvCell = (value: string | number | null) => {
   return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 };
 
-const rows = [["group", "action", "message", "field", "raw_model_value", "value", "status", "latency_s"]];
+const rows = [["group", "action", "message", "field", "value", "status", "latency_s"]];
 let group = "";
 let messages = 0;
 for (const raw of (await readFile(inputPath, "utf8")).split("\n")) {
@@ -37,7 +37,7 @@ for (const raw of (await readFile(inputPath, "utf8")).split("\n")) {
   const seconds = ((performance.now() - started) / 1000).toFixed(2);
   messages++;
   for (const [name, field] of Object.entries(fields)) {
-    rows.push([group, action, line, name, field.raw, field.value, field.status, seconds].map(csvCell));
+    rows.push([group, action, line, name, field.value, field.status, seconds].map(csvCell));
   }
 }
 await writeFile(outputPath, rows.map((r) => r.join(",")).join("\n") + "\n");

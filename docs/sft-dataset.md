@@ -1,6 +1,6 @@
 # Fine-tuning dataset for the field extractor
 
-Goal: teach LFM2.5-230M to fill each action's free-text fields from a banking message, and to leave a field **empty** when the message doesn't state it, so the UI highlights it for the customer. The base model fills every field and invents values (emails, dates, amounts). Grounding (`src/lib/extract/ground.ts`) already blanks invented values at run time, but then the model's answer is wasted. Fine-tuning makes the model itself say "not stated".
+Goal: teach LFM2.5-230M to fill each action's free-text fields from a banking message, and to leave a field **empty** when the message doesn't state it, so the UI highlights it for the customer. The base model fills every field and invents values (emails, dates, amounts). There is no run-time check against the message (Felix removed the grounding filter), so the model itself has to say "not stated": that is what fine-tuning is for.
 
 SFT = supervised fine-tuning: show the model many (input, correct answer) pairs and nudge it to produce the correct answer.
 
@@ -28,7 +28,7 @@ Why this shape:
 
 These decide what "correct" means, so they matter more than the example count.
 
-1. **Copy, never infer.** A text value must appear literally in the message (case and accents as written). `sft:build` rejects any label that fails the extractor's own `isGrounded` check, so the labels and the run-time filter can't disagree.
+1. **Copy, never infer.** A text value must appear literally in the message (case and accents as written); amounts are the number the message states, converted (`2k` → 2000). Nothing in code enforces this any more, so it is checked in review. `sft:build` only checks structure: the field belongs to the action, amounts are positive, no empty strings.
 2. **Absent means empty.** An email in the message is not a name: `transfer $300 to priya.k@example.com` has `recipient: ""`. Do not derive a name from an email address.
 3. **Names.** Use the person's name if given (`my sister Priya` → `Priya`). A relationship alone (`mom`, `my landlord`, `my roommate`) is **blank**: the UI highlights it. A name with no email or phone (`send to Priya`) still fills the name; the app is meant to look up the email later, once there is a database. Companies are only company names: `my phone bill` has no payee, `Rogers` does. Titles stay (`Ms. Chen`).
 4. **Amounts are plain numbers**: `$1,850` → 1850, `2k` → 2000, `$1.5k` → 1500, `two hundred dollars` → 200, `75.50` → 75.5. A number that isn't money (`a 1 year GIC`, `the 15th`, a phone number) is never the amount. When two amounts appear, take the one for this action (`charged $11.99 but my plan is $9.99` → 11.99).
@@ -58,9 +58,9 @@ Why a few thousand and not tens of thousands: this is one narrow, mechanical tas
 
 1. **Seed (done here).** 187 hand-labeled lines in `data/sft/seed-labeled.txt`. Messages came from `sample-messages.txt`, which is the same text the base model was evaluated on, so the base-model numbers stay comparable.
 2. **Synthetic expansion.** Claude generates paraphrases of each **train** seed, plus new messages that target the thin fields above. For each generated message the generator also returns its labels. Prompt it with the labeling rules in section 2 and ask for the "absent" variant of each (same message with the email or amount removed).
-3. **Automatic filter.** Run every generated example through `validateExamples`: any label not literally in the message is thrown away. Exact and near duplicates of val/test messages are dropped. This is the same grounding check the extractor uses, so it catches most generator mistakes for free.
-4. **Human review.** Felix reviews a sample, not everything: all rows where the generator left a field blank that a regex finder (`candidates.ts`) would have found, and about 10% of the rest. The `/annotate` page can show and correct rows; its CSV export would need a small mapping to this file format (not built here).
-5. **Check against the base model.** Run `npm run extract:eval` on the held-out set before and after tuning and compare per field: fabricated values (status `dropped`), missed values (blank where the message states one), correct.
+3. **Automatic filter.** Run every generated example through `validateExamples` (structure only) and drop exact and near duplicates of val/test messages. Because there is no text-match check, review matters more: look first at any label whose text isn't a substring of its message, which is a cheap query to run on the generated file.
+4. **Human review.** Felix reviews a sample, not everything: all rows where the generator left a field blank that a regex finder (`candidates.ts`) would have found, every label that is not a substring of its message (amounts excepted), and about 10% of the rest. The `/annotate` page can show and correct rows; its CSV export would need a small mapping to this file format (not built here).
+5. **Check against the base model.** Run `npm run extract:eval` before and after tuning. Its CSV now only says kept or blank, so measuring fabrications means comparing against the labels in `test.jsonl`; a scorer for that is the next piece to build.
 
 ## 5. Split
 

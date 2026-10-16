@@ -1,13 +1,12 @@
 /**
- * Read the hand-labeled seed file (data/sft/seed-labeled.txt) into typed examples and check every
- * label against the same rules the extractor enforces at run time.
+ * Read the hand-labeled seed file (data/sft/seed-labeled.txt) into typed examples and check their
+ * structure. Whether a value is really in the message is a labeling rule (docs/sft-dataset.md), reviewed by a person.
  *
  * File format, one example per line:  `message => field=value; field=value`
  * Only the fields the message states are listed. Everything else is blank in the training target.
  */
 import { CATALOG, type ParamSpec } from "@/lib/jev/catalog";
 import { freeTextParams } from "@/lib/extract/ollama";
-import { isGrounded } from "@/lib/extract/ground";
 
 export type Action = keyof typeof CATALOG;
 
@@ -69,10 +68,8 @@ export function validateExamples(examples: LabeledExample[]): string[] {
       const spec = params[name];
       if (!spec) {
         problems.push(`${where}: "${name}" is not a free-text field of ${example.action}`);
-      } else if (typeof value === "number" && !Number.isFinite(value)) {
-        problems.push(`${where}: "${name}" is not a number`);
-      } else if (!isGrounded(spec.type, value, example.message)) {
-        problems.push(`${where}: ${name}=${JSON.stringify(value)} is not stated in the message`);
+      } else if (spec.type === "amount" ? !(typeof value === "number" && value > 0) : typeof value !== "string" || !value.trim()) {
+        problems.push(`${where}: "${name}" has no usable value (${JSON.stringify(value)}); leave a blank field out instead`);
       }
     }
 

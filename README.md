@@ -54,7 +54,7 @@ npm run extract:eval                        # data/sample-messages.txt -> extrac
 
 The setup script downloads from huggingface.co directly because `ollama run hf.co/...` needs the `hf.co` host. Ollama's installer needs `zstd`. `OLLAMA_URL` and `OLLAMA_MODEL` override the defaults.
 
-Zero-shot, this model fills every field whether or not the message states it (invented emails, "John Doe", a constant date). So `ground.ts` checks each value against the message and drops anything not literally there (spelled-out amounts like "two hundred" and "$1.5k" are understood); dropped and empty fields stay blank for the customer to fill in. On the sample messages that removes the inventions, at about 0.35 s per message on 4 CPU cores. Fine-tuning should teach the model to leave absent fields empty itself.
+Zero-shot, this model fills every field whether or not the message states it (invented emails, "John Doe", a constant date). The extractor passes the model's values on as they are (there is no run-time check against the message), so fine-tuning (see `docs/sft-dataset.md`) is what teaches the model to leave absent fields empty. Empty fields stay blank for the customer to fill in.
 
 ## Validating Jev's predictions
 

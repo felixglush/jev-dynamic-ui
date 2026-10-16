@@ -1,7 +1,7 @@
 /**
  * Checks on the real seed file and the real extractor, not on mocks: the committed training files
- * must match what the build produces, the training prompt must be the extractor's prompt, every
- * label must be stated in its message, and no message may sit in two splits.
+ * must match what the build produces, the training prompt must be the extractor's prompt, labels
+ * must be well-formed, and no message may sit in two splits.
  */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
@@ -16,13 +16,13 @@ const read = (split: string) =>
   readFileSync(`data/sft/${split}.jsonl`, "utf8").trim().split("\n").map((line) => JSON.parse(line) as SftRecord);
 
 describe("seed set", () => {
-  it("has labels that are all stated in their messages", () => {
+  it("has well-formed labels: known fields of the action, positive amounts, no empty strings", () => {
     expect(validateExamples(examples)).toEqual([]);
   });
 
-  it("catches a label the message doesn't state", () => {
-    const bad = [{ ...examples[0]!, fields: { recipient: "Nobody" } }];
-    expect(validateExamples(bad)[0]).toContain("not stated in the message");
+  it("catches a field the action doesn't have", () => {
+    const bad = [{ ...examples[0]!, fields: { nickname: "Nobody" } }];
+    expect(validateExamples(bad)[0]).toContain("not a free-text field");
   });
 });
 
