@@ -39,12 +39,12 @@ function getClient(): TypeSafeClient {
 const ACTION_NAMES = Object.keys(CATALOG) as ActionName[];
 const specsOf = (action: ActionName): Record<string, ParamSpec> => CATALOG[action].params;
 
-function paramQuestion(spec: ParamSpec, query: string): Question | null {
+function paramQuestion(spec: ParamSpec, query: string, now: Date): Question | null {
   let options: Record<string, string | null>;
   if (spec.type === "choice") {
     options = { ...spec.options };
   } else {
-    const found = FINDERS[spec.type](query);
+    const found = FINDERS[spec.type](query, now);
     // Nothing to pick from, so the value is simply absent. No question needed.
     if (found.length === 0) return null;
     options = Object.fromEntries(found.map((span) => [span, null]));
@@ -53,7 +53,7 @@ function paramQuestion(spec: ParamSpec, query: string): Question | null {
   return choice(spec.question, options);
 }
 
-export function buildQuestions(query: string): Questions {
+export function buildQuestions(query: string, now: Date = new Date()): Questions {
   const actionOptions: Record<string, string | null> = {};
   for (const name of ACTION_NAMES) actionOptions[name] = CATALOG[name].description;
   actionOptions[NONE] =
@@ -64,7 +64,7 @@ export function buildQuestions(query: string): Questions {
   };
   for (const name of ACTION_NAMES) {
     for (const [paramName, spec] of Object.entries(specsOf(name))) {
-      const question = paramQuestion(spec, query);
+      const question = paramQuestion(spec, query, now);
       if (question) questions[`${name}.${paramName}`] = question;
     }
   }
@@ -82,6 +82,7 @@ function choiceAnswer(answers: Answers, key: string): ChoiceResponse | undefined
 export async function classify(
   query: string,
   client: TypeSafeClient = getClient(),
+  now: Date = new Date(),
 ): Promise<ClassifyResult> {
   const { answers } = await client.systemOne({
     // State is what Jev reads; the questions refer to it by field name (`query`).
@@ -89,7 +90,7 @@ export async function classify(
       context: "A customer typed this into the chat box of their bank's mobile app.",
       query,
     },
-    questions: buildQuestions(query),
+    questions: buildQuestions(query, now),
   });
 
   const picked = choiceAnswer(answers, ACTION_QUESTION);
@@ -106,7 +107,7 @@ export async function classify(
       params[paramName] = { value: null, confidence: answer?.confidence ?? null };
       if ("required" in spec && spec.required) missing.push(paramName);
     } else {
-      params[paramName] = { value: normalize(spec.type, answer.choice), confidence: answer.confidence };
+      params[paramName] = { value: normalize(spec.type, answer.choice, now), confidence: answer.confidence };
     }
   }
 

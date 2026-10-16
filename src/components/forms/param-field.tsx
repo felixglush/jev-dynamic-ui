@@ -15,6 +15,8 @@ type Props = {
   required?: boolean;
   /** Passing options renders a dropdown instead of a text box. */
   options?: Record<string, string>;
+  /** What the dropdown's empty choice says; "Choose…" unless leaving it empty has its own meaning. */
+  emptyLabel?: string;
   /** Called when the customer picks a different dropdown option. */
   onSelect?: (value: string) => void;
   type?: React.ComponentProps<"input">["type"];
@@ -24,7 +26,7 @@ type Props = {
 };
 
 /** One form field pre-filled from what Jev found, with a nudge when it is missing or uncertain. */
-export function ParamField({ name, label, param, required, options, onSelect, type = "text", placeholder, idPrefix = "field" }: Props) {
+export function ParamField({ name, label, param, required, options, emptyLabel = "Choose…", onSelect, type = "text", placeholder, idPrefix = "field" }: Props) {
   // The chat keeps every earlier form on screen, so two forms can both have an "amount" field.
   // useId gives each field instance its own id; deriving it from `name` alone would clash.
   const id = `${idPrefix}-${useId()}-${name}`;
@@ -74,7 +76,7 @@ export function ParamField({ name, label, param, required, options, onSelect, ty
           // Explicit colors: native dropdowns ignore the page theme in some browsers' dark mode.
           className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive"
         >
-          <option value="">Choose…</option>
+          <option value="">{emptyLabel}</option>
           {Object.keys(options).map((value) => (
             <option key={value} value={value}>
               {value.replaceAll("_", " ")}

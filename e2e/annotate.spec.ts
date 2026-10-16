@@ -46,8 +46,8 @@ test("fixing a value marks the prediction as wrong values", async ({ page }) => 
   await expect(square(page, 3)).toHaveAccessibleName("Message 3, wrong values");
 
   await page.getByRole("button", { name: "Summary" }).click();
-  // send_etransfer has 4 fields and only recipient is wrong; the action itself was right.
-  await expect(page.getByText("3 of 4 (75%)")).toBeVisible();
+  // send_etransfer has 6 fields and only recipient is wrong; the action itself was right.
+  await expect(page.getByText("5 of 6 (83%)")).toBeVisible();
   await expect(page.getByText("1 of 1 (100%)").first()).toBeVisible();
 });
 

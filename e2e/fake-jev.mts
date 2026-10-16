@@ -17,9 +17,20 @@ type SentQuestion = { type: string; criteria: Record<string, unknown> };
 type Sent = { state: { query: string }; questions: Record<string, SentQuestion> };
 
 const KNOWN_NAMES = ["Sam", "Priya", "Jordan", "jordan", "María-José"];
+const KNOWN_COMPANIES = ["Hydro One", "Rogers", "Amazon"];
 
 function actionFor(query: string): string {
   const text = query.toLowerCase();
+  if (/dispute|recognize|charged twice/.test(text)) return "dispute_transaction";
+  if (/\b(lock|unlock|freeze|replace)\b.*card|card.*\b(lost|stolen)\b|\b(lost|stolen)\b.*card/.test(text)) return "manage_card";
+  if (/auto-?deposit/.test(text)) return "setup_autodeposit";
+  if (/cancel.*e-?transfer/.test(text)) return "cancel_etransfer";
+  if (/\brequest\b.*\bfrom\b/.test(text)) return "request_etransfer";
+  if (/\b(change|update)\b.*\b(address|phone|email)\b/.test(text)) return "update_contact_info";
+  if (/\b(balance|transactions)\b/.test(text)) return "view_account";
+  if (/\b(add|new)\b.*\b(biller|payee)\b/.test(text)) return "add_payee";
+  if (/\bbill\b|hydro|rogers/.test(text)) return "pay_bill";
+  if (/\b(move|transfer)\b.*\b(to|into)\b.*\b(savings|chequing|tfsa|rrsp|fhsa)\b/.test(text)) return "transfer_between_accounts";
   if (/credit card|visa|mastercard/.test(text)) return "pay_credit_card";
   if (/\bopen\b|tfsa|rrsp|fhsa/.test(text)) return "open_account";
   if (/\badd\b.*(contact|sister|brother|friend|e-?transfer)/.test(text)) return "add_etransfer_contact";
@@ -31,9 +42,47 @@ function pick(question: string, labels: string[], query: string): string {
   const text = query.toLowerCase();
   if (question === "__action__") return actionFor(query);
 
-  const param = question.split(".")[1];
+  const [action, param] = question.split(".");
   const firstWith = (test: (label: string) => boolean) => labels.find(test) ?? "none";
+  const optionIn = (words: string[]) => words.find((word) => labels.includes(word) && text.includes(word)) ?? "none";
+  if (action === "transfer_between_accounts" && (param === "from_account" || param === "to_account")) {
+    const word = new RegExp(param === "from_account" ? "from (?:my )?(\\w+)" : "(?:to|into) (?:my )?(\\w+)").exec(text)?.[1];
+    return word && labels.includes(word) ? word : "none";
+  }
   switch (param) {
+    case "date":
+      return labels[0] === "none" ? "none" : labels[0]!;
+    case "frequency":
+      return /every week|weekly/.test(text) ? "weekly" : /every two weeks|biweekly/.test(text) ? "biweekly" : /every month|monthly/.test(text) ? "monthly" : "none";
+    case "payee":
+    case "biller":
+    case "merchant":
+      return firstWith((label) => KNOWN_COMPANIES.includes(label));
+    case "account_number":
+      return firstWith((label) => label.replace(/\D/g, "").length >= 5);
+    case "card_action":
+      return /unlock/.test(text) ? "unlock" : /lock|freeze/.test(text) ? "lock" : /replace|lost|stolen/.test(text) ? "replace" : "none";
+    case "card":
+      return optionIn(["debit", "credit"]);
+    case "reason":
+      return action === "dispute_transaction"
+        ? /recognize/.test(text) ? "unrecognized" : /twice/.test(text) ? "duplicate" : "none"
+        : optionIn(["lost", "stolen", "damaged"]);
+    case "account":
+      return optionIn(["chequing", "savings", "tfsa", "rrsp", "fhsa"]);
+    case "view":
+      return /transactions/.test(text) ? "transactions" : /balance/.test(text) ? "balance" : "none";
+    case "deposit_account":
+      return optionIn(["chequing", "savings"]);
+    case "contact_type":
+      return optionIn(["address", "phone", "email"]);
+    case "from_person":
+      return firstWith((label) => KNOWN_NAMES.includes(label));
+    case "from_email":
+    case "new_email":
+      return firstWith((label) => label.includes("@"));
+    case "new_phone":
+      return firstWith((label) => /\d/.test(label));
     case "from_account":
       return text.includes("savings") ? "savings" : text.includes("chequing") ? "chequing" : "none";
     case "payment_option":

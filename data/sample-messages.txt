@@ -87,17 +87,22 @@ open an account and send $100 to my daughter
 send $200 to Sam from my credit card
 add Priya and send her $25
 open a savings account for my daughter and e-transfer her $50
+lock my card and dispute the $60 charge
+move $200 to savings and pay my Rogers bill
+request $50 from Sam and add him as a contact
+pay Rogers $85 from my credit card
+transfer $500 to Sam
 # no action
-what's my chequing balance?
 hello?
 what time does the branch close
-I lost my debit card
-block my credit card
-show my last 5 transactions
-change my address
 what's the interest rate on a TFSA
-cancel the e-transfer I sent yesterday
-dispute a charge on my visa
+how do I get a mortgage pre-approval
+can I talk to a person
+what's the weather like today
+tell me a joke
+do you have a branch near me
+what is an FHSA
+how long does an e-transfer take
 # tricky values
 send $5,000.50 to María-José
 e-transfer 20 CAD to bob
@@ -109,3 +114,160 @@ pay $99.99 on my credit card
 open a TFSA with 10,000.00
 send Ana Lúcia $45 at ana.lucia+bank@gmail.com
 save Zoë's number (416) 555-0123
+pay the 15th of every month, $90 to Bell
+pay Rogers $85 on February 30
+move $1.5k from chequing to savings on the 3rd
+dispute $1,299.99 from Best Buy on 03/04
+add Rogers as a payee, account number 123
+update my phone to 416 555 0123 ext 2
+# transfer_between_accounts
+move $500 from chequing to savings
+transfer 1000 from my savings to my chequing account
+put $200 into my TFSA from chequing
+can you move $2,500 from savings into my RRSP
+transfer $300 from chequing to savings every month
+move 150 to my FHSA from savings, starting on the 1st
+set up a weekly $50 transfer from chequing to savings
+move $400 from chequing to my savings tomorrow
+# ambiguous: transfer_between_accounts
+put some money into my savings
+I want to save $200 this month
+move money to my TFSA
+top up my chequing account
+shift 500 over to savings
+# pay_bill
+pay my Hydro One bill $112.30
+pay Rogers $85 from chequing
+I need to pay my phone bill, $95
+pay the city $1,200 for property tax
+pay my Bell internet bill of $79.99 on the 15th
+pay my insurance $145 every month
+set up a monthly payment of $1,800 to my landlord's company, Maple Property Management
+pay Enbridge $64.20 on 2026-11-05
+pay my water bill $48 from savings next friday
+# ambiguous: pay_bill
+pay my bills
+I need to pay the electric company
+my internet bill is due
+pay my phone bill
+settle my utilities
+# add_payee
+add Rogers as a payee, my account number is 4471 2290 88
+add a new biller: Hydro One, account 100234567
+I want to pay Enbridge, set up a new payee with account number 55512344
+save my Bell account 7788-9900-11 as a payee
+add the City of Toronto as a biller, account number 3320148876
+new payee: Toronto Hydro, 9001234
+add my gym membership, GoodLife Fitness, account number 20194455
+# ambiguous: add_payee
+add a payee
+I want to pay a new company
+add my cell provider so I can pay them online
+can I add my phone company
+set up a new biller
+# manage_card
+lock my debit card
+unlock my credit card
+freeze my visa
+I lost my debit card
+my credit card was stolen, I need a new one
+replace my damaged debit card
+please block my debit card, I think it was stolen
+unfreeze my debit card
+I need a replacement credit card, the chip is broken
+# ambiguous: manage_card
+block my card
+something's wrong with my card
+I can't find my card
+my card isn't working
+get me a new card
+# view_account
+what's my chequing balance?
+how much is in my savings
+show my last 5 transactions
+show recent activity on my credit card
+what's my TFSA balance
+what did I spend on my chequing account this week
+check my RRSP balance
+show me my FHSA balance
+what's my credit card balance
+# ambiguous: view_account
+how much money do I have
+am I overdrawn
+did my paycheque come in
+what's my balance
+show me my accounts
+# request_etransfer
+request $75 from Sam
+ask Priya to send me $40 for the groceries
+request money from jordan.k@example.com, $200
+request 25 bucks from my roommate Dana
+I want to request an e-transfer of $120 from Tom
+ask my brother Kevin for $60 for the gas
+request $1,500 from my tenant Chris for rent
+# ambiguous: request_etransfer
+Sam owes me money
+get my money back from Alicia
+ask Mike to pay me
+can you collect $50 from Dana
+send a payment request to my friend
+# cancel_etransfer
+cancel the e-transfer I sent yesterday
+cancel my $200 e-transfer to Sam
+stop the e-transfer I sent to the wrong person, Jordan
+I sent $50 to Priya by mistake, cancel it
+cancel the interac I sent to Chris
+undo my e-transfer to Alex for $75
+# ambiguous: cancel_etransfer
+take back my e-transfer
+I sent money to the wrong person
+get my money back from that transfer
+reverse my last payment to Sam
+# setup_autodeposit
+turn on autodeposit
+set up autodeposit for me.work@example.com into my chequing account
+enable auto-deposit so e-transfers go straight to savings
+register my email lena.o@mail.com for autodeposit
+turn on autodeposit for my phone number 416-555-0199 into chequing
+I want e-transfers sent to dave99@gmail.com to deposit automatically into savings
+set up auto deposit
+# ambiguous: setup_autodeposit
+I don't want to keep accepting e-transfers manually
+make e-transfers land in my account without a security question
+how do I get e-transfers automatically
+# dispute_transaction
+I don't recognize a $45.20 charge from Amazon
+dispute a charge on my visa
+I was charged twice by Netflix on October 3rd
+there's a $89.99 charge from Uber I didn't make
+dispute the $230 Best Buy charge from 2026-10-02, I never got my order
+Spotify charged me $11.99 but my plan is $9.99
+report a fraudulent charge from Walmart for $150
+# ambiguous: dispute_transaction
+what is this $12.50 charge from Apple on Oct 9
+there's a weird charge on my account
+I think my card was used without me
+this charge is wrong
+I want my money back from that store
+someone took money from my account
+# update_contact_info
+change my email to new.me@example.com
+update my phone number to 647-555-0188
+I moved, change my address
+my new mobile number is (905) 555-0123
+update my email address
+change my phone number
+new email address: priya.k@example.com
+update my mailing address
+# ambiguous: update_contact_info
+my details are out of date
+you have the wrong number for me
+I changed providers
+fix my profile
+# scheduling
+send $50 to Sam every week
+e-transfer my landlord $1,850 on the 1st of every month from chequing
+send Priya $100 on December 24
+pay my credit card the minimum every month
+send Mom 200 bucks on friday
+transfer $75 to Alex tomorrow
