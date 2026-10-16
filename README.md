@@ -50,7 +50,7 @@ npm run predict                                  # data/sample-messages.txt -> p
 npm run predict -- my-messages.txt out.csv       # your own messages: one per line, `# group` lines label sections
 ```
 
-Runs every message through the real classifier (needs `TYPESAFE_API_KEY` in the environment) and writes a CSV with the predicted action, its confidence, the extracted parameters (each with its confidence), and which required parameters are missing. The empty `expected_action` column is for you to fill in, by hand in a spreadsheet or with the annotation page below. `data/sample-messages.txt` covers all four actions plus ambiguous, no-action and tricky-value messages.
+Runs every message through the real classifier (needs `TYPESAFE_API_KEY` in the environment) and writes a CSV with the predicted action, its confidence, the extracted parameters (each with its confidence), and which required parameters are missing. The empty `expected_action` column is for you to fill in, by hand in a spreadsheet or with the annotation page below. `data/sample-messages.txt` has 100 messages: clear requests for each of the four actions, vaguer "ambiguous" ones for each action (the group name says which action was meant), messages that mix actions, requests the app has no form for, and tricky values.
 
 ### Annotating them
 

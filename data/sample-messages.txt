@@ -7,18 +7,32 @@ pay Alex 75.50 via interac
 transfer $300 to priya.k@example.com
 send money to Chris
 etransfer 40 to my roommate Dana from savings
+interac my brother Kevin $60 for the gas
+can you send 15 dollars to taylor@outlook.com
+I need to e-transfer $2,400 to my contractor Mike from my chequing account
+send Grandma 100 for her birthday
 # add_etransfer_contact
 add my sister Priya, priya.k@example.com, so I can e-transfer her
 save Marcus as a contact, his number is 416-555-0199
 add a new e-transfer recipient: Lena Ortiz lena.o@mail.com
 I need to add my landlord to e-transfer
 put dave at dave99@gmail.com in my contacts
+add Jamal as a new interac contact
+new payee for e-transfers: Sofia Rossi, 647-555-0142
+can you save my coworker Ben (ben.wu@company.ca) so I can send him money later
+set up my nephew Leo as an e-transfer recipient, his email is leo.m@gmail.com
+register Hannah's phone number 905-555-0177 for interac
 # pay_credit_card
 pay the minimum on my credit card from savings
 can you pay off my visa, it's due tomorrow
 pay $250 toward my mastercard from chequing
 I want to pay my statement balance
 pay my credit card
+pay the full balance on my credit card
+make a $75 payment to my visa from savings
+put 400 on my credit card
+I'd like to make my minimum credit card payment
+clear my credit card statement balance using my savings account
 # open_account
 I want to open a TFSA and put 2k in it
 how do I open an RRSP
@@ -27,7 +41,42 @@ I'd like a new chequing account
 start an FHSA
 get me a GIC
 apply for a new credit card
-# ambiguous
+sign me up for a high interest savings account
+I want to start a first home savings account with $8,000
+open a 1 year GIC with 5k
+# ambiguous: send_etransfer
+can you get Sam his 40 bucks back
+I need to pay back my friend Alicia
+send it to Jordan
+give my son some money for lunch
+I want to split the dinner bill with Tom, he's owed $35
+transfer money to my mom
+can you pay Priya
+# ambiguous: add_etransfer_contact
+I want to be able to send money to my new roommate
+my cousin's email is raj.p@yahoo.ca
+remember Olivia's number for next time: 289-555-0110
+set up Kim so I can pay her later
+can my babysitter get money from me by email? it's nanny.jo@gmail.com
+add Tyler
+I'll be paying my piano teacher every week, her name is Ms. Chen
+# ambiguous: pay_credit_card
+my card bill is due
+pay off what I owe
+take care of my visa
+I want to pay down some debt, maybe $300
+pay mastercard
+settle up my balance before the due date
+move $200 to my credit card
+# ambiguous: open_account
+I want to start saving for a house
+somewhere to put my tax refund that earns interest
+I need a place to save for retirement
+can I lock in a rate for 2 years
+I'd like a second account for my business expenses
+help me save tax-free
+I want another card
+# ambiguous: mixed
 send $50 to Sam and add him as a contact
 I owe Sam money
 transfer $500
@@ -35,6 +84,9 @@ pay Sam $50 on my credit card
 move 1000 to savings
 pay my bills
 open an account and send $100 to my daughter
+send $200 to Sam from my credit card
+add Priya and send her $25
+open a savings account for my daughter and e-transfer her $50
 # no action
 what's my chequing balance?
 hello?
@@ -43,8 +95,17 @@ I lost my debit card
 block my credit card
 show my last 5 transactions
 change my address
+what's the interest rate on a TFSA
+cancel the e-transfer I sent yesterday
+dispute a charge on my visa
 # tricky values
 send $5,000.50 to María-José
 e-transfer 20 CAD to bob
 send two hundred dollars to Sam
 send 50 to Sam and 30 to Priya
+send $1.5k to Noah
+etransfer seventy-five dollars to Chloé
+pay $99.99 on my credit card
+open a TFSA with 10,000.00
+send Ana Lúcia $45 at ana.lucia+bank@gmail.com
+save Zoë's number (416) 555-0123

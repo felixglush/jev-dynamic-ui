@@ -11,7 +11,7 @@ const text = await readFile(new URL("../../../predictions.csv", import.meta.url)
 describe("the predictions CSV", () => {
   test("parses every message with its values and confidences", () => {
     const { predictions, annotations } = parseDataset(text);
-    expect(predictions).toHaveLength(43);
+    expect(predictions).toHaveLength(100);
     expect(annotations).toEqual({});
     expect(predictions[2]).toMatchObject({
       id: "3",
@@ -19,7 +19,7 @@ describe("the predictions CSV", () => {
       predictedAction: "send_etransfer",
       actionConfidence: 0.99,
       params: {
-        recipient: { value: "my landlord", confidence: 0.33 },
+        recipient: { value: "my landlord", confidence: 0.35 },
         amount: { value: "1850.00", confidence: 1 },
         from_account: { value: "chequing", confidence: 1 },
       },
