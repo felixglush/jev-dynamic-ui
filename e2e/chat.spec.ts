@@ -162,3 +162,34 @@ test("unknown pages get a friendly 404 with a way back", async ({ page }) => {
 test("sets browser theme colors for light and dark", async ({ page }) => {
   await expect(page.locator('meta[name="theme-color"]')).toHaveCount(2);
 });
+
+test("two forms on screen keep separate fields: a label focuses its own input", async ({ page }) => {
+  await say(page, "Send $50 to Sam");
+  await expect(page.getByLabel("Amount (CAD)")).toHaveCount(1);
+  await say(page, "Send $20 to Priya");
+  await expect(page.getByLabel("Amount (CAD)")).toHaveCount(2);
+
+  await page.getByText("Amount (CAD)").nth(1).click();
+  await expect(page.getByLabel("Amount (CAD)").nth(1)).toBeFocused();
+});
+
+test("typing into a Needed field clears the badge", async ({ page }) => {
+  await say(page, "send $20 to somebody");
+  await expect(page.getByText("Needed")).toBeVisible();
+  await page.getByLabel("To").fill("Sam");
+  await expect(page.getByText("Needed")).toHaveCount(0);
+  await expect(page.getByLabel("To")).not.toHaveAttribute("aria-invalid", "true");
+});
+
+test("choosing a custom payment amount makes the amount required", async ({ page }) => {
+  await say(page, "pay my credit card");
+  await page.getByLabel("How much").selectOption("custom");
+  await page.getByRole("button", { name: "Make Payment" }).click();
+
+  await expect(page.getByLabel("Custom amount (CAD)")).toBeFocused();
+  await expect(page.getByRole("status")).toHaveText("");
+
+  await page.getByLabel("Custom amount (CAD)").fill("75");
+  await page.getByRole("button", { name: "Make Payment" }).click();
+  await expect(page.getByRole("status")).not.toHaveText("");
+});
