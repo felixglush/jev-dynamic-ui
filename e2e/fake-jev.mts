@@ -69,7 +69,7 @@ function pick(question: string, labels: string[], query: string): string {
         ? /recognize/.test(text) ? "unrecognized" : /twice/.test(text) ? "duplicate" : "none"
         : optionIn(["lost", "stolen", "damaged"]);
     case "account":
-      return optionIn(["chequing", "savings", "tfsa", "rrsp", "fhsa"]);
+      return /credit card/.test(text) ? "credit_card" : optionIn(["chequing", "savings", "tfsa", "rrsp", "fhsa"]);
     case "view":
       return /transactions/.test(text) ? "transactions" : /balance/.test(text) ? "balance" : "none";
     case "deposit_account":

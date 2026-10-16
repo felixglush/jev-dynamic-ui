@@ -268,9 +268,9 @@ export const CATALOG = {
   request_etransfer: {
     description: "Ask another person to send the customer money by Interac e-Transfer (a money request).",
     params: {
+      // Not required here: the form accepts a name or an email, whichever the customer gives.
       from_person: {
         type: "name",
-        required: true,
         question: "Who does the customer want to request money from in `query`?",
       },
       from_email: {

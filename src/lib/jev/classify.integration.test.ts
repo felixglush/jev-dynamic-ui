@@ -204,6 +204,20 @@ describe("classify: banking actions beyond e-Transfers", () => {
     });
   });
 
+  it("finds Feb 29 even when the next one is years away", async () => {
+    // From March 2028 the next Feb 29 is in 2032.
+    const result = await classify("pay Rogers $85 on February 29", client, new Date(2028, 2, 1));
+    expect(result).toMatchObject({ params: { date: { value: "2032-02-29" } } });
+  });
+
+  it("requests money by email alone, without a name", async () => {
+    expect(await ask("request $75 from jordan.k@example.com")).toMatchObject({
+      action: "request_etransfer",
+      missing: [],
+      params: { from_email: { value: "jordan.k@example.com" }, from_person: { value: null } },
+    });
+  });
+
   it("updates the customer's own email", async () => {
     expect(await ask("change my email to new.me@example.com")).toMatchObject({
       action: "update_contact_info",

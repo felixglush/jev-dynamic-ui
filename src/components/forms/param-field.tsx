@@ -19,6 +19,8 @@ type Props = {
   emptyLabel?: string;
   /** Called when the customer picks a different dropdown option. */
   onSelect?: (value: string) => void;
+  /** Called with the current value on every edit, for forms where one field's need depends on another. */
+  onValue?: (value: string) => void;
   type?: React.ComponentProps<"input">["type"];
   placeholder?: string;
   /** Keeps ids unique when two forms with the same fields share a page. */
@@ -26,7 +28,7 @@ type Props = {
 };
 
 /** One form field pre-filled from what Jev found, with a nudge when it is missing or uncertain. */
-export function ParamField({ name, label, param, required, options, emptyLabel = "Choose…", onSelect, type = "text", placeholder, idPrefix = "field" }: Props) {
+export function ParamField({ name, label, param, required, options, emptyLabel = "Choose…", onSelect, onValue, type = "text", placeholder, idPrefix = "field" }: Props) {
   // The chat keeps every earlier form on screen, so two forms can both have an "amount" field.
   // useId gives each field instance its own id; deriving it from `name` alone would clash.
   const id = `${idPrefix}-${useId()}-${name}`;
@@ -44,6 +46,7 @@ export function ParamField({ name, label, param, required, options, emptyLabel =
   function track(value: string) {
     setCurrent(value);
     setEdited(true);
+    onValue?.(value);
   }
 
   return (

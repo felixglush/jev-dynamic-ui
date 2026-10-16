@@ -108,7 +108,8 @@ export function parseDate(span: string, now: Date): string | null {
   };
   /** The first day on or after today that falls on month/day, in this year or the next. */
   const upcoming = (month: number, day: number) => {
-    for (const year of [today.getUTCFullYear(), today.getUTCFullYear() + 1, today.getUTCFullYear() + 2]) {
+    // Eight years ahead always reaches the next leap day, even across a skipped leap year like 2100.
+    for (let year = today.getUTCFullYear(); year <= today.getUTCFullYear() + 8; year++) {
       if (isReal(year, month, day) && utcDay(year, month, day) >= today) return toIso(utcDay(year, month, day));
     }
     return null;

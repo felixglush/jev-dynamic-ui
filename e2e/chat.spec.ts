@@ -304,3 +304,23 @@ test("two address forms keep separate fields: a label focuses its own input", as
   await page.getByText("New mailing address").nth(1).click();
   await expect(page.getByLabel("New mailing address").nth(1)).toBeFocused();
 });
+
+test("request_etransfer: an email is enough to name who to ask", async ({ page }) => {
+  await say(page, "request $75 from jordan.k@example.com");
+  await expect(page.getByLabel("Their email")).toHaveValue("jordan.k@example.com");
+  await expect(page.getByLabel("Request from")).not.toHaveAttribute("aria-invalid", "true");
+  await page.getByRole("button", { name: "Send Request" }).click();
+  await expect(page.getByRole("status")).not.toHaveText("");
+});
+
+test("setup_autodeposit: needs an email or a phone number", async ({ page }) => {
+  await say(page, "turn on autodeposit into savings");
+  await expect(page.getByLabel("Your email")).toHaveAttribute("aria-invalid", "true");
+  await page.getByLabel("Your mobile number").fill("4165550199");
+  await expect(page.getByLabel("Your email")).not.toHaveAttribute("aria-invalid", "true");
+});
+
+test("view_account: a credit card balance is understood", async ({ page }) => {
+  await say(page, "what's my credit card balance");
+  await expect(page.getByLabel("Account", { exact: true })).toHaveValue("credit_card");
+});
