@@ -39,4 +39,10 @@ describe("the predictions CSV", () => {
     expect(reread).toEqual(dataset);
     expect(summarize(reread)).toMatchObject({ reviewed: 2, action: { total: 2, correct: 1 } });
   });
+
+  test("refuses a file that would silently lose rows or answers", () => {
+    const header = "id,message,predicted_action,expected_action";
+    expect(() => parseDataset(`${header}\n1,hi,none,\n1,hello,none,\n`)).toThrow("Line 3: id 1 appears more than once.");
+    expect(() => parseDataset(`${header}\n1,hi,none,send_etransfr\n`)).toThrow('Line 2: "send_etransfr" isn\'t an action.');
+  });
 });

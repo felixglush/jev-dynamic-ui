@@ -94,9 +94,12 @@ export function parseDataset(text: string): Dataset {
   const predictions: Prediction[] = [];
   const annotations: Annotations = {};
   const seen = new Set<string>();
-  for (const row of rows) {
+  for (const [index, row] of rows.entries()) {
+    const line = index + 2; // 1-based, after the header, as a spreadsheet numbers it
     const id = column(row, "id");
-    if (!id || seen.has(id)) continue;
+    if (!id) continue;
+    // Fail loudly rather than drop data: annotations are keyed by id.
+    if (seen.has(id)) throw new Error(`Line ${line}: id ${id} appears more than once.`);
     seen.add(id);
 
     const confidence = column(row, "action_confidence");
@@ -112,7 +115,10 @@ export function parseDataset(text: string): Dataset {
     });
 
     const expected = column(row, "expected_action");
-    if (isExpectedAction(expected)) {
+    if (expected) {
+      if (!isExpectedAction(expected)) {
+        throw new Error(`Line ${line}: "${expected}" isn't an action. Use none or one of: ${Object.keys(CATALOG).join(", ")}.`);
+      }
       annotations[id] = {
         expectedAction: expected,
         expectedParams: parseExpectedParams(column(row, "expected_params")),

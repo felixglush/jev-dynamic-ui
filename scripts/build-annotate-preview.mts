@@ -52,6 +52,9 @@ const css = (await Promise.all(cssFiles.map((f) => readFile(path.join(cssDir, f)
   // next/font's @font-face rules point at files that aren't in the preview; Google Fonts serves Geist instead.
   .replaceAll(/@font-face\s*\{[^}]*\}/g, "");
 
+const escapeHtml = (text: string) =>
+  text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+
 const data = JSON.stringify({ dataset, source: path.basename(inputPath) }).replaceAll("<", "\\u003c");
 // The theme tokens, so an explicit light/dark choice in the host can win over the system setting.
 const light = css.match(/:root\s*\{(\s*--background[^}]*)\}/)?.[1] ?? "";
@@ -71,7 +74,7 @@ ${css}
 <div class="flex min-h-full flex-col">
   <p class="mx-auto mt-4 w-full max-w-3xl px-4 text-xs text-muted-foreground">
     Preview: the app's /annotate page, built as one static file with ${dataset.predictions.length} predictions
-    from ${path.basename(inputPath)} embedded. Progress is kept in this browser; download the CSV to keep it.
+    from ${escapeHtml(path.basename(inputPath))} embedded. Progress is kept in this browser; download the CSV to keep it.
   </p>
   <main id="main" class="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-4 pt-6 pb-24">
     <div id="annotate-root"></div>
