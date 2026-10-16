@@ -120,12 +120,21 @@ test("the square grid scrolls and shows three groups at a time", async ({ page }
   expect(await nav.evaluate((g) => g.scrollHeight > g.clientHeight)).toBe(true);
 });
 
-test("a fix that only rewrites a value (50 to 50.00) is marked Fixed formatting, not Correct", async ({ page }) => {
+test("a fix that only rewrites a value (50 to 50.00) is marked Fixed, not Correct", async ({ page }) => {
   await page.keyboard.press("n");
   await page.getByLabel("amount", { exact: true }).fill("50.00");
   await page.getByLabel("Note (optional)").fill("money formatting");
   await page.getByLabel("Note (optional)").press("Enter");
   await expect(page.getByTestId("file-status")).toHaveText(`Saved to ${SFT_REVIEW_FILE}`);
-  await expect(page.getByRole("navigation", { name: "Messages" }).getByRole("button").first()).toHaveAccessibleName("Message 1, reformatted");
+  await expect(page.getByRole("navigation", { name: "Messages" }).getByRole("button").first()).toHaveAccessibleName("Message 1, fixed");
   expect((await rows())[0]!.meta).toMatchObject({ status: "approved", note: "money formatting" });
+});
+
+test("a note alone counts as a fix", async ({ page }) => {
+  await page.keyboard.press("n");
+  await page.getByLabel("Note (optional)").fill("fine, but odd wording");
+  await page.getByLabel("Note (optional)").press("Enter");
+  await expect(page.getByTestId("file-status")).toHaveText(`Saved to ${SFT_REVIEW_FILE}`);
+  await expect(page.getByRole("navigation", { name: "Messages" }).getByRole("button").first()).toHaveAccessibleName("Message 1, fixed");
+  expect((await rows())[0]!.meta).toMatchObject({ status: "approved", note: "fine, but odd wording" });
 });

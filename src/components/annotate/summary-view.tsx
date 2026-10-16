@@ -39,7 +39,7 @@ export function SummaryView({ summary, onOpen }: Props) {
           value={formatTally(summary.values)}
           hint="Each field, on messages with the right action."
         />
-        <Stat title="Fully right" value={formatTally(summary.exact)} hint={`Right action and every value.${summary.reformatted ? ` ${summary.reformatted} only needed formatting fixes.` : ""}`} />
+        <Stat title="Fully right" value={formatTally(summary.exact)} hint={`Right action and every value.${summary.fixed ? ` ${summary.fixed} only needed small fixes or a note.` : ""}`} />
       </dl>
 
       <div className="grid gap-6 sm:grid-cols-2">

@@ -32,15 +32,15 @@ export function compareParams(action: ActionName, prediction: Prediction, annota
   });
 }
 
-/** "reformatted": every value is right but at least one was rewritten (say, "$50" to "50.00"). */
-export type Verdict = "correct" | "reformatted" | "wrong_action" | "wrong_values";
+/** "fixed": every value is right, but the reviewer rewrote one (say, "$50" to "50.00") or left a note. */
+export type Verdict = "correct" | "fixed" | "wrong_action" | "wrong_values";
 
 export function verdict(prediction: Prediction, annotation: Annotation): Verdict {
   if (prediction.predictedAction !== annotation.expectedAction) return "wrong_action";
-  if (!isActionName(annotation.expectedAction)) return "correct"; // "none" has no values
+  if (!isActionName(annotation.expectedAction)) return annotation.note.trim() ? "fixed" : "correct"; // "none" has no values
   const params = compareParams(annotation.expectedAction, prediction, annotation);
   if (!params.every((p) => p.correct)) return "wrong_values";
-  return params.some((p) => p.reformatted) ? "reformatted" : "correct";
+  return params.some((p) => p.reformatted) || annotation.note.trim() ? "fixed" : "correct";
 }
 
 type Tally = { total: number; correct: number };
@@ -58,9 +58,9 @@ export type Summary = {
   byExpectedAction: Array<{ action: string } & Tally>;
   /** Action accuracy split at the low-confidence threshold: is Jev's confidence telling the truth? */
   byConfidence: Array<{ label: string } & Tally>;
-  /** Rows counted as right where the reviewer only changed how a value is written. */
-  reformatted: number;
-  mistakes: Array<{ prediction: Prediction; annotation: Annotation; verdict: Exclude<Verdict, "correct" | "reformatted"> }>;
+  /** Rows counted as right where the reviewer only reformatted a value or added a note. */
+  fixed: number;
+  mistakes: Array<{ prediction: Prediction; annotation: Annotation; verdict: Exclude<Verdict, "correct" | "fixed"> }>;
 };
 
 export function summarize({ predictions, annotations }: Dataset): Summary {
@@ -72,7 +72,7 @@ export function summarize({ predictions, annotations }: Dataset): Summary {
     values: { total: 0, correct: 0 },
     byExpectedAction: [],
     byConfidence: [],
-    reformatted: 0,
+    fixed: 0,
     mistakes: [],
   };
   const byAction = new Map<string, Tally>();
@@ -89,9 +89,9 @@ export function summarize({ predictions, annotations }: Dataset): Summary {
     summary.action.total++;
     summary.exact.total++;
     if (actionCorrect) summary.action.correct++;
-    if (result === "correct" || result === "reformatted") summary.exact.correct++;
-    if (result === "reformatted") summary.reformatted++;
-    if (result !== "correct" && result !== "reformatted") summary.mistakes.push({ prediction, annotation, verdict: result });
+    if (result === "correct" || result === "fixed") summary.exact.correct++;
+    if (result === "fixed") summary.fixed++;
+    if (result !== "correct" && result !== "fixed") summary.mistakes.push({ prediction, annotation, verdict: result });
 
     if (actionCorrect && isActionName(annotation.expectedAction)) {
       for (const param of compareParams(annotation.expectedAction, prediction, annotation)) {

@@ -36,7 +36,7 @@ const INPUT_TYPE = {
 
 const VERDICT_BADGE = {
   correct: { text: "Correct", variant: "success" },
-  reformatted: { text: "Fixed formatting", variant: "warning" },
+  fixed: { text: "Fixed", variant: "warning" },
   wrong_action: { text: "Wrong action", variant: "destructive" },
   wrong_values: { text: "Wrong values", variant: "warning" },
 } as const;
