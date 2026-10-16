@@ -120,3 +120,101 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans);
 }
+
+/* Motion. Everything below is switched off for people who ask their system for reduced motion. */
+@theme {
+  --animate-rise: rise 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-slide-in: slide-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+}
+
+/* The floating card and the phone drawer are native <dialog>s. They animate both ways with CSS
+   alone: @starting-style gives the "just opened" state to transition from, and allow-discrete lets
+   display and overlay wait for the closing fade to finish before the dialog disappears. */
+.floating-card,
+.drawer {
+  transition:
+    opacity 200ms ease-out,
+    transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    display 260ms allow-discrete,
+    overlay 260ms allow-discrete;
+  opacity: 0;
+}
+
+.floating-card {
+  transform: translateY(16px) scale(0.97);
+}
+
+.drawer {
+  transform: translateX(-100%);
+}
+
+.floating-card[open],
+.drawer[open] {
+  opacity: 1;
+  transform: none;
+}
+
+@starting-style {
+  .floating-card[open] {
+    opacity: 0;
+    transform: translateY(16px) scale(0.97);
+  }
+
+  .drawer[open] {
+    opacity: 0;
+    transform: translateX(-100%);
+  }
+}
+
+.floating-card::backdrop,
+.drawer::backdrop {
+  transition:
+    background-color 260ms ease-out,
+    backdrop-filter 260ms ease-out,
+    display 260ms allow-discrete,
+    overlay 260ms allow-discrete;
+  background-color: transparent;
+  backdrop-filter: blur(0);
+}
+
+.floating-card[open]::backdrop,
+.drawer[open]::backdrop {
+  background-color: color-mix(in oklab, var(--background) 45%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+@starting-style {
+  .floating-card[open]::backdrop,
+  .drawer[open]::backdrop {
+    background-color: transparent;
+    backdrop-filter: blur(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .floating-card,
+  .drawer,
+  .floating-card::backdrop,
+  .drawer::backdrop {
+    transition: none;
+  }
+
+  .animate-rise,
+  .animate-slide-in {
+    animation: none;
+  }
+}
