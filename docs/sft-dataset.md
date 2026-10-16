@@ -93,6 +93,14 @@ LoRA trains small add-on matrices next to the frozen model instead of changing a
 
 You need a Modal account and `modal setup` once (the token stays on your machine). The scoring code has tests (`python3 -m pytest training`); the Modal run itself hasn't been run yet, so expect a library-version tweak on the first try (the image installs the latest `transformers`, `trl` and `peft`; the model was exported with transformers 5.2).
 
+## What review found in the first iteration
+
+Felix's first pass on `/annotate` (62 sample rows approved, 10 of them with a note) showed the first batch of labels was not ready to train on. Nothing was wrong with the copying rules; the problem was **which fields the data asked the model for**.
+
+- **Account and payment fields were missing from the data (notes on `smp-003`, `-008`, `-049`, `-050`, `-051`, `-062`, `-068`, `-070`, `-086`).** Messages like `etransfer 40 to my roommate Dana from savings` or `move $500 from chequing to savings` state which account, and `pay the minimum` states how much of the card to pay, but the first answers had no field for it, so that information was thrown away. These are the "pick from a set of choices" parameters, which belong to Jev, not the extractor (see the README, "Who fills which parameter"). The fix is that the catalog gives Jev those choices (`from_account` on `open_account` was added so the opening deposit has a source), and the training data stays free text only.
+- **Detour to avoid.** The first attempt at a fix added `from_account`, `to_account`, `payment_option` and `account_type` to the extractor's answers as copied text, and relabeled about 300 rows. Felix rejected that: choices are classified against the supported options, not copied. It was reverted, and the 62 approvals were restored. Don't add choice parameters to the training answers.
+- **`cancel_etransfer` rows can't be fully labeled yet (note on `smp-141`, applying to all of them).** `cancel the e-transfer I sent yesterday` names no recipient or amount, because the real work is looking up which e-transfer is meant, and that retrieval step does not exist yet. The rows stay as they are (blank when the message is silent), but treat that group as provisional until the lookup is built.
+
 ## Decisions (Felix, 2026-10-16)
 
 1. Multi-recipient messages stay out of the data.
