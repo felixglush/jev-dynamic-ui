@@ -1,11 +1,12 @@
 /**
  * Add labeled messages to data/sft/examples.jsonl as pending rows, ready to review on /annotate.
  *
- *   npm run sft:add -- path/to/batch.txt [--source sample|synthetic]    (default: synthetic)
+ *   npm run sft:add -- path/to/batch.txt [--source sample|synthetic] [--train-only]    (default: synthetic)
  *
  * The batch is plain text, one example per line: `message => field=value; field=value`, with
  * `# <action>` headers. "sample" rows are real messages that can end up in val or test once approved;
- * "synthetic" rows are generated and only ever train. A message already in the file is skipped.
+ * "synthetic" rows are generated. With --train-only the rows skip the val/test split and always train, so
+ * val and test stay as they were when a model was last scored. A message already in the file is skipped.
  * Existing rows, and any review already done on them, are never touched.
  */
 import { readFile, writeFile } from "node:fs/promises";
@@ -16,9 +17,10 @@ import { addExamples, parseExamples, serializeExamples, type ExampleSource } fro
 const args = process.argv.slice(2);
 const flag = args.indexOf("--source");
 const source = (flag === -1 ? "synthetic" : args[flag + 1]) as ExampleSource;
+const trainOnly = args.includes("--train-only");
 const batchPath = args.find((arg, index) => !arg.startsWith("--") && args[index - 1] !== "--source");
 if (!batchPath || (source !== "sample" && source !== "synthetic")) {
-  console.error("Usage: npm run sft:add -- path/to/batch.txt [--source sample|synthetic]");
+  console.error("Usage: npm run sft:add -- path/to/batch.txt [--source sample|synthetic] [--train-only]");
   process.exit(1);
 }
 const FILE = "data/sft/examples.jsonl";
@@ -31,7 +33,7 @@ if (problems.length > 0) {
 }
 
 const existing = parseExamples(await readFile(FILE, "utf8").catch(() => ""));
-const { records, skipped } = addExamples(existing, batch, source);
+const { records, skipped } = addExamples(existing, batch, source, { trainOnly });
 await writeFile(FILE, serializeExamples(records));
 
 console.log(`Added ${records.length - existing.length} pending ${source} row(s); skipped ${skipped.length}.`);

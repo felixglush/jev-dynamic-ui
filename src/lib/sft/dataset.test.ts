@@ -109,3 +109,17 @@ describe("stratifiedSplit", () => {
     for (const [id, split] of stratifiedSplit(rows)) expect(reversed.get(id)).toBe(split);
   });
 });
+
+describe("train-only rows", () => {
+  it("never change val or test, so a model scored earlier stays comparable", () => {
+    const approved = approveAll(rows);
+    const without = buildSplits(approved.filter((r) => !r.meta.trainOnly));
+    const withAll = buildSplits(approved);
+    expect(withAll.files.val).toEqual(without.files.val);
+    expect(withAll.files.test).toEqual(without.files.test);
+    const trainOnly = approved.filter((r) => r.meta.trainOnly).map((r) => r.meta.id);
+    expect(trainOnly.length).toBeGreaterThan(0);
+    const heldOut = new Set([...withAll.files.val, ...withAll.files.test].map((r) => r.meta.id));
+    expect(trainOnly.some((id) => heldOut.has(id))).toBe(false);
+  });
+});

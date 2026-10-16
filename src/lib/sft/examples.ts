@@ -8,6 +8,8 @@
  *   original  what the generator wrote, kept once a reviewer changes it, so the page can show the
  *             correction and "undo" can restore it
  *   note      the reviewer's note
+ *   trainOnly the row is never held out: it goes to train whatever the split would say. Rows added after
+ *             a model was scored use it, so val and test stay the same and runs stay comparable
  *
  * Labels were written by Claude, so nothing counts until a person approves it on /annotate, which edits
  * this file in place. `npm run sft:build` then builds train, val and test from the approved rows.
@@ -21,7 +23,7 @@ export type ExampleSource = "sample" | "synthetic";
 export type ReviewStatus = "pending" | "approved" | "rejected";
 
 export type ExampleRecord = SftRecord & {
-  meta: SftRecord["meta"] & { source: ExampleSource; status: ReviewStatus; original?: { action: string; answer: string }; note?: string };
+  meta: SftRecord["meta"] & { source: ExampleSource; status: ReviewStatus; original?: { action: string; answer: string }; note?: string; trainOnly?: boolean };
 };
 
 /** What a reviewer decided: an action ("none" rejects the row) and the values, as the annotate form gives them. */
@@ -54,6 +56,7 @@ export function addExamples(
   records: ExampleRecord[],
   examples: LabeledExample[],
   source: ExampleSource,
+  options: { trainOnly?: boolean } = {},
 ): { records: ExampleRecord[]; skipped: { message: string; reason: string }[] } {
   const keys = new Set(records.map((r) => messageKey(r.meta.action, r.messages[1].content)));
   let next = records.filter((r) => r.meta.source === source).reduce((max, r) => Math.max(max, Number(r.meta.id.replace(/\D/g, "")) || 0), 0) + 1;
@@ -67,7 +70,7 @@ export function addExamples(
     }
     keys.add(key);
     const record = toRecord({ ...example, id: `${ID_PREFIX[source]}-${String(next++).padStart(source === "sample" ? 3 : 4, "0")}` });
-    added.push({ ...record, meta: { ...record.meta, source, status: "pending" } });
+    added.push({ ...record, meta: { ...record.meta, source, status: "pending", ...(options.trainOnly ? { trainOnly: true } : {}) } });
   }
   const all = [...records, ...added];
   return { records: [...all.filter((r) => r.meta.source === "sample"), ...all.filter((r) => r.meta.source === "synthetic")], skipped };
@@ -119,6 +122,7 @@ export function applyReview(record: ExampleRecord, review: Review | null): Examp
       source: record.meta.source,
       status: "approved",
       note,
+      ...(record.meta.trainOnly ? { trainOnly: true } : {}),
       // Keep the generator's first answer, not an earlier correction.
       original: original ?? (changed ? { action: record.meta.action, answer: record.messages[2].content } : undefined),
     },
