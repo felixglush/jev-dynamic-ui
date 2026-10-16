@@ -5,10 +5,16 @@ import { expect, test, type Page } from "@playwright/test";
 // These run against the real predictions.csv at the project root (100 messages from a live
 // Jev run), served by the production build. No Jev calls are made on this page.
 
+/** Open the page and wait until it is interactive: the HTML shows up before keys do anything. */
+async function open(page: Page) {
+  await page.goto("/annotate");
+  await expect(page.locator("[data-interactive]")).toBeVisible();
+}
+
 const square = (page: Page, n: number) => page.getByRole("navigation", { name: "Messages" }).getByRole("button").nth(n - 1);
 
 test.beforeEach(async ({ page }) => {
-  await page.goto("/annotate");
+  await open(page);
   await expect(page.getByRole("heading", { name: "Message 1 of 100" })).toBeVisible();
 });
 
@@ -79,6 +85,7 @@ test("progress survives a reload", async ({ page }) => {
   await expect(page.getByTestId("progress")).toHaveText("2 of 100 reviewed");
 
   await page.reload();
+  await expect(page.locator("[data-interactive]")).toBeVisible();
 
   await expect(page.getByTestId("progress")).toHaveText("2 of 100 reviewed");
   await expect(page.getByText("restored your saved progress")).toBeVisible();
@@ -109,7 +116,7 @@ test("a downloaded CSV imports back with its annotations", async ({ page, browse
 
   // A fresh browser profile, so nothing comes from saved progress.
   const fresh = await browser.newPage();
-  await fresh.goto("/annotate");
+  await open(fresh);
   await expect(fresh.getByTestId("progress")).toHaveText("0 of 100 reviewed");
   await fresh.getByLabel("Import predictions CSV").setInputFiles({
     name: "my-annotations.csv",
@@ -144,4 +151,19 @@ test("Clear all asks for a second click before wiping every answer", async ({ pa
   await page.getByRole("button", { name: "Click again to clear every answer" }).click();
 
   await expect(page.getByTestId("progress")).toHaveText("0 of 100 reviewed");
+});
+
+test("re-importing a file keeps the progress saved in this browser", async ({ page }) => {
+  const csv = await readFile("predictions.csv", "utf8");
+  const file = { name: "predictions-copy.csv", mimeType: "text/csv", buffer: Buffer.from(csv) };
+  await page.getByLabel("Import predictions CSV").setInputFiles(file);
+  await page.keyboard.press("y");
+  await expect(page.getByTestId("progress")).toHaveText("1 of 100 reviewed");
+
+  await page.reload();
+  await expect(page.locator("[data-interactive]")).toBeVisible();
+  await page.getByLabel("Import predictions CSV").setInputFiles(file);
+
+  await expect(page.getByTestId("progress")).toHaveText("1 of 100 reviewed");
+  await expect(page.getByText("restored your saved progress")).toBeVisible();
 });

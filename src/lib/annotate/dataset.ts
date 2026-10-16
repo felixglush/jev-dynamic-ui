@@ -61,15 +61,20 @@ export function parseParams(text: string): Record<string, ParamValue> {
 }
 
 /** "recipient=Sam; amount=50.00" ↔ { recipient: "Sam", amount: "50.00" }, without confidences. */
+// Values are free text, so a ";" inside one is written as %3B (and "%" as %25) to keep it from
+// reading as the separator between parameters.
+const encodeValue = (value: string) => value.replaceAll("%", "%25").replaceAll(";", "%3B");
+const decodeValue = (value: string) => value.replace(/%(25|3B)/gi, (code) => (code === "%25" ? "%" : ";"));
+
 function parseExpectedParams(text: string): Record<string, string> {
   return Object.fromEntries(
-    Object.entries(parseParams(text)).flatMap(([name, p]) => (p.value ? [[name, p.value]] : [])),
+    Object.entries(parseParams(text)).flatMap(([name, p]) => (p.value ? [[name, decodeValue(p.value)]] : [])),
   );
 }
 
 function formatExpectedParams(params: Record<string, string>): string {
   return Object.entries(params)
-    .map(([name, value]) => `${name}=${value}`)
+    .map(([name, value]) => `${name}=${encodeValue(value)}`)
     .join("; ");
 }
 

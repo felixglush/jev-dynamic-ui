@@ -32,12 +32,14 @@ describe("the predictions CSV", () => {
     dataset.annotations = {
       [first!.id]: acceptPrediction(first!)!,
       [second!.id]: { expectedAction: "none", expectedParams: {}, note: 'says "hi", oddly' },
+      // Separators and the escape character inside a value must survive the trip.
+      ["3"]: { expectedAction: "send_etransfer", expectedParams: { recipient: "Smith; Jr 100%3B" }, note: "" },
     };
 
     const reread = parseDataset(serializeDataset(dataset));
 
     expect(reread).toEqual(dataset);
-    expect(summarize(reread)).toMatchObject({ reviewed: 2, action: { total: 2, correct: 1 } });
+    expect(summarize(reread)).toMatchObject({ reviewed: 3, action: { total: 3, correct: 2 } });
   });
 
   test("refuses a file that would silently lose rows or answers", () => {

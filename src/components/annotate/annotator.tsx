@@ -57,6 +57,8 @@ export function Annotator({ initial, initialSource }: Props) {
   const [view, setView] = useState<"review" | "summary">("review");
   const [importError, setImportError] = useState<string | null>(null);
   const [restored, setRestored] = useState(false);
+  // False in the server's HTML; true once the browser has taken over and shortcuts work.
+  const [interactive, setInteractive] = useState(false);
   const [confirmingClear, setConfirmingClear] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -74,6 +76,7 @@ export function Annotator({ initial, initialSource }: Props) {
       setDataset((d) => ({ ...d, annotations: { ...d.annotations, ...saved } }));
       setRestored(true);
     }
+    setInteractive(true);
   }, [initial]);
 
   function setAnnotations(next: Annotations) {
@@ -100,13 +103,17 @@ export function Annotator({ initial, initialSource }: Props) {
   async function importFile(file: File) {
     try {
       const imported = parseDataset(await file.text());
-      setDataset(imported);
-      writeSaved(storageKey(imported), imported.annotations);
+      // Work saved in this browser for the same messages is newer than the file, so it wins.
+      const key = storageKey(imported);
+      const saved = readSaved(key) ?? {};
+      const annotations = { ...imported.annotations, ...saved };
+      setDataset({ ...imported, annotations });
+      writeSaved(key, annotations);
       setSource(file.name);
       setIndex(0);
       setView("review");
       setImportError(null);
-      setRestored(false);
+      setRestored(Object.keys(saved).length > 0);
     } catch (error) {
       setImportError(error instanceof Error ? error.message : "Couldn’t read that file.");
     }
@@ -146,7 +153,7 @@ export function Annotator({ initial, initialSource }: Props) {
   const percent = Math.round((done / predictions.length) * 100);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6" data-interactive={interactive || undefined}>
       <header className="flex flex-col gap-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="flex flex-col gap-1">
