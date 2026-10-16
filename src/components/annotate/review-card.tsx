@@ -137,7 +137,8 @@ export function ReviewCard({ prediction, extraction, annotation, position, total
             <p className="text-xs text-muted-foreground" data-testid="extractor-status">
               {extraction.status === "off" && "Values are Jev's."}
               {extraction.status === "loading" && "LiquidFM is reading the message…"}
-              {extraction.status === "ready" && "Jev picked the action and the choices; LiquidFM read the typed-in values."}
+              {extraction.status === "ready" && fields.every((f) => f.spec.type === "choice") && "Every field of this action is a choice, so all of it is Jev's."}
+              {extraction.status === "ready" && fields.some((f) => f.spec.type !== "choice") && "Jev picked the action and the choices; LiquidFM read the typed-in values."}
               {extraction.status === "error" && `LiquidFM didn't answer (${extraction.message}), so these are Jev's values.`}
             </p>
             <table className="w-full text-sm">
