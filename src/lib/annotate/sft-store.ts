@@ -3,15 +3,15 @@ import "server-only";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { applyReview, parseSynthetic, serializeSynthetic } from "@/lib/sft/synthetic";
+import { applyReview, parseExamples, serializeExamples } from "@/lib/sft/examples";
 import { datasetFromReviews, sanitizeAnnotations, type Annotation, type Dataset } from "./dataset";
 
 /**
- * The synthetic SFT file the annotate page reviews in place: each answer you give is written into the
+ * The examples file (data/sft/examples.jsonl) the annotate page reviews in place: each answer you give is written into the
  * row itself (status, corrected values), so the file is ready for `npm run sft:build` as you go.
  * Set SFT_REVIEW_FILE to use another path.
  */
-const DEFAULT_SFT_FILE = "data/sft/synthetic.jsonl";
+const DEFAULT_SFT_FILE = "data/sft/examples.jsonl";
 
 function sftPath() {
   return path.resolve(process.cwd(), process.env.SFT_REVIEW_FILE || DEFAULT_SFT_FILE);
@@ -22,7 +22,7 @@ export function sftLabel() {
 }
 
 async function readRecords() {
-  return parseSynthetic(await readFile(sftPath(), "utf8"));
+  return parseExamples(await readFile(sftPath(), "utf8"));
 }
 
 /** The file as rows to review plus the reviews it already holds. Not cached: it changes as you work. */
@@ -54,7 +54,7 @@ export function writeReviewChanges(raw: unknown): Promise<void> {
     const file = sftPath();
     await mkdir(path.dirname(file), { recursive: true });
     const temp = `${file}.tmp`;
-    await writeFile(temp, serializeSynthetic(next));
+    await writeFile(temp, serializeExamples(next));
     await rename(temp, file);
   };
   const next = queue.then(run, run);

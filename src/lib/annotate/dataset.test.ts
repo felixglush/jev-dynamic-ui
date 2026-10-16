@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 
 import { describe, expect, test } from "vitest";
 
-import { parseSeed } from "@/lib/sft/seed";
+import { parseBatch } from "@/lib/sft/batch";
 import { acceptPrediction, annotationsFor, parseAnyDataset, parseDataset, sanitizeAnnotations, serializeDataset, serializeLabels } from "./dataset";
 import { summarize } from "./summary";
 
@@ -82,7 +82,7 @@ describe("the predictions CSV", () => {
 });
 
 describe("fine-tuning files in the annotator", () => {
-  const sft = readFileSync(new URL("../../../data/sft/train.jsonl", import.meta.url), "utf8");
+  const sft = readFileSync(new URL("../../../data/sft/examples.jsonl", import.meta.url), "utf8");
 
   test("an SFT JSONL file becomes reviewable rows, with blank fields left out of the values", () => {
     const { predictions, annotations } = parseAnyDataset(sft);
@@ -105,7 +105,7 @@ describe("fine-tuning files in the annotator", () => {
     dataset.annotations[target.id] = { expectedAction: "send_etransfer", expectedParams: { recipient: "Priya", amount: "300", from_account: "chequing" }, note: "" };
     const lines = serializeLabels(dataset);
     expect(lines).toBe("# send_etransfer\ntransfer $300 to priya.k@example.com => recipient=Priya; amount=300\n");
-    expect(parseSeed(lines)[0]).toMatchObject({ action: "send_etransfer", fields: { recipient: "Priya", amount: 300 } });
+    expect(parseBatch(lines)[0]).toMatchObject({ action: "send_etransfer", fields: { recipient: "Priya", amount: 300 } });
   });
 
   test("a broken file says which line is wrong", () => {

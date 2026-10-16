@@ -317,7 +317,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ti
             <Button
               variant="outline"
               size="sm"
-              title="Reviewed answers as lines for data/sft/seed-labeled.txt"
+              title="Reviewed answers as message => field=value lines (the batch format npm run sft:add reads)"
               onClick={() => void saveFile(`labels-${new Date().toISOString().slice(0, 10)}.txt`, serializeLabels(dataset))}
             >
               <Download aria-hidden="true" />

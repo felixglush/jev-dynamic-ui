@@ -34,7 +34,7 @@ export async function saveAnnotationsToFile(changes: Record<string, Annotation |
 
 export type SftLoadResult = { ok: true; dataset: Dataset; path: string } | { ok: false; error: string };
 
-/** The synthetic SFT file as rows to review, with the reviews already saved in it. */
+/** The examples file as rows to review, with the reviews already saved in it. */
 export async function loadSftReviews(): Promise<SftLoadResult> {
   try {
     return { ok: true, dataset: await readReviewDataset(), path: sftLabel() };

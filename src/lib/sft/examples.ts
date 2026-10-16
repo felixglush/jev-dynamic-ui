@@ -1,23 +1,27 @@
 /**
- * The synthetic (generated) training rows and their review state, kept in one JSONL file
- * (data/sft/synthetic.jsonl). Same record format as the other SFT files, plus review fields in `meta`:
+ * Every labeled example and its review state, kept in one JSONL file (data/sft/examples.jsonl). Same
+ * record format as the other SFT files, plus review fields in `meta`:
  *
+ *   source    "sample" (a real message from data/sample-messages.txt, eligible for val and test) or
+ *             "synthetic" (generated, train only)
  *   status    "pending" (not looked at), "approved" (goes into training) or "rejected" (never used)
  *   original  what the generator wrote, kept once a reviewer changes it, so the page can show the
  *             correction and "undo" can restore it
  *   note      the reviewer's note
  *
- * The annotate page edits this file in place; `npm run sft:build` trains on the approved rows.
+ * Labels were written by Claude, so nothing counts until a person approves it on /annotate, which edits
+ * this file in place. `npm run sft:build` then builds train, val and test from the approved rows.
  */
 import { CATALOG } from "@/lib/jev/catalog";
 import { freeTextParams, systemPromptFor } from "@/lib/extract/prompt";
 import { toRecord, type SftRecord } from "./record";
-import type { Action, LabeledExample } from "./seed";
+import type { Action, LabeledExample } from "./batch";
 
+export type ExampleSource = "sample" | "synthetic";
 export type ReviewStatus = "pending" | "approved" | "rejected";
 
-export type SyntheticRecord = SftRecord & {
-  meta: SftRecord["meta"] & { source: "synthetic"; status: ReviewStatus; original?: { action: string; answer: string }; note?: string };
+export type ExampleRecord = SftRecord & {
+  meta: SftRecord["meta"] & { source: ExampleSource; status: ReviewStatus; original?: { action: string; answer: string }; note?: string };
 };
 
 /** What a reviewer decided: an action ("none" rejects the row) and the values, as the annotate form gives them. */
@@ -26,46 +30,51 @@ export type Review = { expectedAction: string; expectedParams: Record<string, st
 export const normalizeMessage = (text: string) => text.normalize("NFC").toLowerCase().replace(/\s+/g, " ").trim();
 export const messageKey = (action: string, message: string) => `${action}|${normalizeMessage(message)}`;
 
-export function parseSynthetic(text: string): SyntheticRecord[] {
+export function parseExamples(text: string): ExampleRecord[] {
   return text
     .split("\n")
     .filter((line) => line.trim())
     .map((line, index) => {
-      const record = JSON.parse(line) as SyntheticRecord;
-      if (record.meta?.source !== "synthetic") throw new Error(`Line ${index + 1}: not a synthetic record.`);
+      const record = JSON.parse(line) as ExampleRecord;
+      if (record.meta?.source !== "sample" && record.meta?.source !== "synthetic") throw new Error(`Line ${index + 1}: not an example record.`);
       return record;
     });
 }
 
-export const serializeSynthetic = (records: SyntheticRecord[]) => records.map((r) => JSON.stringify(r)).join("\n") + (records.length ? "\n" : "");
+export const serializeExamples = (records: ExampleRecord[]) => records.map((r) => JSON.stringify(r)).join("\n") + (records.length ? "\n" : "");
 
-/** Append new generated examples as pending rows. Duplicates of anything in `existingKeys` are skipped and reported. */
+const ID_PREFIX: Record<ExampleSource, string> = { sample: "smp", synthetic: "syn" };
+
+/**
+ * Append new examples as pending rows with the next ids for their source. Messages that are already
+ * in the file (same action) are skipped and reported. Sample rows are kept ahead of synthetic ones,
+ * so they come first in the review; existing rows are never changed.
+ */
 export function addExamples(
-  records: SyntheticRecord[],
+  records: ExampleRecord[],
   examples: LabeledExample[],
-  existingKeys: Set<string>,
-): { records: SyntheticRecord[]; skipped: { message: string; reason: string }[] } {
-  const keys = new Set(existingKeys);
-  for (const r of records) keys.add(messageKey(r.meta.action, r.messages[1].content));
-  let next = records.reduce((max, r) => Math.max(max, Number(r.meta.id.replace(/\D/g, "")) || 0), 0) + 1;
-  const added = [...records];
+  source: ExampleSource,
+): { records: ExampleRecord[]; skipped: { message: string; reason: string }[] } {
+  const keys = new Set(records.map((r) => messageKey(r.meta.action, r.messages[1].content)));
+  let next = records.filter((r) => r.meta.source === source).reduce((max, r) => Math.max(max, Number(r.meta.id.replace(/\D/g, "")) || 0), 0) + 1;
+  const added: ExampleRecord[] = [];
   const skipped: { message: string; reason: string }[] = [];
   for (const example of examples) {
     const key = messageKey(example.action, example.message);
     if (keys.has(key)) {
-      skipped.push({ message: example.message, reason: "already in the seed set or the synthetic file" });
+      skipped.push({ message: example.message, reason: "already in the file" });
       continue;
     }
     keys.add(key);
-    const id = `syn-${String(next++).padStart(4, "0")}`;
-    const record = toRecord({ ...example, id });
-    added.push({ ...record, meta: { ...record.meta, source: "synthetic", status: "pending" } });
+    const record = toRecord({ ...example, id: `${ID_PREFIX[source]}-${String(next++).padStart(source === "sample" ? 3 : 4, "0")}` });
+    added.push({ ...record, meta: { ...record.meta, source, status: "pending" } });
   }
-  return { records: added, skipped };
+  const all = [...records, ...added];
+  return { records: [...all.filter((r) => r.meta.source === "sample"), ...all.filter((r) => r.meta.source === "synthetic")], skipped };
 }
 
 /** The review form's values for the action's free-text fields, as a labeled example. Throws on a bad amount. */
-function exampleFrom(record: SyntheticRecord, action: Action, params: Record<string, string>): LabeledExample {
+function exampleFrom(record: ExampleRecord, action: Action, params: Record<string, string>): LabeledExample {
   const fields: Record<string, string | number> = {};
   for (const [name, spec] of freeTextParams(action)) {
     const text = (params[name] ?? "").trim();
@@ -82,7 +91,7 @@ function exampleFrom(record: SyntheticRecord, action: Action, params: Record<str
 }
 
 /** Apply one review to a row. `null` takes the review back: the row goes to pending with the generator's answer. */
-export function applyReview(record: SyntheticRecord, review: Review | null): SyntheticRecord {
+export function applyReview(record: ExampleRecord, review: Review | null): ExampleRecord {
   const { original, ...meta } = record.meta;
   if (review === null) {
     if (!original) return { ...record, meta: { ...meta, status: "pending", note: undefined } };
@@ -107,7 +116,7 @@ export function applyReview(record: SyntheticRecord, review: Review | null): Syn
     messages: rebuilt.messages,
     meta: {
       ...rebuilt.meta,
-      source: "synthetic",
+      source: record.meta.source,
       status: "approved",
       note,
       // Keep the generator's first answer, not an earlier correction.
@@ -117,7 +126,7 @@ export function applyReview(record: SyntheticRecord, review: Review | null): Syn
 }
 
 /** The review a row currently carries, in the annotate page's terms, or null while pending. */
-export function reviewOf(record: SyntheticRecord): Review | null {
+export function reviewOf(record: ExampleRecord): Review | null {
   const note = record.meta.note ?? "";
   if (record.meta.status === "rejected") return { expectedAction: "none", expectedParams: {}, note };
   if (record.meta.status !== "approved") return null;

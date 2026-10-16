@@ -8,7 +8,7 @@
  * see at run time is the point; any wording drift between the two would quietly weaken the tuning.
  */
 import { freeTextParams, systemPromptFor } from "@/lib/extract/prompt";
-import type { LabeledExample } from "./seed";
+import type { LabeledExample } from "./batch";
 
 export type SftRecord = {
   /** The column trainers read (TRL, Unsloth, Axolotl "chat_template" datasets). */
@@ -23,7 +23,7 @@ export type SftRecord = {
     action: string;
     vague: boolean;
     present: string[];
-    /** "synthetic" for generated rows, "model" for extract:eval output; absent for the hand-labeled seed. */
+    /** "sample", "synthetic" or "model" (extract:eval output). */
     source?: string;
   };
 };

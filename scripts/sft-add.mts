@@ -1,35 +1,38 @@
 /**
- * Add generated examples to the synthetic file as pending rows, ready to review on /annotate.
+ * Add labeled messages to data/sft/examples.jsonl as pending rows, ready to review on /annotate.
  *
- *   npm run sft:add -- path/to/batch.txt
+ *   npm run sft:add -- path/to/batch.txt [--source sample|synthetic]    (default: synthetic)
  *
- * The batch uses the seed file's format (`message => field=value; field=value`, `# <action>` headers).
- * A message already in the seed set or the synthetic file is skipped. Existing rows, and any review
- * already done on them, are never touched; new rows get the next syn-NNNN ids.
+ * The batch is plain text, one example per line: `message => field=value; field=value`, with
+ * `# <action>` headers. "sample" rows are real messages that can end up in val or test once approved;
+ * "synthetic" rows are generated and only ever train. A message already in the file is skipped.
+ * Existing rows, and any review already done on them, are never touched.
  */
 import { readFile, writeFile } from "node:fs/promises";
 
-import { parseSeed, validateExamples } from "../src/lib/sft/seed";
-import { addExamples, messageKey, parseSynthetic, serializeSynthetic } from "../src/lib/sft/synthetic";
+import { parseBatch, validateBatch } from "../src/lib/sft/batch";
+import { addExamples, parseExamples, serializeExamples, type ExampleSource } from "../src/lib/sft/examples";
 
-const [batchPath] = process.argv.slice(2);
-if (!batchPath) {
-  console.error("Usage: npm run sft:add -- path/to/batch.txt");
+const args = process.argv.slice(2);
+const flag = args.indexOf("--source");
+const source = (flag === -1 ? "synthetic" : args[flag + 1]) as ExampleSource;
+const batchPath = args.find((arg, index) => !arg.startsWith("--") && args[index - 1] !== "--source");
+if (!batchPath || (source !== "sample" && source !== "synthetic")) {
+  console.error("Usage: npm run sft:add -- path/to/batch.txt [--source sample|synthetic]");
   process.exit(1);
 }
-const SYNTHETIC = "data/sft/synthetic.jsonl";
+const FILE = "data/sft/examples.jsonl";
 
-const batch = parseSeed(await readFile(batchPath, "utf8"));
-const problems = validateExamples(batch);
+const batch = parseBatch(await readFile(batchPath, "utf8"));
+const problems = validateBatch(batch);
 if (problems.length > 0) {
   console.error(`${problems.length} problem(s) in ${batchPath}:\n- ${problems.join("\n- ")}`);
   process.exit(1);
 }
 
-const seed = parseSeed(await readFile("data/sft/seed-labeled.txt", "utf8"));
-const existing = parseSynthetic(await readFile(SYNTHETIC, "utf8").catch(() => ""));
-const { records, skipped } = addExamples(existing, batch, new Set(seed.map((e) => messageKey(e.action, e.message))));
-await writeFile(SYNTHETIC, serializeSynthetic(records));
+const existing = parseExamples(await readFile(FILE, "utf8").catch(() => ""));
+const { records, skipped } = addExamples(existing, batch, source);
+await writeFile(FILE, serializeExamples(records));
 
-console.log(`Added ${records.length - existing.length} pending row(s); skipped ${skipped.length}.`);
+console.log(`Added ${records.length - existing.length} pending ${source} row(s); skipped ${skipped.length}.`);
 for (const { message, reason } of skipped) console.log(`  skipped "${message}": ${reason}`);

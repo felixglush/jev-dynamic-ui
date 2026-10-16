@@ -5,7 +5,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { SFT_REVIEW_FILE } from "./paths";
 
-// Reviewing the generated fine-tuning rows on /annotate, against a copy of data/sft/synthetic.jsonl
+// Reviewing the generated fine-tuning rows on /annotate, against a copy of data/sft/examples.jsonl
 // that the app writes into. No model and no network: this is the file round trip.
 
 type Row = { messages: { content: string }[]; meta: { id: string; status: string; action: string; original?: { answer: string }; note?: string } };
@@ -24,7 +24,7 @@ async function open(page: Page) {
 test.beforeEach(async ({ page }) => {
   await rm(SFT_REVIEW_FILE, { force: true });
   await mkdir(path.dirname(SFT_REVIEW_FILE), { recursive: true });
-  await copyFile("data/sft/synthetic.jsonl", SFT_REVIEW_FILE);
+  await copyFile("data/sft/examples.jsonl", SFT_REVIEW_FILE);
   await open(page);
 });
 
@@ -43,7 +43,7 @@ test("Y approves the row in the file, with its answer unchanged", async ({ page 
   await page.keyboard.press("y");
   await expect(page.getByTestId("file-status")).toHaveText(`Saved to ${SFT_REVIEW_FILE}`);
   const [first, second] = await rows();
-  expect(first!.meta).toMatchObject({ id: "syn-0001", status: "approved" });
+  expect(first!.meta).toMatchObject({ id: "smp-001", status: "approved" });
   expect(first!.meta.original).toBeUndefined();
   expect(second!.meta.status).toBe("pending");
 });
@@ -57,8 +57,8 @@ test("a correction is written into the row and the generator's answer is kept", 
   await expect(page.getByTestId("file-status")).toHaveText(`Saved to ${SFT_REVIEW_FILE}`);
 
   const [first] = await rows();
-  expect(JSON.parse(first!.messages[2]!.content)).toEqual({ recipient: "Marcus", recipient_email: "", amount: 850, date: "tomorrow" });
-  expect(JSON.parse(first!.meta.original!.answer).amount).toBe(85);
+  expect(JSON.parse(first!.messages[2]!.content)).toEqual({ recipient: "Sam", recipient_email: "", amount: 850, date: "tomorrow" });
+  expect(JSON.parse(first!.meta.original!.answer).amount).toBe(50);
   expect(first!.meta).toMatchObject({ status: "approved", note: "amount was wrong" });
 
   // A fresh page load reads the review back from the file.

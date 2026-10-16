@@ -2,7 +2,7 @@
 LoRA fine-tune LiquidAI/LFM2.5-230M on the field-extraction data, on Modal, and score it.
 
     pip install modal && modal setup           # once, on the machine you run this from
-    npm run sft:build                          # writes data/sft/{train,val,test}.jsonl
+    npm run sft:build                          # approved rows -> data/sft/{train,val,test}.jsonl
     modal run training/modal_train.py          # baseline score, LoRA training, tuned score, GGUF
 
 Stages (--stage): baseline | train | gguf | all (default). The training data is read from the local
@@ -268,6 +268,12 @@ def report(name: str, result: dict) -> None:
 @app.local_entrypoint()
 def main(stage: str = "all", epochs: int = 3, lr: float = 2e-4, rank: int = 16, base: str = BASE_MODEL):
     files = {split: Path(f"data/sft/{split}.jsonl").read_text() for split in ("train", "val", "test")}
+    empty = [split for split, text in files.items() if not text.strip()]
+    if empty:
+        raise SystemExit(
+            f"data/sft/{', '.join(empty)}.jsonl is empty. Approve rows on /annotate (Fine-tuning data), "
+            "then run `npm run sft:build`."
+        )
     out_dir = Path("training/out")
     out_dir.mkdir(exist_ok=True)
 

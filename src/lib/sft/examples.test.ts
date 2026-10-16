@@ -1,5 +1,5 @@
 /**
- * The synthetic file's life cycle on the real data: add, review (approve, correct, reject, undo), and
+ * The examples file's life cycle on the real data: add, review (approve, correct, reject, undo), and
  * what reaches training. The annotate page and `npm run sft:build` both go through these functions.
  */
 import { readFileSync } from "node:fs";
@@ -7,34 +7,40 @@ import { describe, expect, it } from "vitest";
 
 import { datasetFromReviews } from "@/lib/annotate/dataset";
 import { buildSplits } from "./build";
-import { parseSeed } from "./seed";
-import { addExamples, applyReview, messageKey, parseSynthetic, reviewOf, serializeSynthetic } from "./synthetic";
+import type { LabeledExample } from "./batch";
+import { addExamples, applyReview, messageKey, parseExamples, reviewOf, serializeExamples } from "./examples";
 
-const seed = parseSeed(readFileSync("data/sft/seed-labeled.txt", "utf8"));
-const rows = parseSynthetic(readFileSync("data/sft/synthetic.jsonl", "utf8"));
+const rows = parseExamples(readFileSync("data/sft/examples.jsonl", "utf8"));
 const row = (message: string) => rows.find((r) => r.messages[1].content === message)!;
 const answer = (r: { messages: [unknown, unknown, { content: string }] }) => JSON.parse(r.messages[2].content);
 
-describe("the synthetic file", () => {
-  it("has unique ids and messages, none of them in the seed set", () => {
+describe("the examples file", () => {
+  it("has unique ids and unique messages per action", () => {
     expect(new Set(rows.map((r) => r.meta.id)).size).toBe(rows.length);
     const keys = rows.map((r) => messageKey(r.meta.action, r.messages[1].content));
     expect(new Set(keys).size).toBe(rows.length);
-    const seedKeys = new Set(seed.map((e) => messageKey(e.action, e.message)));
-    expect(keys.filter((k) => seedKeys.has(k))).toEqual([]);
   });
 
   it("round-trips through serialize and parse", () => {
-    expect(parseSynthetic(serializeSynthetic(rows))).toEqual(rows);
+    expect(parseExamples(serializeExamples(rows))).toEqual(rows);
   });
 
-  it("skips a message that is already there and never changes existing rows", () => {
-    const example = { ...seed[0]!, message: rows[0]!.messages[1].content, action: rows[0]!.meta.action as typeof seed[0]["action"] };
-    const fresh = { ...seed[0]!, message: "send $1 to a brand new person named Zed", fields: { recipient: "Zed", amount: 1 } };
-    const { records, skipped } = addExamples(rows, [example, fresh], new Set());
+  const example = (message: string, fields: Record<string, string | number> = {}): LabeledExample => ({
+    id: "batch-001", action: "send_etransfer", message, fields, vague: false,
+  });
+
+  it("skips a message that is already there, numbers new rows per source, and never changes existing rows", () => {
+    const { records, skipped } = addExamples(rows, [{ ...example(rows[0]!.messages[1].content), action: rows[0]!.meta.action as LabeledExample["action"] }, example("send $1 to a brand new person named Zed", { recipient: "Zed", amount: 1 })], "synthetic");
     expect(skipped).toHaveLength(1);
     expect(records.slice(0, rows.length)).toEqual(rows);
-    expect(records.at(-1)!.meta).toMatchObject({ id: `syn-${String(rows.length + 1).padStart(4, "0")}`, status: "pending" });
+    expect(records.at(-1)!.meta).toMatchObject({ id: `syn-${String(rows.filter((r) => r.meta.source === "synthetic").length + 1).padStart(4, "0")}`, source: "synthetic", status: "pending" });
+  });
+
+  it("keeps sample rows ahead of synthetic ones when more samples are added", () => {
+    const { records } = addExamples(rows, [example("send $2 to Quinn", { recipient: "Quinn", amount: 2 })], "sample");
+    const lastSample = records.map((r) => r.meta.source).lastIndexOf("sample");
+    expect(records[lastSample]!.meta.id).toMatch(/^smp-188$/);
+    expect(records.slice(0, lastSample + 1).every((r) => r.meta.source === "sample")).toBe(true);
   });
 });
 
@@ -92,21 +98,32 @@ describe("what the annotate page sees", () => {
 });
 
 describe("training", () => {
-  it("only approved rows reach train, and never val or test", () => {
-    const target = row("e-transfer $85 to Marcus for the tickets");
-    const approved = [applyReview(target, { expectedAction: "send_etransfer", expectedParams: { recipient: "Marcus", amount: "85" } }), applyReview(row("send 30 bucks to lena"), { expectedAction: "none", expectedParams: {} })];
-    const before = buildSplits(seed, rows).files;
-    const after = buildSplits(seed, approved).files;
-    expect(before.train.some((r) => r.meta.source === "synthetic")).toBe(false);
-    expect(after.train.filter((r) => r.meta.source === "synthetic").map((r) => r.meta.id)).toEqual([target.meta.id]);
-    expect(after.val).toEqual(before.val);
-    expect(after.test).toEqual(before.test);
+  const approve = (r: (typeof rows)[number]) =>
+    applyReview(r, { expectedAction: r.meta.action, expectedParams: Object.fromEntries(Object.entries(JSON.parse(r.messages[2].content) as Record<string, string | number>).filter(([, v]) => v !== "" && v !== 0).map(([k, v]) => [k, String(v)])) });
+
+  it("only approved rows reach the training files", () => {
+    expect(Object.values(buildSplits(rows).files).flat()).toEqual([]);
+    const syn = approve(row("e-transfer $85 to Marcus for the tickets"));
+    const rejected = applyReview(row("send 30 bucks to lena"), { expectedAction: "none", expectedParams: {} });
+    const { files } = buildSplits([syn, rejected]);
+    expect(files.train.map((r) => r.meta.id)).toEqual([syn.meta.id]);
+    expect(files.val).toEqual([]);
+    expect(files.test).toEqual([]);
   });
 
-  it("drops an approved row that repeats a held-out message", () => {
-    const { files } = buildSplits(seed, []);
-    const heldOut = files.test[0]!;
-    const copy = { ...row("e-transfer $85 to Marcus for the tickets"), messages: heldOut.messages, meta: { ...heldOut.meta, source: "synthetic" as const, status: "approved" as const, id: "syn-9999" } };
-    expect(buildSplits(seed, [copy]).dropped).toEqual(["syn-9999"]);
+  it("splits approved sample rows by id, and sends synthetic rows to train only", () => {
+    const samples = rows.filter((r) => r.meta.source === "sample").map(approve);
+    const { files } = buildSplits([...samples, approve(row("send 30 bucks to lena"))]);
+    expect(files.val.length).toBeGreaterThan(0);
+    expect(files.test.length).toBeGreaterThan(0);
+    expect([...files.val, ...files.test].every((r) => r.meta.source === "sample")).toBe(true);
+    expect(files.train.some((r) => r.meta.source === "synthetic")).toBe(true);
+  });
+
+  it("drops an approved synthetic row that repeats a held-out message", () => {
+    const samples = rows.filter((r) => r.meta.source === "sample").map(approve);
+    const heldOut = buildSplits(samples).files.test[0]!;
+    const copy = { ...approve(row("send 30 bucks to lena")), messages: heldOut.messages, meta: { ...heldOut.meta, source: "synthetic" as const, status: "approved" as const, id: "syn-9999" } };
+    expect(buildSplits([...samples, copy]).dropped).toEqual(["syn-9999"]);
   });
 });

@@ -6,7 +6,7 @@
 import { freeTextParams } from "@/lib/extract/prompt";
 import { CATALOG } from "@/lib/jev/catalog";
 import type { ActionName, ParamValue } from "@/lib/jev/types";
-import { reviewOf, type Review, type SyntheticRecord } from "@/lib/sft/synthetic";
+import { reviewOf, type Review, type ExampleRecord } from "@/lib/sft/examples";
 import { parseCsv, toCsv } from "./csv";
 
 export type Prediction = {
@@ -130,11 +130,11 @@ export function parseSftJsonl(text: string): Dataset {
 }
 
 /**
- * The synthetic file as rows to review. The "output" shown is what the generator wrote (its first
+ * The examples file as rows to review. The "output" shown is what the generator wrote (its first
  * answer, even after a reviewer corrected it), and rows already approved or rejected come back as
  * annotations, so the page picks up where the file says review stands.
  */
-export function datasetFromReviews(records: SyntheticRecord[]): Dataset {
+export function datasetFromReviews(records: ExampleRecord[]): Dataset {
   const asGenerated = records.map(({ meta: { original, ...meta }, messages }) =>
     JSON.stringify({
       messages: [messages[0], messages[1], { role: "assistant", content: original?.answer ?? messages[2].content }],
@@ -156,7 +156,7 @@ export function parseAnyDataset(text: string): Dataset {
 }
 
 /**
- * The reviewed answers as lines of the seed file (data/sft/seed-labeled.txt): `message => field=value`,
+ * The reviewed answers as batch lines (the format `npm run sft:add` reads): `message => field=value`,
  * grouped under `# <action>`. Rows marked "none", or not reviewed yet, are left out.
  */
 export function serializeLabels({ predictions, annotations }: Dataset): string {

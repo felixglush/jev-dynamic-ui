@@ -1,6 +1,7 @@
 /**
- * Read the hand-labeled seed file (data/sft/seed-labeled.txt) into typed examples and check their
- * structure. Whether a value is really in the message is a labeling rule (docs/sft-dataset.md), reviewed by a person.
+ * Read a batch of labeled messages (the text format `npm run sft:add` takes) into typed examples and
+ * check their structure. Whether a value is really in the message is a labeling rule
+ * (docs/sft-dataset.md), checked by the person who reviews the rows on /annotate.
  *
  * File format, one example per line:  `message => field=value; field=value`
  * Only the fields the message states are listed. Everything else is blank in the training target.
@@ -11,7 +12,7 @@ import { freeTextParams } from "@/lib/extract/prompt";
 export type Action = keyof typeof CATALOG;
 
 export type LabeledExample = {
-  /** Stable id: `seed-NNN` by line order. Never reused, so append new lines at the end of a group. */
+  /** Position in the batch (`batch-NNN`); the examples file assigns the real ids. */
   id: string;
   action: Action;
   message: string;
@@ -23,7 +24,7 @@ export type LabeledExample = {
 
 const isAction = (name: string): name is Action => name in CATALOG;
 
-export function parseSeed(text: string): LabeledExample[] {
+export function parseBatch(text: string): LabeledExample[] {
   const examples: LabeledExample[] = [];
   let action: Action | null = null;
   let vague = false;
@@ -51,13 +52,13 @@ export function parseSeed(text: string): LabeledExample[] {
       const spec = (CATALOG[action].params as Record<string, ParamSpec>)[name];
       fields[name] = spec?.type === "amount" ? Number(value) : value;
     }
-    examples.push({ id: `seed-${String(examples.length + 1).padStart(3, "0")}`, action, message, fields, vague });
+    examples.push({ id: `batch-${String(examples.length + 1).padStart(3, "0")}`, action, message, fields, vague });
   }
   return examples;
 }
 
 /** Everything wrong with the labels, as readable strings. Empty means the set is clean. */
-export function validateExamples(examples: LabeledExample[]): string[] {
+export function validateBatch(examples: LabeledExample[]): string[] {
   const problems: string[] = [];
   const seen = new Map<string, string>();
   for (const example of examples) {

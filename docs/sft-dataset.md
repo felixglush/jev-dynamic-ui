@@ -13,7 +13,7 @@ One JSON object per line (JSONL), chat style:
   {"role": "system",    "content": "Extract these fields from the user's banking message: recipient, recipient_email, amount, date. Only copy information ... Never invent names, emails, phone numbers or dates."},
   {"role": "user",      "content": "transfer $300 to priya.k@example.com"},
   {"role": "assistant", "content": "{\"recipient\":\"\",\"recipient_email\":\"priya.k@example.com\",\"amount\":300,\"date\":\"\"}"}],
- "meta": {"id": "seed-006", "action": "send_etransfer", "vague": false, "present": ["recipient_email", "amount"]}}
+ "meta": {"id": "smp-006", "action": "send_etransfer", "vague": false, "present": ["recipient_email", "amount"]}}
 ```
 
 Why this shape:
@@ -35,37 +35,48 @@ These decide what "correct" means, so they matter more than the example count.
 5. **Dates are copied as written** (`tomorrow`, `the 1st`, `December 24`, `2026-11-05`, `03/04`). No converting to ISO, no checking validity (`February 30` stays; the form validates). Keep the day only: `the 1st of every month` → `the 1st`; "every week/month" is the frequency choice, not a date. A past event used as a reason (`dinner last night`) is not a schedule date. For `dispute_transaction` the date is the charge date.
 6. **Phones and account numbers as written**, minus trailing words (`416 555 0123 ext 2` → `416 555 0123`).
 7. **Several people in one message** (`send 50 to Sam and 30 to Priya`) are left out of the data. The UI handles one transfer at a time (Felix's call).
-8. **Vague messages stay in.** `send it to Jordan` still has a name; `pay my bills` has nothing. Mostly-empty answers are the lesson, so they are kept on purpose (`# <action> (vague)` groups in the seed file).
+8. **Vague messages stay in.** `send it to Jordan` still has a name; `pay my bills` has nothing. Mostly-empty answers are the lesson, so they are kept on purpose (rows with `meta.vague`).
 
 ## 3. Coverage targets
 
-The seed (187 hand-labeled examples from `data/sample-messages.txt`) is the starting point, not the finish. Targets for the final set, counted per field in the **train** split (`npm run sft:build` prints this table):
+The 187 sample rows (real messages from `data/sample-messages.txt`) plus 458 generated rows are the starting point, not the finish, and **none of it counts until a person approves it on `/annotate`**: all labels so far were written by Claude. Targets for the final set, counted per field in the **train** split (the "written so far" column counts all rows, approved or not) (`npm run sft:build` prints this table once rows are approved):
 
-| What | Target | Seed today |
+| What | Target | Written so far (not yet approved) |
 | --- | --- | --- |
-| Examples per action | 150 to 250 (about 2,000 total) | 15 to 30 |
-| Per field: value stated | at least 40 each | 0 to 18 |
-| Per field: field blank | at least 40 each, and 30 to 40% of all answers | 17 of 20 for `recipient_email`, few for `add_etransfer_contact.name` |
-| Fully empty answers | 10 to 15% | 36% (68 of 187), too many: synthetic data should dilute this |
-| Phrasing | typos, lowercase, no punctuation, slang (`bucks`, `interac`), spelled-out numbers, accented and hyphenated names, two or three word names | partial |
-| Look-alikes | field A present but B absent (email without name, name without email, amount in the message but no date) | a few |
+| Examples per action | 150 to 250 (about 2,000 total) | 39 to 103 |
+| Per field: value stated | at least 40 each | 13 to 91 (thinnest: `transfer_between_accounts.date`, `setup_autodeposit.phone`, `pay_bill.date`) |
+| Per field: field blank | at least 40 each, and 30 to 40% of all answers | at least 9 each |
+| Fully empty answers | 10 to 15% | 22% |
+| Phrasing | typos, lowercase, no punctuation, slang (`bucks`, `interac`), spelled-out numbers, accented and hyphenated names, two or three word names | covered in the first batch |
+| Look-alikes | field A present but B absent (email without name, name without email, amount in the message but no date) | covered in the first batch |
 
-Weak spots in the seed today: `setup_autodeposit.phone` (no stated example in train), `request_etransfer.from_email` (1), `send_etransfer.date` (2), and `add_etransfer_contact.name` (rarely blank; add messages like `add a contact, email is x@y.com`).
-
-Why a few thousand and not tens of thousands: this is one narrow, mechanical task and 230M parameters. Label quality and covering the "absent" cases matter more than volume.
+Run `npm run sft:build` after a review session to see the real counts. Why a few thousand and not tens of thousands: this is one narrow, mechanical task and 230M parameters. Label quality and covering the "absent" cases matter more than volume.
 
 ## 4. Workflow
 
-1. **Seed (done here).** 187 hand-labeled lines in `data/sft/seed-labeled.txt`. Messages came from `sample-messages.txt`, which is the same text the base model was evaluated on, so the base-model numbers stay comparable.
-2. **Synthetic expansion (done for a first batch).** Claude Sonnet 5.5 wrote 458 labeled messages in the seed file's format, using the labeling rules above, aimed at the thin fields (an email with no name, a date with no amount, "relationship only" blanks, typos, spelled-out amounts, accented names) and about 20% fully empty answers. They were written in a Claude Code session, not through the API, because that environment has no `ANTHROPIC_API_KEY`. `npm run sft:add -- batch.txt` appends a batch to `data/sft/synthetic.jsonl` as **pending** rows (skipping any message already in the seed set or the file, and never touching rows already reviewed). Batches only paraphrase and extend **train** families, never val or test messages.
+Everything lives in one file, `data/sft/examples.jsonl`. Each row is a training record plus review fields in `meta`: `source` (`sample` or `synthetic`), `status` (`pending`, `approved`, `rejected`), `original` (what Claude wrote, kept once you change it) and `note`.
+
+1. **Sample rows.** 187 real messages from `sample-messages.txt` (the same text the base model was evaluated on, so base-model numbers stay comparable), labeled by Claude using the rules above. Only these can become val or test.
+2. **Synthetic rows.** Claude Sonnet 5.5 wrote 458 more messages, aimed at the thin fields (an email with no name, a date with no amount, "relationship only" blanks, typos, spelled-out numbers, accented names) and some fully empty answers. They were written in a Claude Code session, not through the API, because that environment has no `ANTHROPIC_API_KEY`. They only ever train. To add a batch, write lines like `message => field=value; field=value` (with `# <action>` headers) and run `npm run sft:add -- batch.txt` (or `--source sample` for real messages). It adds **pending** rows, skips messages already in the file and never touches reviewed rows.
 3. **Automatic filter.** `sft:add` checks structure only (known field, positive amount, no duplicates). There is no text-match check, so review matters: look first at any label whose text isn't a substring of its message.
-4. **Human review on `/annotate`.** Switch to **Fine-tuning data**. It opens `data/sft/synthetic.jsonl` on the **Fields only** view (the model's fields with blanks marked); **Full** shows the whole card. Press **Y** to approve a row, **N** to correct it (change values, or pick another action), or choose action `none` to reject it. Every answer is written straight into the row in the file:
+4. **Human review on `/annotate`.** Switch to **Fine-tuning data**. It opens `data/sft/examples.jsonl` on the **Fields only** view (the model's fields with blanks marked), sample rows first; **Full** shows the whole card. Press **Y** to approve a row, **N** to correct it (change values, or pick another action), or choose action `none` to reject it. Every answer is written straight into the row in the file:
    - `meta.status` becomes `approved` or `rejected`, and the row's answer and system prompt are rewritten if you corrected it;
-   - `meta.original` keeps what the generator wrote the first time you change a row, and **Clear all** (or taking an answer back) restores it, so the Summary can show how often the generator was wrong;
+   - `meta.original` keeps what Claude wrote the first time you change a row, and **Clear all** (or taking an answer back) restores it, so the Summary shows how often Claude's labels were wrong;
    - there is no browser-only copy for this file; the file is the source of truth.
-   Reviewing other JSONL files (`train.jsonl`, or model output from `extract:eval`) still works with **Import file**, browser-only.
-   `npm run sft:build` then puts the **approved** synthetic rows in `train.jsonl`. Pending and rejected rows never train, and an approved row that repeats a val/test message is left out with a warning.
-5. **Check against the base model.** Run `npm run extract:eval` before and after tuning. Its CSV now only says kept or blank, so measuring fabrications means comparing against the labels in `test.jsonl`; a scorer for that is the next piece to build.
+   Other JSONL files (`train.jsonl`, or model output from `extract:eval`) still open with **Import file**, browser-only.
+5. **Build.** `npm run sft:build` writes `train.jsonl`, `val.jsonl` and `test.jsonl` from the **approved** rows only, so they stay empty until you approve something. Pending and rejected rows are ignored.
+6. **Check against the base model.** `training/modal_train.py` scores the base model and the tuned one on val and test (section 6).
+
+## 5. Split
+
+`src/lib/sft/split.ts`: each **approved sample row** is assigned by a hash of its id: 15% test, 15% val, 70% train. Because it depends on the id alone, a row's split never changes when other rows are approved or added, so val and test stay the same messages from run to run. The hash salt was picked so that, with every sample row approved, each action has at least one val and one test row (checked in `dataset.test.ts`).
+
+Rules that keep the test honest:
+
+- **Test and val are real messages you approved.** Synthetic rows only ever go to train (and are dropped if they repeat a val/test message), so a paraphrase of a test message can never be in training.
+- **Test is never tuned on**: it is read once per candidate model, val is for choosing settings.
+- **No message in two splits** (checked in `dataset.test.ts`).
+- With 187 sample rows, val and test get about 28 each, so each field has only a handful of cases and the numbers are noisy. Add more real messages with `sft:add -- batch.txt --source sample` before trusting small differences between models.
 
 ## 5. Split
 

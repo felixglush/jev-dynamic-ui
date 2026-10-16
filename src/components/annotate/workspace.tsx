@@ -27,7 +27,7 @@ type Sft = { state: "idle" } | { state: "loading" } | { state: "error"; message:
 
 /**
  * One page, two data sets: Jev's predictions (predictions.csv) and the generated fine-tuning rows
- * (data/sft/synthetic.jsonl). Both use the same review screen. The fine-tuning rows are read from the
+ * (data/sft/examples.jsonl). Both use the same review screen. The fine-tuning rows are read from the
  * server when you switch to them, because every answer is written back into that file.
  */
 export function Workspace({ jev, sft }: Props) {
