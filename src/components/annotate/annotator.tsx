@@ -420,6 +420,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ti
                         "size-6 rounded text-[10px] font-medium tabular-nums outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
                         result === null && "bg-muted text-muted-foreground",
                         result === "correct" && "bg-success/25 text-foreground",
+                        result === "reformatted" && "bg-warning/15 ring-1 ring-inset ring-warning/60 text-foreground",
                         result === "wrong_values" && "bg-warning/35 text-foreground",
                         result === "wrong_action" && "bg-destructive/20 text-destructive",
                         view === "review" && i === index && "ring-2 ring-foreground",

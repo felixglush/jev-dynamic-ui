@@ -22,20 +22,25 @@ function normalize(value: string | null | undefined, type: ParamSpec["type"]): s
 /** The parameters of an action, each with whether Jev's value matches the expected one. */
 export function compareParams(action: ActionName, prediction: Prediction, annotation: Annotation) {
   const specs: Record<string, ParamSpec> = CATALOG[action].params;
-  return Object.entries(specs).map(([name, spec]) => ({
-    name,
-    correct:
-      normalize(prediction.params[name]?.value, spec.type) === normalize(annotation.expectedParams[name], spec.type),
-  }));
+  return Object.entries(specs).map(([name, spec]) => {
+    const predicted = prediction.params[name]?.value;
+    const expected = annotation.expectedParams[name];
+    const correct = normalize(predicted, spec.type) === normalize(expected, spec.type);
+    // Same value, written differently ("$50" vs "50.00"): right, but the reviewer still edited it.
+    const reformatted = correct && (predicted ?? "").trim() !== (expected ?? "").trim();
+    return { name, correct, reformatted };
+  });
 }
 
-export type Verdict = "correct" | "wrong_action" | "wrong_values";
+/** "reformatted": every value is right but at least one was rewritten (say, "$50" to "50.00"). */
+export type Verdict = "correct" | "reformatted" | "wrong_action" | "wrong_values";
 
 export function verdict(prediction: Prediction, annotation: Annotation): Verdict {
   if (prediction.predictedAction !== annotation.expectedAction) return "wrong_action";
   if (!isActionName(annotation.expectedAction)) return "correct"; // "none" has no values
   const params = compareParams(annotation.expectedAction, prediction, annotation);
-  return params.every((p) => p.correct) ? "correct" : "wrong_values";
+  if (!params.every((p) => p.correct)) return "wrong_values";
+  return params.some((p) => p.reformatted) ? "reformatted" : "correct";
 }
 
 type Tally = { total: number; correct: number };
@@ -53,7 +58,9 @@ export type Summary = {
   byExpectedAction: Array<{ action: string } & Tally>;
   /** Action accuracy split at the low-confidence threshold: is Jev's confidence telling the truth? */
   byConfidence: Array<{ label: string } & Tally>;
-  mistakes: Array<{ prediction: Prediction; annotation: Annotation; verdict: Exclude<Verdict, "correct"> }>;
+  /** Rows counted as right where the reviewer only changed how a value is written. */
+  reformatted: number;
+  mistakes: Array<{ prediction: Prediction; annotation: Annotation; verdict: Exclude<Verdict, "correct" | "reformatted"> }>;
 };
 
 export function summarize({ predictions, annotations }: Dataset): Summary {
@@ -65,6 +72,7 @@ export function summarize({ predictions, annotations }: Dataset): Summary {
     values: { total: 0, correct: 0 },
     byExpectedAction: [],
     byConfidence: [],
+    reformatted: 0,
     mistakes: [],
   };
   const byAction = new Map<string, Tally>();
@@ -81,8 +89,9 @@ export function summarize({ predictions, annotations }: Dataset): Summary {
     summary.action.total++;
     summary.exact.total++;
     if (actionCorrect) summary.action.correct++;
-    if (result === "correct") summary.exact.correct++;
-    else summary.mistakes.push({ prediction, annotation, verdict: result });
+    if (result === "correct" || result === "reformatted") summary.exact.correct++;
+    if (result === "reformatted") summary.reformatted++;
+    if (result !== "correct" && result !== "reformatted") summary.mistakes.push({ prediction, annotation, verdict: result });
 
     if (actionCorrect && isActionName(annotation.expectedAction)) {
       for (const param of compareParams(annotation.expectedAction, prediction, annotation)) {
