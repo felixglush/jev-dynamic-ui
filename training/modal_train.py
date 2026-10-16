@@ -31,7 +31,7 @@ app = modal.App("jev-sft")
 volume = modal.Volume.from_name(VOLUME_NAME, create_if_missing=True)
 
 train_image = modal.Image.debian_slim(python_version="3.12").pip_install(
-    "torch", "transformers>=5.2", "trl", "peft", "datasets", "accelerate"
+    "torch", "transformers>=5.2", "trl", "peft", "datasets", "accelerate", "xgrammar"
 )
 # llama.cpp's converter turns the merged Hugging Face model into a GGUF that Ollama can load.
 gguf_image = (
@@ -123,9 +123,22 @@ def load_records(text: str) -> list[dict]:
     return [json.loads(line) for line in text.splitlines() if line.strip()]
 
 
+def answer_schema(label: dict) -> dict:
+    """The JSON schema the extractor hands Ollama (schemaFor in ollama.ts): every field, in order, amounts as numbers."""
+    properties = {name: {"type": "number" if name in AMOUNT_FIELDS else "string"} for name in label}
+    return {"type": "object", "properties": properties, "required": list(properties), "additionalProperties": False}
+
+
 def generate_replies(model, tokenizer, records: list[dict]) -> list[dict]:
-    """Greedy answers for each record's system + user messages, paired with the label."""
+    """
+    Greedy answers for each record's system + user messages, paired with the label. Decoding is
+    constrained to the action's JSON schema, as Ollama does at run time, so the model can only
+    choose values: it cannot chat back, and base and tuned models are scored on equal terms.
+    """
     import torch
+    import xgrammar as xgr
+
+    compiler = xgr.GrammarCompiler(xgr.TokenizerInfo.from_huggingface(tokenizer, vocab_size=model.config.vocab_size))
 
     rows = []
     model.eval()
@@ -133,13 +146,16 @@ def generate_replies(model, tokenizer, records: list[dict]) -> list[dict]:
         prompt = tokenizer.apply_chat_template(
             record["messages"][:2], add_generation_prompt=True, return_tensors="pt", return_dict=True
         ).to(model.device)
+        label = json.loads(record["messages"][2]["content"])
+        # A logits processor holds the parse state, so each answer gets its own.
+        constrain = xgr.contrib.hf.LogitsProcessor(compiler.compile_json_schema(json.dumps(answer_schema(label))))
         with torch.no_grad():
-            out = model.generate(**prompt, max_new_tokens=160, do_sample=False)
+            out = model.generate(**prompt, max_new_tokens=160, do_sample=False, logits_processor=[constrain])
         reply = tokenizer.decode(out[0][prompt["input_ids"].shape[1]:], skip_special_tokens=True)
         rows.append(
             {
                 "action": record["meta"]["action"],
-                "label": json.loads(record["messages"][2]["content"]),
+                "label": label,
                 "message": record["messages"][1]["content"],
                 "reply": reply,
             }
@@ -203,7 +219,7 @@ def train(files: dict[str, str], base: str = BASE_MODEL, epochs: int = 3, lr: fl
             per_device_train_batch_size=16,
             learning_rate=lr,
             lr_scheduler_type="cosine",
-            warmup_ratio=0.05,
+            warmup_steps=0.05,  # a float below 1 is a fraction of all steps
             bf16=True,
             max_length=512,
             logging_steps=10,
