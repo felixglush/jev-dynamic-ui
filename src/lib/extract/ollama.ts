@@ -56,6 +56,15 @@ export function schemaFor(action: keyof typeof CATALOG) {
   return { type: "object", properties, required: Object.keys(properties), additionalProperties: false };
 }
 
+/** The system prompt the model is given. Exported so the fine-tuning data (src/lib/sft) trains on exactly this text. */
+export function systemPromptFor(action: keyof typeof CATALOG): string {
+  return (
+    `Extract these fields from the user's banking message: ${freeTextParams(action).map(([name]) => name).join(", ")}. ` +
+    "Only copy information that is actually written in the message. If a field is not stated, leave it empty. " +
+    "Never invent names, emails, phone numbers or dates."
+  );
+}
+
 export async function extractFields(
   action: keyof typeof CATALOG,
   message: string,
@@ -73,13 +82,7 @@ export async function extractFields(
       format: schemaFor(action),
       options: { temperature: 0 },
       messages: [
-        {
-          role: "system",
-          content:
-            `Extract these fields from the user's banking message: ${params.map(([name]) => name).join(", ")}. ` +
-            "Only copy information that is actually written in the message. If a field is not stated, leave it empty. " +
-            "Never invent names, emails, phone numbers or dates.",
-        },
+        { role: "system", content: systemPromptFor(action) },
         { role: "user", content: message },
       ],
     }),
