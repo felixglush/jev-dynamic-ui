@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { use, useState } from "react";
 
+import { ActionHostContext } from "./action-form";
 import { ParamField } from "./param-field";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CATALOG } from "@/lib/jev/catalog";
@@ -33,9 +34,11 @@ export function ViewAccount({ call }: { call: Extract<ActionCall, { action: "vie
   const [account, setAccount] = useState(accountParam.value ?? "");
   const [view, setView] = useState(viewParam.value ?? "balance");
   const accountName = account.replaceAll("_", " ");
+  // Inside the chat's floating card the card chrome would be doubled, so only the contents render.
+  const hosted = use(ActionHostContext) !== null;
 
-  return (
-    <Card className="w-full max-w-md">
+  const content = (
+    <>
       <CardHeader>
         <CardTitle>
           <h2 className="text-balance">Your Account</h2>
@@ -67,6 +70,8 @@ export function ViewAccount({ call }: { call: Extract<ActionCall, { action: "vie
           )}
         </div>
       </CardContent>
-    </Card>
+    </>
   );
+
+  return hosted ? content : <Card className="w-full max-w-md">{content}</Card>;
 }
