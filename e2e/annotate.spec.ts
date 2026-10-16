@@ -261,6 +261,24 @@ test.describe("autosave to a file", () => {
     expect(await savedFile()).toBe(before);
   });
 
+  test("two browsers answering different messages both end up in the file", async ({ page, browser }) => {
+    // Both pages loaded the same empty state. The other one answers message 2 first.
+    const other = await browser.newPage();
+    await open(other);
+    await square(other, 2).click();
+    await other.keyboard.press("y");
+    await expect(other.getByTestId("file-status")).toHaveText(/^Saved to/);
+    await other.close();
+
+    // This page still thinks nothing is answered, then answers message 1.
+    await page.keyboard.press("y");
+    await expect(page.getByTestId("file-status")).toHaveText(/^Saved to/);
+
+    const csv = (await savedFile())!;
+    expect(csv).toContain("Send $50 to Sam for dinner last night,send_etransfer,1.000,recipient=Sam (1.00); amount=50.00 (0.98),,send_etransfer");
+    expect(csv).toContain("jordan (0.99); amount=120.00 (1.00),,send_etransfer");
+  });
+
   test("Clear all empties the file too", async ({ page }) => {
     await page.keyboard.press("y");
     await expect(page.getByTestId("file-status")).toHaveText(/^Saved to/);

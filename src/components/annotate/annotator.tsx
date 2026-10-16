@@ -18,10 +18,22 @@ type Props = {
   /** Read annotations saved in a file on the server. Left out in the static preview. */
   loadFromFile?: () => Promise<LoadResult>;
   /** Write every annotation to that file. Left out in the static preview. */
-  saveToFile?: (annotations: Annotations) => Promise<SaveResult>;
+  saveToFile?: (changes: Changes) => Promise<SaveResult>;
 };
 
 /** Where the annotations last went: a file on the server, or only this browser. */
+/** A message id → its new annotation, or null when the answer was removed. */
+type Changes = Record<string, Annotation | null>;
+
+function changesBetween(before: Annotations, after: Annotations): Changes {
+  const changes: Changes = {};
+  for (const [id, annotation] of Object.entries(after)) {
+    if (JSON.stringify(before[id]) !== JSON.stringify(annotation)) changes[id] = annotation;
+  }
+  for (const id of Object.keys(before)) if (!(id in after)) changes[id] = null;
+  return changes;
+}
+
 type FileStatus =
   | { state: "idle" }
   | { state: "saving"; path: string }
@@ -100,7 +112,9 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: 
   const [fileStatus, setFileStatus] = useState<FileStatus>({ state: "idle" });
   // The file couldn't be read (say, edited by hand into something invalid): don't overwrite it.
   const fileBlocked = useRef(false);
-  const queued = useRef<Annotations | null>(null);
+  // Changes not yet written to the file, and the newest annotations this session has set.
+  const pending = useRef<Changes | null>(null);
+  const latest = useRef<Annotations>({});
   const writing = useRef(false);
 
   const { predictions, annotations } = dataset;
@@ -132,29 +146,30 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: 
       }
       const merged = { ...fromFile, ...local };
       if (Object.keys(merged).length > 0) {
-        setDataset((d) => ({ ...d, annotations: { ...d.annotations, ...merged } }));
+        // Answers given while the file was loading are newer than anything restored, so they win.
+        setDataset((d) => ({ ...d, annotations: { ...merged, ...d.annotations } }));
+        writeSaved(storageKey(initial), { ...merged, ...latest.current });
         setRestored(true);
-        // Anything only the browser had goes to the file too.
-        if (Object.keys(local).some((id) => JSON.stringify(local[id]) !== JSON.stringify(fromFile[id]))) {
-          queueFileSave(merged);
-        }
+        // Anything only the browser had goes to the file too, except what was answered since.
+        const browserOnly = Object.keys(local).filter((id) => !(id in latest.current) && JSON.stringify(local[id]) !== JSON.stringify(fromFile[id]));
+        if (browserOnly.length > 0) queueFileSave(Object.fromEntries(browserOnly.map((id) => [id, local[id]!])));
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once; the props are stable
   }, [initial]);
 
-  /** Send the latest annotations to the file. Saves queue up so only the newest state is written. */
-  function queueFileSave(next: Annotations) {
+  /** Send changed answers to the file. Changes made while a save is running go out together in the next one. */
+  function queueFileSave(changes: Changes) {
     if (!saveToFile || !usingDefaultRef.current || fileBlocked.current) return;
-    queued.current = next;
+    pending.current = { ...pending.current, ...changes };
     if (writing.current) return;
     writing.current = true;
     void (async () => {
       let failed = false;
       let path = "";
-      while (queued.current) {
-        const batch = queued.current;
-        queued.current = null;
+      while (pending.current) {
+        const batch = pending.current;
+        pending.current = null;
         setFileStatus((s) => (s.state === "saved" || s.state === "saving" ? { state: "saving", path: s.path } : { state: "saving", path: "" }));
         const result = await saveToFile(batch).catch(() => null);
         if (result?.ok) path = result.path;
@@ -172,7 +187,8 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: 
   function setAnnotations(next: Annotations) {
     setDataset((d) => ({ ...d, annotations: next }));
     writeSaved(key, next);
-    queueFileSave(next);
+    latest.current = next;
+    queueFileSave(changesBetween(annotations, next));
   }
 
   function save(annotation: Annotation) {

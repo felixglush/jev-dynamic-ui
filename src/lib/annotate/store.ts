@@ -37,11 +37,26 @@ export async function readAnnotationsFile(): Promise<Annotations | null> {
 // Saves run one at a time so two quick answers can't interleave their writes.
 let queue: Promise<unknown> = Promise.resolve();
 
-/** Write all annotations to disk, replacing the file. Writes to a temp file first, then renames. */
-export function writeAnnotationsFile(raw: unknown): Promise<void> {
+/**
+ * Apply changes to the saved annotations: an annotation sets that message's answer, null removes it.
+ * Only the changed messages are sent, and they are applied to what is on disk right now, so a second
+ * tab with an older view can't wipe answers it never saw. Writes to a temp file first, then renames.
+ */
+export function writeAnnotationChanges(raw: unknown): Promise<void> {
   const run = async () => {
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw new Error("Changes must be an object.");
     const { predictions } = await loadDefaultDataset();
-    const annotations = sanitizeAnnotations(predictions, raw);
+    const entries = Object.entries(raw);
+    const removed = entries.filter(([, value]) => value === null).map(([id]) => id);
+    const set = sanitizeAnnotations(predictions, Object.fromEntries(entries.filter(([, value]) => value !== null)));
+    const known = new Set(predictions.map((p) => p.id));
+    const unknown = removed.find((id) => !known.has(id));
+    if (unknown !== undefined) throw new Error(`Unknown message id ${unknown}.`);
+
+    // Throws when the file exists but can't be read, so a hand-edited file is never overwritten.
+    const annotations = { ...(await readAnnotationsFile()), ...set };
+    for (const id of removed) delete annotations[id];
+
     const file = annotationsPath();
     await mkdir(path.dirname(file), { recursive: true });
     const temp = `${file}.tmp`;

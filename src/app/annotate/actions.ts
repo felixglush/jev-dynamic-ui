@@ -1,7 +1,7 @@
 "use server";
 
-import { annotationsLabel, readAnnotationsFile, writeAnnotationsFile } from "@/lib/annotate/store";
-import type { Annotations } from "@/lib/annotate/dataset";
+import { annotationsLabel, readAnnotationsFile, writeAnnotationChanges } from "@/lib/annotate/store";
+import type { Annotation, Annotations } from "@/lib/annotate/dataset";
 
 export type LoadResult = { ok: true; annotations: Annotations | null; path: string } | { ok: false; error: string };
 export type SaveResult = { ok: true; path: string } | { ok: false; error: string };
@@ -20,9 +20,10 @@ export async function loadSavedAnnotations(): Promise<LoadResult> {
   }
 }
 
-export async function saveAnnotationsToFile(annotations: Annotations): Promise<SaveResult> {
+/** `changes` maps a message id to its new annotation, or to null to remove it. */
+export async function saveAnnotationsToFile(changes: Record<string, Annotation | null>): Promise<SaveResult> {
   try {
-    await writeAnnotationsFile(annotations);
+    await writeAnnotationChanges(changes);
     return { ok: true, path: annotationsLabel() };
   } catch (error) {
     console.error("saveAnnotationsToFile failed:", error);
