@@ -5,7 +5,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { SFT_REVIEW_FILE } from "./paths";
 
-// Reviewing the generated fine-tuning rows on /annotate, against a copy of data/sft/examples.jsonl
+// Reviewing the generated fine-tuning rows on /annotate, against a copy of e2e/fixtures/examples.jsonl
 // that the app writes into. No model and no network: this is the file round trip.
 
 type Row = { messages: { content: string }[]; meta: { id: string; status: string; action: string; original?: { answer: string }; note?: string } };
@@ -24,7 +24,7 @@ async function open(page: Page) {
 test.beforeEach(async ({ page }) => {
   await rm(SFT_REVIEW_FILE, { force: true });
   await mkdir(path.dirname(SFT_REVIEW_FILE), { recursive: true });
-  await copyFile("data/sft/examples.jsonl", SFT_REVIEW_FILE);
+  await copyFile("e2e/fixtures/examples.jsonl", SFT_REVIEW_FILE);
   await open(page);
 });
 
@@ -89,14 +89,14 @@ test("the Group menu walks one group at a time and shows its progress", async ({
   const group = page.getByRole("combobox", { name: "Group" });
   await group.selectOption("send_etransfer");
   await expect(page.getByTestId("predicted-action")).toHaveText("send_etransfer");
-  await expect(page.getByText(/Message 1 of \d+/)).not.toContainText("of 645");
+  await expect(page.getByText(/Message 1 of \d+/)).not.toContainText("of 48");
   // Overall progress stays global.
-  await expect(page.getByTestId("progress")).toHaveText(/^0 of 645 reviewed$/);
+  await expect(page.getByTestId("progress")).toHaveText(/^0 of 48 reviewed$/);
   await page.keyboard.press("y");
   await expect(group.locator("option:checked")).toHaveText(/^send etransfer \(1\//);
-  await expect(page.getByTestId("progress")).toHaveText("1 of 645 reviewed");
+  await expect(page.getByTestId("progress")).toHaveText("1 of 48 reviewed");
   await group.selectOption("");
-  await expect(page.getByText("Message 1 of 645")).toBeVisible();
+  await expect(page.getByText("Message 1 of 48")).toBeVisible();
 });
 
 test("the square grid has one labeled block per group", async ({ page }) => {
@@ -137,4 +137,20 @@ test("a note alone counts as a fix", async ({ page }) => {
   await expect(page.getByTestId("file-status")).toHaveText(`Saved to ${SFT_REVIEW_FILE}`);
   await expect(page.getByRole("navigation", { name: "Messages" }).getByRole("button").first()).toHaveAccessibleName("Message 1, fixed");
   expect((await rows())[0]!.meta).toMatchObject({ status: "approved", note: "fine, but odd wording" });
+});
+
+test("reviews made after importing a file are kept in this browser and come back on re-import", async ({ page }) => {
+  const buffer = await readFile("e2e/fixtures/examples.jsonl");
+  const file = { name: "examples.jsonl", mimeType: "application/jsonl", buffer };
+  await page.getByLabel("Import predictions CSV").setInputFiles(file);
+  await expect(page.getByTestId("file-status")).toHaveText("Imported file: saved in this browser only");
+  await page.keyboard.press("y");
+  await expect(page.getByTestId("progress")).toHaveText("1 of 48 reviewed");
+  // The imported copy is browser-only: the app's own file is untouched.
+  expect((await rows())[0]!.meta.status).toBe("pending");
+
+  await page.reload();
+  await open(page);
+  await page.getByLabel("Import predictions CSV").setInputFiles(file);
+  await expect(page.getByTestId("progress")).toHaveText("1 of 48 reviewed");
 });

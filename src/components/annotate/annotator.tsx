@@ -238,7 +238,8 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ti
 
   function setAnnotations(next: Annotations) {
     setDataset((d) => ({ ...d, annotations: next }));
-    if (persistLocal) writeSaved(key, next);
+    // The file-backed data set keeps its answers in the file; an imported file has only this browser.
+    if (persistLocal || !usingDefaultRef.current) writeSaved(key, next);
     latest.current = next;
     queueFileSave(changesBetween(annotations, next));
   }
