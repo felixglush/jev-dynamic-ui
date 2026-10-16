@@ -86,7 +86,7 @@ function pick(question: string, labels: string[], query: string): string {
     case "from_account":
       return text.includes("savings") ? "savings" : text.includes("chequing") ? "chequing" : "none";
     case "payment_option":
-      return text.includes("minimum") ? "minimum" : text.includes("pay off") ? "full_balance" : "none";
+      return text.includes("minimum") ? "minimum" : text.includes("pay off") ? "current_balance" : "none";
     case "account_type":
       return ["tfsa", "rrsp", "fhsa"].find((kind) => text.includes(kind)) ?? "none";
     case "email":

@@ -43,11 +43,11 @@ describe("extractFields", () => {
     expect(request!.messages.at(-1)!.content).toBe("Send $50 to Sam for dinner");
   });
 
-  it("also asks for the account and the payment option as text", async () => {
-    answer = { payment_option: "minimum", amount: 0, from_account: "savings" };
+  it("also asks for the source account as text", async () => {
+    answer = { amount: 0, from_account: "savings" };
     const fields = await extractFields("pay_credit_card", "pay the minimum on my card from savings");
-    expect(Object.keys(requests.at(-1)!.format.properties)).toEqual(["payment_option", "amount", "from_account"]);
-    expect(fields.payment_option).toEqual({ value: "minimum", status: "kept" });
+    // payment_option (minimum, statement balance, ...) is Jev's pick, so it isn't asked here.
+    expect(Object.keys(requests.at(-1)!.format.properties)).toEqual(["amount", "from_account"]);
     expect(fields.from_account).toEqual({ value: "savings", status: "kept" });
     expect(fields.amount).toEqual({ value: null, status: "blank" });
   });

@@ -123,12 +123,10 @@ export const CATALOG = {
         question: "How much of the credit card balance does the customer want to pay in `query`?",
         options: {
           minimum: "The minimum payment due.",
-          statement_balance: "The balance on the latest statement.",
-          full_balance: "Everything owed right now; 'pay it off'.",
+          statement_balance: "The balance on the latest statement, which is what is due by the due date.",
+          current_balance: "Everything owed right now, including purchases not yet on a statement.",
           custom: "A specific dollar amount the customer states.",
         },
-        extract:
-          "how much of the balance to pay, in the customer's words, e.g. 'minimum', 'statement balance' or 'pay off'; empty if only a dollar amount is given",
       },
       amount: {
         type: "amount",
