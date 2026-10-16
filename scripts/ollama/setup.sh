@@ -4,6 +4,10 @@
 set -eu
 cd "$(dirname "$0")"
 mkdir -p models
-[ -f models/LFM2.5-230M-Q8_0.gguf ] || curl -fL -o models/LFM2.5-230M-Q8_0.gguf \
-  https://huggingface.co/LiquidAI/LFM2.5-230M-GGUF/resolve/main/LFM2.5-230M-Q8_0.gguf
+# Download to a temporary name and rename on success, so an interrupted transfer is never mistaken for the model.
+if [ ! -f models/LFM2.5-230M-Q8_0.gguf ]; then
+  curl -fL -o models/LFM2.5-230M-Q8_0.gguf.part \
+    https://huggingface.co/LiquidAI/LFM2.5-230M-GGUF/resolve/main/LFM2.5-230M-Q8_0.gguf
+  mv models/LFM2.5-230M-Q8_0.gguf.part models/LFM2.5-230M-Q8_0.gguf
+fi
 ollama create lfm25-230m -f Modelfile

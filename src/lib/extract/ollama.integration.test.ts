@@ -74,6 +74,15 @@ describe("extractFields", () => {
     expect(fields.amount).toMatchObject({ value: null, status: "dropped" });
   });
 
+  it("does not mistake a date, ordinal or number phrase for the amount", async () => {
+    answer = { payee: "Bell", amount: 15, date: "the 15th" };
+    expect((await extractFields("pay_bill", "pay Bell on the 15th")).amount).toMatchObject({ value: null, status: "dropped" });
+    answer = { payee: "Sam", amount: 52, date: "" };
+    expect((await extractFields("pay_bill", "pay Sam fifty dollars in two weeks")).amount).toMatchObject({ status: "dropped" });
+    answer = { payee: "Sam", amount: 50, date: "in two weeks" };
+    expect((await extractFields("pay_bill", "pay Sam fifty dollars in two weeks")).amount).toMatchObject({ value: 50, status: "kept" });
+  });
+
   it("matches phone numbers by digits, whatever the punctuation", async () => {
     answer = { name: "Zoë", email: "", phone: "4165550123" };
     const fields = await extractFields("add_etransfer_contact", "save Zoë's number (416) 555-0123");

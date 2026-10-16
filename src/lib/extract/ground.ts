@@ -3,6 +3,7 @@
  * checked against the customer's message. A value that doesn't literally appear there (after
  * normalizing) is dropped and the field is left blank for the customer to fill in.
  */
+import { findAmounts } from "@/lib/jev/candidates";
 
 const NUMBER_WORDS: Record<string, number> = {
   one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
@@ -14,28 +15,37 @@ const NUMBER_WORDS: Record<string, number> = {
 /** Every amount the message could be saying: "1,850" and "$1.5k" as digits, "seventy-five" as words. */
 export function amountsIn(message: string): Set<number> {
   const found = new Set<number>();
-  const text = message.toLowerCase();
-  for (const match of text.matchAll(/\d[\d,]*(?:\.\d+)?(\s?k\b)?/g)) {
-    const value = Number(match[0].replace(/[,k\s]/g, ""));
-    if (Number.isFinite(value)) found.add(match[1] ? value * 1000 : value);
+  // findAmounts already ignores digits that belong to emails, phone numbers and day ordinals ("the 15th").
+  for (const span of findAmounts(message)) {
+    const value = Number(span.replace(/[^\d.]/g, ""));
+    if (Number.isFinite(value) && /\d/.test(span)) found.add(/\d\s?k\b/i.test(span) ? value * 1000 : value);
   }
-  // Spelled out: "two hundred", "seventy-five", "one thousand five hundred".
+  // Spelled out: "two hundred", "seventy-five", "one thousand five hundred". Each run of number
+  // words is its own phrase, so "fifty dollars ... in two weeks" gives 50 and 2, not 52.
   let total = 0;
   let current = 0;
-  let sawNumber = false;
-  for (const word of text.replaceAll("-", " ").match(/[a-z]+/g) ?? []) {
+  let inPhrase = false;
+  const endPhrase = () => {
+    if (inPhrase) found.add(total + current);
+    total = 0;
+    current = 0;
+    inPhrase = false;
+  };
+  for (const word of message.toLowerCase().replaceAll("-", " ").match(/[a-z]+|[^a-z\s]+/g) ?? []) {
     const small = NUMBER_WORDS[word];
     if (small !== undefined) {
       current += small;
-      sawNumber = true;
-    } else if (word === "hundred" && sawNumber) {
+      inPhrase = true;
+    } else if (word === "hundred" && inPhrase) {
       current = (current || 1) * 100;
-    } else if (word === "thousand" && sawNumber) {
+    } else if (word === "thousand" && inPhrase) {
       total += (current || 1) * 1000;
       current = 0;
+    } else if (word !== "and") {
+      endPhrase();
     }
   }
-  if (sawNumber) found.add(total + current);
+  endPhrase();
   return found;
 }
 

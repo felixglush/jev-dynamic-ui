@@ -37,7 +37,7 @@ for (const raw of (await readFile(inputPath, "utf8")).split("\n")) {
   const seconds = ((performance.now() - started) / 1000).toFixed(2);
   messages++;
   for (const [name, field] of Object.entries(fields)) {
-    rows.push([group, action, line, name, csvCell(field.raw), csvCell(field.value), field.status, seconds].map((c) => csvCell(c)));
+    rows.push([group, action, line, name, field.raw, field.value, field.status, seconds].map(csvCell));
   }
 }
 await writeFile(outputPath, rows.map((r) => r.join(",")).join("\n") + "\n");
