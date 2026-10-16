@@ -94,9 +94,43 @@ Reading: the net change is not distinguishable from noise. Val went from 6 wrong
 
 **Do not read the test gain as proof the fixes work.** Run 1's test errors were read and the new rows were written for them, so test is no longer a clean held-out set. Val and test are retired as the final measure until new held-out rows exist (see below).
 
-## Fair evaluation v2 (planned, handed off)
+## Fair evaluation v2
 
-Status: not started. Decision (2026-10-16): val becomes the dev set (errors may be read), test is sealed and scored once per final candidate, and the current test is retired as `dev-2` because its errors were read before Run 2's rows were written. New held-out rows will be written per failure pattern (8 to 10 each, tagged, split between val and test), the sets versioned (v1 = current, v2 = new), and every candidate re-scored on the current version, with a per-pattern pass rate in the report. Run 1 and Run 2 numbers above are v1 and are not comparable to v2. Full brief for the new chat: [handoff-fair-eval.md](handoff-fair-eval.md). That chat appends its results to this log.
+Date: 2026-10-16. Replaces the plan in [handoff-fair-eval.md](handoff-fair-eval.md).
+
+**Decisions**
+
+- **Val is the dev set.** Its errors may be read, and it is used to choose settings and to decide which train rows to add.
+- **Test is sealed.** Nobody reads its errors; it is scored once per final candidate. The output of `modal_train.py` no longer contains the test messages or which test rows failed, only counts (overall and per pattern), so this is enforced in code and tested.
+- **The old test is retired as `dev-2`.** Run 1's test errors were read and rows were written for them, so those 98 rows no longer measure generalisation. They stay in the v2 test file (existing rows keep their splits) but the sealed part of v2 test is its **new rows**, tagged `meta.version: "v2"`. The report gives both the pattern tables with all rows and with v2 rows alone.
+- **Versions.** A row with no `meta.version` is v1. `data/sft/{train,val,test}.jsonl` is the current version (v2 = every row). `data/sft/v1/` holds the v1 files exactly as scored for Runs 1 and 2 (583 / 98 / 98); a test rebuilds v1 from the v1 rows and checks the messages are identical. **Scores are only compared within a version**: the v1 numbers above are not comparable with v2.
+
+**What changed**
+
+- Code (`b7e17a8`): `meta.split` (`train`/`val`/`test`) pins a row and overrides the hash split; `trainOnly` still works (read as `split: "train"`; `split` wins when both are set). `meta.pattern` and `meta.version` added. `sft:add` takes `--split`, `--pattern`, `--version`, and batch files can carry `# split:` / `# pattern:` lines. `applyReview` keeps the new fields. Tests cover pinning not moving any hash-split row, `trainOnly` compatibility and v1 reproducibility.
+- Tags on existing rows (`b7e17a8`): assigned by simple rules on the message and label (see below), not by reading each row. Counts by pattern and v1 split are in the table below.
+- Held-out rows (`1080147`): 70 new rows, 5 val and 5 test for each of 7 patterns. Written without opening the train batch (I only listed the 134 train-only messages to avoid exact duplicates; none of the 70 was a duplicate). Different names, companies, amounts and phrasing from train. Labels were checked against the substring rule and `docs/sft-dataset.md` section 2 and marked `approved` by Claude with a note; **none of these rows was reviewed by a person**.
+- Scoring (`training/modal_train.py`): pass rate (exact record match) per `meta.pattern`, for all rows and for v2 rows alone, plus per version; `--stage score --run <folder>` scores a saved model from the volume; every stage writes to its own volume folder (`--run`), so `latest/` is no longer overwritten by accident; `--train-subset run1` trains on the Run 1 rows only. Run 2's weights were copied to the volume folder `run2/` before anything was trained.
+
+**Pattern tags** (rules: `cancel-email-only` = cancel with an email and no recipient; `past-event-date` = a date field that is blank and the message has `last night`, `yesterday`, `cancelled on` and the like; `today-date` = date label `today`/`tonight`; `spelled-amount` = `hundred`/`thousand` in the message and amount at least 100; `lowercase-name` = a name label that starts lowercase; `email-no-name` = an email and no name, or autodeposit with phone and email; `company-name` = a payee/biller/merchant of two or more words, or `my X ... bill`):
+
+| Pattern | Existing rows tagged (train / val / test) | New v2 rows (val / test) |
+| --- | --- | --- |
+| spelled-amount | 59 / 3 / 2 | 5 / 5 |
+| company-name | 35 / 7 / 3 | 5 / 5 |
+| email-no-name | 45 / 10 / 6 | 5 / 5 |
+| past-event-date | 18 / 1 / 1 | 5 / 5 |
+| lowercase-name | 17 / 1 / 1 | 5 / 5 |
+| today-date | 9 / 1 / 1 | 5 / 5 |
+| cancel-email-only | 1 / 0 / 1 | 5 / 5 |
+
+v2 sets: val 133 (98 v1 + 35 new), test 133 (98 + 35), train 583 until Run 3's rows are added.
+
+**Caveats that apply to every v2 number**
+
+- The new rows are AI-written by the same author who knows which patterns failed, in the same style as train. A pass shows the fixes generalise within these patterns, not that the model is accurate on real messages.
+- Five rows per pattern per split means one row is 20 points on a single cell. Read patterns as pass counts, not percentages, and do not rank models on differences of one or two rows.
+- The v1 part of val and test was already read (errors from Run 1 and Run 2), so only the v2 rows are clean.
 
 ## Ideas to try next
 
