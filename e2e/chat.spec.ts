@@ -447,11 +447,12 @@ test("saying something else swaps the form, and clearing the message closes the 
 });
 
 test("an answer to something typed earlier never overwrites the form for what is typed now", async ({ page }) => {
-  let release: () => void = () => {};
-  const held = new Promise<void>((resolve) => (release = resolve));
+  // Hold the first two answers separately, so the older one can land while the newer one is pending.
+  const releases: (() => void)[] = [];
+  const holds = [0, 1].map(() => new Promise<void>((resolve) => releases.push(resolve)));
   let posts = 0;
   await page.route("**/*", async (route) => {
-    if (route.request().method() === "POST" && posts++ === 0) await held;
+    if (route.request().method() === "POST") await holds[posts++];
     await route.continue();
   });
   const firstAsked = page.waitForRequest((request) => request.method() === "POST");
@@ -461,8 +462,12 @@ test("an answer to something typed earlier never overwrites the form for what is
 
   // Next runs a page's server actions one after another, so the older answer lands first. It must
   // be dropped, because by then the customer has typed something else.
-  release();
-  await expect(card(page).getByText("Open a New Account")).toBeVisible();
+  releases[0]!();
+  await page.waitForTimeout(400);
+  await expect(card(page)).toBeHidden();
+  await expect(page.getByLabel("To")).toHaveCount(0);
+
+  releases[1]!();
   await expect(card(page).getByText("Open a New Account")).toBeVisible();
   await expect(card(page).getByText("Send an e-Transfer")).toHaveCount(0);
 });
