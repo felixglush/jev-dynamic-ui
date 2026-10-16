@@ -7,7 +7,7 @@
  * decoding (`format`), so the model only has to learn the values. Training on exactly what it will
  * see at run time is the point; any wording drift between the two would quietly weaken the tuning.
  */
-import { freeTextParams, systemPromptFor } from "@/lib/extract/ollama";
+import { freeTextParams, systemPromptFor } from "@/lib/extract/prompt";
 import type { LabeledExample } from "./seed";
 
 export type SftRecord = {
@@ -18,7 +18,14 @@ export type SftRecord = {
     { role: "assistant"; content: string },
   ];
   /** Bookkeeping for review and splits. Drop it, or select only `messages`, when training. */
-  meta: { id: string; action: string; vague: boolean; present: string[] };
+  meta: {
+    id: string;
+    action: string;
+    vague: boolean;
+    present: string[];
+    /** "synthetic" for generated rows, "model" for extract:eval output; absent for the hand-labeled seed. */
+    source?: string;
+  };
 };
 
 /** The answer for one example: every field, in schema order, with "" (or 0 for amounts) where the message doesn't say. */

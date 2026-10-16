@@ -4,16 +4,19 @@
  *   npm run sft:build            write data/sft/{train,val,test}.jsonl and print a coverage table
  *   npm run sft:build -- --check fail if the files on disk are stale (for CI / before committing)
  *
- * Reads data/sft/seed-labeled.txt, refuses to continue if any label isn't literally in its message,
+ * Reads data/sft/seed-labeled.txt (hand-labeled) and the approved rows of data/sft/synthetic.jsonl (generated,
+ * reviewed on /annotate), refuses to continue if any label isn't literally in its message,
  * splits per action (src/lib/sft/split.ts) and writes one JSON record per line.
  */
 import { readFile, writeFile } from "node:fs/promises";
 
-import { toRecord, type SftRecord } from "../src/lib/sft/record";
+import { buildSplits } from "../src/lib/sft/build";
 import { parseSeed, validateExamples } from "../src/lib/sft/seed";
-import { splitIds, type Split } from "../src/lib/sft/split";
+import { parseSynthetic } from "../src/lib/sft/synthetic";
+import type { Split } from "../src/lib/sft/split";
 
 const SEED = "data/sft/seed-labeled.txt";
+const SYNTHETIC = "data/sft/synthetic.jsonl";
 const check = process.argv.includes("--check");
 
 const examples = parseSeed(await readFile(SEED, "utf8"));
@@ -23,9 +26,11 @@ if (problems.length > 0) {
   process.exit(1);
 }
 
-const splitOf = splitIds(examples);
-const files: Record<Split, SftRecord[]> = { train: [], val: [], test: [] };
-for (const example of examples) files[splitOf.get(example.id)!].push(toRecord(example));
+const synthetic = parseSynthetic(await readFile(SYNTHETIC, "utf8").catch(() => ""));
+const { files, dropped } = buildSplits(examples, synthetic);
+if (dropped.length > 0) console.warn(`Left out ${dropped.length} approved synthetic row(s) that repeat a val/test message: ${dropped.join(", ")}`);
+const count = (status: string) => synthetic.filter((r) => r.meta.status === status).length;
+console.log(`synthetic: ${count("approved")} approved (in train), ${count("pending")} pending, ${count("rejected")} rejected\n`);
 
 let stale = false;
 for (const [split, records] of Object.entries(files)) {
@@ -51,7 +56,7 @@ for (const action of actions) {
   const vague = examples.filter((e) => e.action === action && e.vague).length;
   console.log(action.padEnd(28), String(count("train")).padStart(5), String(count("val")).padStart(4), String(count("test")).padStart(5), String(vague).padStart(6));
 }
-console.log(`\ntotal ${examples.length}: train ${files.train.length}, val ${files.val.length}, test ${files.test.length}`);
+console.log(`\ntotal ${examples.length} seed + ${count("approved")} synthetic: train ${files.train.length}, val ${files.val.length}, test ${files.test.length}`);
 console.log("\nfield (train only)".padEnd(46), "stated  blank");
 for (const action of actions) {
   const rows = files.train.filter((r) => r.meta.action === action);

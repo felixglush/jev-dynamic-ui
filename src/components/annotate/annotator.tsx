@@ -19,6 +19,12 @@ type Props = {
   loadFromFile?: () => Promise<LoadResult>;
   /** Write every annotation to that file. Left out in the static preview. */
   saveToFile?: (changes: Changes) => Promise<SaveResult>;
+  /** Heading above the progress. */
+  title?: string;
+  /** Which view opens first. */
+  defaultMode?: ReviewMode;
+  /** Keep a copy in this browser too. Off when the file on the server is the only source of truth. */
+  persistLocal?: boolean;
 };
 
 /** Where the annotations last went: a file on the server, or only this browser. */
@@ -95,12 +101,12 @@ function isTyping(target: EventTarget | null) {
  * The annotation screen: one message at a time, a progress strip to jump around, and a summary.
  * Annotations autosave in this browser and can be downloaded as CSV (and imported again).
  */
-export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: Props) {
+export function Annotator({ initial, initialSource, loadFromFile, saveToFile, title = "Annotate Jev's predictions", defaultMode = "full", persistLocal = true }: Props) {
   const [dataset, setDataset] = useState(initial);
   const [source, setSource] = useState(initialSource);
   const [index, setIndex] = useState(0);
   const [view, setView] = useState<"review" | "summary">("review");
-  const [mode, setMode] = useState<ReviewMode>("full");
+  const [mode, setMode] = useState<ReviewMode>(defaultMode);
   const [importError, setImportError] = useState<string | null>(null);
   const [restored, setRestored] = useState(false);
   // False in the server's HTML; true once the browser has taken over and shortcuts work.
@@ -127,7 +133,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: 
   // server has no localStorage, and the first browser render must match the server's HTML.
   // Progress in this browser is newer than the file, so it wins where the two disagree.
   useEffect(() => {
-    const local = readSaved(storageKey(initial)) ?? {};
+    const local = (persistLocal && readSaved(storageKey(initial))) || {};
     // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing from browser storage
     setInteractive(true);
     void (async () => {
@@ -151,7 +157,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: 
       if (usingDefaultRef.current && Object.keys(merged).length > 0) {
         // Answers given while the file was loading are newer than anything restored, so they win.
         setDataset((d) => ({ ...d, annotations: { ...merged, ...d.annotations } }));
-        writeSaved(storageKey(initial), { ...merged, ...latest.current });
+        if (persistLocal) writeSaved(storageKey(initial), { ...merged, ...latest.current });
         setRestored(true);
         // Anything only the browser had goes to the file too, except what was answered since.
         const browserOnly = Object.keys(local).filter((id) => !(id in latest.current) && JSON.stringify(local[id]) !== JSON.stringify(fromFile[id]));
@@ -194,7 +200,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: 
 
   function setAnnotations(next: Annotations) {
     setDataset((d) => ({ ...d, annotations: next }));
-    writeSaved(key, next);
+    if (persistLocal) writeSaved(key, next);
     latest.current = next;
     queueFileSave(changesBetween(annotations, next));
   }
@@ -274,7 +280,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: 
       <header className="flex flex-col gap-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="flex flex-col gap-1">
-            <h1 className="text-2xl font-semibold tracking-tight text-balance">Annotate Jev&apos;s predictions</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-balance">{title}</h1>
             <p className="text-sm text-muted-foreground">
               <span className="font-mono">{source}</span> · {predictions.length} messages
               {restored && " · restored your saved progress"}

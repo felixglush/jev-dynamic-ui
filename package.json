@@ -13,7 +13,8 @@
     "predict": "tsx --conditions=react-server scripts/predict.mts",
     "annotate:preview": "tsx scripts/build-annotate-preview.mts",
     "extract:eval": "tsx --conditions=react-server scripts/extract-eval.mts",
-    "sft:build": "tsx --conditions=react-server scripts/sft-build.mts"
+    "sft:build": "tsx --conditions=react-server scripts/sft-build.mts",
+    "sft:add": "tsx --conditions=react-server scripts/sft-add.mts"
   },
   "dependencies": {
     "@radix-ui/react-label": "^2.1.17",

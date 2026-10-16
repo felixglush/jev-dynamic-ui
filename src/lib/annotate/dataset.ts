@@ -3,8 +3,10 @@
  * plus the expected answers a person fills in. Reading and writing it as CSV lives here so the
  * server page, the import button and the export button all agree on the format.
  */
-import { CATALOG, type ParamSpec } from "@/lib/jev/catalog";
+import { freeTextParams } from "@/lib/extract/prompt";
+import { CATALOG } from "@/lib/jev/catalog";
 import type { ActionName, ParamValue } from "@/lib/jev/types";
+import { reviewOf, type Review, type SyntheticRecord } from "@/lib/sft/synthetic";
 import { parseCsv, toCsv } from "./csv";
 
 export type Prediction = {
@@ -37,6 +39,8 @@ export type Dataset = { predictions: Prediction[]; annotations: Annotations };
 
 // The `value is ActionName` return type tells TypeScript what a true result means, so code after
 // an `if (isActionName(x))` check can use x as an ActionName.
+export { freeTextParams };
+
 export function isActionName(value: string): value is ActionName {
   return Object.hasOwn(CATALOG, value);
 }
@@ -76,11 +80,6 @@ function formatExpectedParams(params: Record<string, string>): string {
   return Object.entries(params)
     .map(([name, value]) => `${name}=${encodeValue(value)}`)
     .join("; ");
-}
-
-/** The parameters the extractor model fills in: everything except choices (which Jev answers). */
-export function freeTextParams(action: ActionName): [string, ParamSpec][] {
-  return Object.entries(CATALOG[action].params as Record<string, ParamSpec>).filter(([, spec]) => spec.type !== "choice");
 }
 
 /**
@@ -128,6 +127,27 @@ export function parseSftJsonl(text: string): Dataset {
   }
   if (predictions.length === 0) throw new Error("The file has no records.");
   return { predictions, annotations: {} };
+}
+
+/**
+ * The synthetic file as rows to review. The "output" shown is what the generator wrote (its first
+ * answer, even after a reviewer corrected it), and rows already approved or rejected come back as
+ * annotations, so the page picks up where the file says review stands.
+ */
+export function datasetFromReviews(records: SyntheticRecord[]): Dataset {
+  const asGenerated = records.map(({ meta: { original, ...meta }, messages }) =>
+    JSON.stringify({
+      messages: [messages[0], messages[1], { role: "assistant", content: original?.answer ?? messages[2].content }],
+      meta: { ...meta, action: original?.action ?? meta.action },
+    }),
+  );
+  const { predictions } = parseSftJsonl(asGenerated.join("\n"));
+  const annotations: Annotations = {};
+  for (const record of records) {
+    const review: Review | null = reviewOf(record);
+    if (review) annotations[record.meta.id] = { expectedAction: review.expectedAction as ExpectedAction, expectedParams: review.expectedParams, note: review.note ?? "" };
+  }
+  return { predictions, annotations };
 }
 
 /** A predictions CSV or an SFT JSONL file: JSONL lines start with "{". */

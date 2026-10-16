@@ -9,9 +9,11 @@ import { describe, expect, it } from "vitest";
 import { schemaFor, systemPromptFor } from "@/lib/extract/ollama";
 import { toRecord, type SftRecord } from "./record";
 import { parseSeed, validateExamples } from "./seed";
-import { splitIds } from "./split";
+import { buildSplits } from "./build";
+import { parseSynthetic } from "./synthetic";
 
 const examples = parseSeed(readFileSync("data/sft/seed-labeled.txt", "utf8"));
+const synthetic = parseSynthetic(readFileSync("data/sft/synthetic.jsonl", "utf8"));
 const read = (split: string) =>
   readFileSync(`data/sft/${split}.jsonl`, "utf8").trim().split("\n").map((line) => JSON.parse(line) as SftRecord);
 
@@ -52,11 +54,8 @@ describe("split", () => {
   const files = Object.fromEntries(["train", "val", "test"].map((s) => [s, read(s)]));
 
   it("matches what `npm run sft:build` would write", () => {
-    const splitOf = splitIds(examples);
-    for (const [split, records] of Object.entries(files)) {
-      const expected = examples.filter((e) => splitOf.get(e.id) === split).map(toRecord);
-      expect(records).toEqual(expected);
-    }
+    const { files: built } = buildSplits(examples, synthetic);
+    for (const [split, records] of Object.entries(files)) expect(records).toEqual(built[split as keyof typeof built]);
   });
 
   it("never puts the same message in two splits", () => {

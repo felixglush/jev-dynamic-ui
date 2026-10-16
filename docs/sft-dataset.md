@@ -57,9 +57,14 @@ Why a few thousand and not tens of thousands: this is one narrow, mechanical tas
 ## 4. Workflow
 
 1. **Seed (done here).** 187 hand-labeled lines in `data/sft/seed-labeled.txt`. Messages came from `sample-messages.txt`, which is the same text the base model was evaluated on, so the base-model numbers stay comparable.
-2. **Synthetic expansion.** Claude generates paraphrases of each **train** seed, plus new messages that target the thin fields above. For each generated message the generator also returns its labels. Prompt it with the labeling rules in section 2 and ask for the "absent" variant of each (same message with the email or amount removed).
-3. **Automatic filter.** Run every generated example through `validateExamples` (structure only) and drop exact and near duplicates of val/test messages. Because there is no text-match check, review matters more: look first at any label whose text isn't a substring of its message, which is a cheap query to run on the generated file.
-4. **Human review on `/annotate`.** Import a JSONL file (`data/sft/train.jsonl`, a synthetic file, or model output from `npm run extract:eval -- data/sample-messages.txt out.jsonl`) with the Import button. The **Full** view is the usual card; **Fields only** shows just the extractor's fields for the action, with blanks marked, and a fix-it form without the choice fields. Press Y to accept a row or fix it, then **Download labels** to get the reviewed rows as lines for `data/sft/seed-labeled.txt`. Review first any row where a label is not a substring of its message (amounts excepted), and about 10% of the rest.
+2. **Synthetic expansion (done for a first batch).** Claude Sonnet 5.5 wrote 458 labeled messages in the seed file's format, using the labeling rules above, aimed at the thin fields (an email with no name, a date with no amount, "relationship only" blanks, typos, spelled-out amounts, accented names) and about 20% fully empty answers. They were written in a Claude Code session, not through the API, because that environment has no `ANTHROPIC_API_KEY`. `npm run sft:add -- batch.txt` appends a batch to `data/sft/synthetic.jsonl` as **pending** rows (skipping any message already in the seed set or the file, and never touching rows already reviewed). Batches only paraphrase and extend **train** families, never val or test messages.
+3. **Automatic filter.** `sft:add` checks structure only (known field, positive amount, no duplicates). There is no text-match check, so review matters: look first at any label whose text isn't a substring of its message.
+4. **Human review on `/annotate`.** Switch to **Fine-tuning data**. It opens `data/sft/synthetic.jsonl` on the **Fields only** view (the model's fields with blanks marked); **Full** shows the whole card. Press **Y** to approve a row, **N** to correct it (change values, or pick another action), or choose action `none` to reject it. Every answer is written straight into the row in the file:
+   - `meta.status` becomes `approved` or `rejected`, and the row's answer and system prompt are rewritten if you corrected it;
+   - `meta.original` keeps what the generator wrote the first time you change a row, and **Clear all** (or taking an answer back) restores it, so the Summary can show how often the generator was wrong;
+   - there is no browser-only copy for this file; the file is the source of truth.
+   Reviewing other JSONL files (`train.jsonl`, or model output from `extract:eval`) still works with **Import file**, browser-only.
+   `npm run sft:build` then puts the **approved** synthetic rows in `train.jsonl`. Pending and rejected rows never train, and an approved row that repeats a val/test message is left out with a warning.
 5. **Check against the base model.** Run `npm run extract:eval` before and after tuning. Its CSV now only says kept or blank, so measuring fabrications means comparing against the labels in `test.jsonl`; a scorer for that is the next piece to build.
 
 ## 5. Split
@@ -68,7 +73,7 @@ Why a few thousand and not tens of thousands: this is one narrow, mechanical tas
 
 Rules that keep the test honest:
 
-- **Test and val are human-written only.** Synthetic examples are generated from train seeds only, so a paraphrase of a test message can never be in training.
+- **Test and val are human-written only.** Synthetic rows only ever go to train (and are dropped if they repeat a val/test message), so a paraphrase of a test message can never be in training.
 - **Test is never tuned on**: it is read once per candidate model, val is for choosing settings. Both are rebuilt only by adding new lines at the end of a group (ids are line order, so appending keeps existing ids).
 - **No message in two splits** (checked in `dataset.test.ts`).
 - At 30 test examples each field has a handful of cases, which is noisy. Grow the held-out set to 100 to 150 hand-written messages before trusting small differences between models.

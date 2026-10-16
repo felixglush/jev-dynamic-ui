@@ -6,7 +6,7 @@
  * Only the fields the message states are listed. Everything else is blank in the training target.
  */
 import { CATALOG, type ParamSpec } from "@/lib/jev/catalog";
-import { freeTextParams } from "@/lib/extract/ollama";
+import { freeTextParams } from "@/lib/extract/prompt";
 
 export type Action = keyof typeof CATALOG;
 
@@ -40,7 +40,8 @@ export function parseSeed(text: string): LabeledExample[] {
       continue;
     }
     if (!action) throw new Error(`Example before any action header: ${line}`);
-    const [message = "", labels = ""] = line.split(" => ");
+    // `message => labels`, or just `message =>` when no field is stated.
+    const [, message = "", labels = ""] = /^(.*?)(?: =>(?: (.*))?)?$/.exec(line) ?? [];
     const fields: Record<string, string | number> = {};
     for (const pair of labels.split("; ").filter(Boolean)) {
       const at = pair.indexOf("=");

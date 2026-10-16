@@ -24,13 +24,13 @@ import type { ActionCall, ActionName, ParamValue } from "@/lib/jev/types";
 
 const ACTIONS = Object.keys(CATALOG) as ActionName[];
 
-/** The <input type> for each kind of parameter. */
+/** The <input type> for each kind of parameter. Dates are plain text: the fine-tuning data keeps them as written ("tomorrow", "the 1st"). */
 const INPUT_TYPE = {
   name: "text",
   email: "email",
   phone: "tel",
   amount: "number",
-  date: "date",
+  date: "text",
   account_number: "text",
 } as const;
 
