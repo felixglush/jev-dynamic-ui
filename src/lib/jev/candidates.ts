@@ -13,7 +13,8 @@ const MAX_NAME_WORDS = 3;
 const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 const PHONE_RE = /\(?\+?\d[\d\s()\-.]{6,}\d/g;
 const MONEY_RE = /\$?\s?\d[\d,]*(?:\.\d{1,2})?(?:\s?(?:k|dollars?|bucks|cad))?/gi;
-const WORD_RE = /[A-Za-z][A-Za-z'-]*/g;
+// \p{L} is any letter in any script and \p{M} a combining mark, so accented and non-Latin names stay whole.
+const WORD_RE = /[\p{L}\p{M}][\p{L}\p{M}'’\-]*/gu;
 
 // A name candidate shouldn't start or end with filler. "my" may start one ("my sister").
 const EDGE_WORDS = new Set(

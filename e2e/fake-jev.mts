@@ -16,7 +16,7 @@ import { zstdDecompressSync } from "node:zlib";
 type SentQuestion = { type: string; criteria: Record<string, unknown> };
 type Sent = { state: { query: string }; questions: Record<string, SentQuestion> };
 
-const KNOWN_NAMES = ["Sam", "Priya", "Jordan", "jordan"];
+const KNOWN_NAMES = ["Sam", "Priya", "Jordan", "jordan", "María-José"];
 
 function actionFor(query: string): string {
   const text = query.toLowerCase();
