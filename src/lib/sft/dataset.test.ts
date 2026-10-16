@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 import { schemaFor, systemPromptFor } from "@/lib/extract/ollama";
 import { buildSplits } from "./build";
 import { parseExamples, type ExampleRecord } from "./examples";
-import { groupOf, MIN_GROUP_SIZE, stratifiedSplit } from "./split";
+import { groupOf, MIN_GROUP_SIZE, pinnedSplit, stratifiedSplit } from "./split";
 import type { SftRecord } from "./record";
 
 const rows = parseExamples(readFileSync("data/sft/examples.jsonl", "utf8"));
@@ -17,6 +17,8 @@ const read = (split: string) => {
   const text = readFileSync(`data/sft/${split}.jsonl`, "utf8").trim();
   return text ? text.split("\n").map((line) => JSON.parse(line) as SftRecord) : [];
 };
+// The hash split only decides the rows that are not pinned; pinned rows (v2 and later) are placed by hand.
+const hashRows = rows.filter((r) => !pinnedSplit(r.meta) && !r.meta.version);
 const approveAll = (list: ExampleRecord[]) => list.map((r) => ({ ...r, meta: { ...r.meta, status: "approved" as const } }));
 
 describe("the examples file", () => {
@@ -66,9 +68,9 @@ describe("train, val and test", () => {
   });
 
   it("hold out rows for every group big enough, whatever their source", () => {
-    const { files: built } = buildSplits(approveAll(rows));
+    const { files: built } = buildSplits(approveAll(hashRows));
     const sizes = new Map<string, number>();
-    for (const r of rows) sizes.set(groupOf(r.meta), (sizes.get(groupOf(r.meta)) ?? 0) + 1);
+    for (const r of hashRows) sizes.set(groupOf(r.meta), (sizes.get(groupOf(r.meta)) ?? 0) + 1);
     for (const [group, size] of sizes) {
       const inSplit = (list: SftRecord[]) => list.filter((r) => groupOf(r.meta) === group).length;
       if (size >= MIN_GROUP_SIZE) {
@@ -81,9 +83,9 @@ describe("train, val and test", () => {
   });
 
   it("keep each group's val and test share close to the target (15% each)", () => {
-    const { files: built } = buildSplits(approveAll(rows));
-    for (const group of new Set(rows.map((r) => groupOf(r.meta)))) {
-      const total = rows.filter((r) => groupOf(r.meta) === group).length;
+    const { files: built } = buildSplits(approveAll(hashRows));
+    for (const group of new Set(hashRows.map((r) => groupOf(r.meta)))) {
+      const total = hashRows.filter((r) => groupOf(r.meta) === group).length;
       if (total < 20) continue;
       const share = built.test.filter((r) => groupOf(r.meta) === group).length / total;
       expect(share, group).toBeGreaterThan(0.08);

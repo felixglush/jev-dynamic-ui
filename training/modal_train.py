@@ -402,7 +402,7 @@ def main(
               run overwrites: give each run its own name)
     --stage   baseline | train | score (a saved <run>/merged model, no training) | gguf | snapshot (copy latest to <run>) | all
     --train-subset  all | run1 (the rows Run 1 trained on: no trainOnly / split / v2 rows)
-    --label   names the local result file training/out/v2-<label>.json (default: the run name)
+    --label   names the local result file training/out/v3-<label>.json (default: the run name)
     """
     if stage == "snapshot":
         print("\n".join(snapshot.remote("latest", run)))
@@ -421,7 +421,7 @@ def main(
     def save(result: dict, kind: str) -> None:
         # One file per stage; "all" runs two scorings, so they get a suffix.
         suffix = f"-{kind}" if stage == "all" else ""
-        (out_dir / f"v2-{label or run}{suffix}.json").write_text(json.dumps(result, indent=2, ensure_ascii=False))
+        (out_dir / f"v3-{label or run}{suffix}.json").write_text(json.dumps(result, indent=2, ensure_ascii=False))
 
     if stage in ("baseline", "all"):
         result = baseline.remote(files, base, run)
