@@ -13,13 +13,24 @@ type Props = {
   options?: Record<string, string>;
   type?: React.ComponentProps<"input">["type"];
   placeholder?: string;
+  /** Keeps ids unique when two forms with the same fields share a page. */
+  idPrefix?: string;
 };
 
 /** One form field pre-filled from what Jev found, with a nudge when it is missing or uncertain. */
-export function ParamField({ name, label, param, required, options, type = "text", placeholder }: Props) {
+export function ParamField({
+  name,
+  label,
+  param,
+  required,
+  options,
+  type = "text",
+  placeholder,
+  idPrefix = "field",
+}: Props) {
   const missing = required && param.value === null;
   const uncertain = param.value !== null && param.confidence !== null && param.confidence < LOW_CONFIDENCE;
-  const id = `field-${name}`;
+  const id = `${idPrefix}-${name}`;
   const statusId = `${id}-status`;
   // Read out "Needed" or "Please check" together with the field, not just show it.
   const describedBy = missing || uncertain ? statusId : undefined;

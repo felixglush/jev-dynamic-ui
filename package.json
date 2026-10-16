@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "predict": "tsx --conditions=react-server scripts/predict.mts"
+    "predict": "tsx --conditions=react-server scripts/predict.mts",
+    "annotate:preview": "tsx scripts/build-annotate-preview.mts"
   },
   "dependencies": {
     "@radix-ui/react-label": "^2.1.17",
@@ -32,6 +33,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@typescript/native": "npm:typescript@^7.0.2",
+    "esbuild": "^0.28.2",
     "eslint": "^10.12.0",
     "eslint-config-next": "^16.4.2",
     "tailwindcss": "^4",

@@ -30,7 +30,7 @@ ActionPanel picks a form  <---  typed result (action + params)  <---
 - Jev picks, it never writes text. For amounts, emails, phones and names, code first finds candidates in the message (`candidates.ts`) and Jev chooses which one fills each parameter, or "none". Choice parameters (account type and so on) pick from the options in the catalog.
 - `src/lib/jev/types.ts` derives the result types from the catalog. `ActionPanel` switches on `call.action`; TypeScript narrows the params in each case and fails the build if an action has no component.
 - `src/components/ui/` is shadcn/ui style components (Tailwind + Radix). `src/components/forms/` holds one form per banking action. `src/app/actions.ts` is the Next.js *Server Action* (server code the browser can call); it's unrelated to the banking "actions".
-- Server and client split: `page.tsx`, `layout.tsx` and `not-found.tsx` are Server Components. Only what needs state or events is a Client Component (`"use client"`): `chat.tsx`, `forms/action-form.tsx` and `app/error.tsx`. The Jev call and the API key live only in `lib/jev/classify.ts` (`server-only`).
+- Server and client split: `page.tsx`, `layout.tsx` and `not-found.tsx` are Server Components. Only what needs state or events is a Client Component (`"use client"`): `chat.tsx`, `forms/action-form.tsx`, the `annotate/` components and `app/error.tsx`. The Jev call and the API key live only in `lib/jev/classify.ts` (`server-only`).
 
 ## Tests
 
@@ -50,7 +50,17 @@ npm run predict                                  # data/sample-messages.txt -> p
 npm run predict -- my-messages.txt out.csv       # your own messages: one per line, `# group` lines label sections
 ```
 
-Runs every message through the real classifier (needs `TYPESAFE_API_KEY` in the environment) and writes a CSV with the predicted action, its confidence, the extracted parameters (each with its confidence), and which required parameters are missing. The empty `expected_action` column is for you to fill in, then compare with `predicted_action` in a spreadsheet. `data/sample-messages.txt` covers all four actions plus ambiguous, no-action and tricky-value messages.
+Runs every message through the real classifier (needs `TYPESAFE_API_KEY` in the environment) and writes a CSV with the predicted action, its confidence, the extracted parameters (each with its confidence), and which required parameters are missing. The empty `expected_action` column is for you to fill in, by hand in a spreadsheet or with the annotation page below. `data/sample-messages.txt` covers all four actions plus ambiguous, no-action and tricky-value messages.
+
+### Annotating them
+
+Open [`/annotate`](http://localhost:3000/annotate) (`npm run dev`). It shows `predictions.csv` one message at a time: what Jev picked, its values and confidences, and the real form the customer would get. Press **Y** if Jev got it right, or **N** to fix the expected action and values, then **Enter**. Squares at the top show each message's status (green right, amber wrong values, red wrong action) and jump to it. **Summary** shows action accuracy, value accuracy, accuracy by confidence, and the list of mistakes.
+
+Progress autosaves in the browser. **Download CSV** writes the predictions with `expected_action`, `expected_params` and `annotator_note` filled in; **Import CSV** loads any predictions CSV, including one downloaded earlier, so you can pick up where you left off. The page reads `predictions.csv` at build time: restart `npm run dev` after re-running `npm run predict`, or import the new file.
+
+- `src/app/annotate/page.tsx` is a Server Component that reads the file (`lib/annotate/load.ts`, `"use cache"`) and passes the rows to `components/annotate/annotator.tsx`, the client component that does the rest.
+- `src/lib/annotate/` holds the plain functions: CSV reading and writing (`dataset.ts`, `csv.ts`) and the scoring (`summary.ts`). Values are compared loosely: `50` matches `50.00`, phone numbers by digits, names ignoring case.
+- `npm run annotate:preview` (after `npm run build`) bundles the same component into one HTML file with the predictions embedded, for sharing where the server can't run, such as a Claude Artifact.
 
 ## Dependency notes
 
