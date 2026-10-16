@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 
 import { describe, expect, test } from "vitest";
 
-import { acceptPrediction, parseDataset, serializeDataset } from "./dataset";
+import { acceptPrediction, annotationsFor, parseDataset, sanitizeAnnotations, serializeDataset } from "./dataset";
 import { summarize } from "./summary";
 
 // Runs on the real predictions file the annotation page loads, not a hand-made sample.
@@ -46,5 +46,35 @@ describe("the predictions CSV", () => {
     const header = "id,message,predicted_action,expected_action";
     expect(() => parseDataset(`${header}\n1,hi,none,\n1,hello,none,\n`)).toThrow("Line 3: id 1 appears more than once.");
     expect(() => parseDataset(`${header}\n1,hi,none,send_etransfr\n`)).toThrow('Line 2: "send_etransfr" isn\'t an action.');
+  });
+
+  test("sanitizes annotations from the browser before they are written", () => {
+    const { predictions } = parseDataset(text);
+    const clean = sanitizeAnnotations(predictions, {
+      "3": {
+        expectedAction: "send_etransfer",
+        expectedParams: { recipient: "  landlord ", amount: "1850", bogus: "x", from_account: 7 },
+        note: "n".repeat(900),
+      },
+    });
+    expect(clean["3"]?.expectedParams).toEqual({ recipient: "landlord", amount: "1850" });
+    expect(clean["3"]?.note).toHaveLength(500);
+
+    expect(() => sanitizeAnnotations(predictions, { "999": { expectedAction: "none" } })).toThrow("Unknown message id 999");
+    expect(() => sanitizeAnnotations(predictions, { "1": { expectedAction: "wire_money" } })).toThrow("isn't an action");
+    expect(() => sanitizeAnnotations(predictions, [])).toThrow("must be an object");
+  });
+
+  test("only reuses saved answers whose message text is unchanged", () => {
+    const dataset = parseDataset(text);
+    const answer = { expectedAction: "none", expectedParams: {}, note: "" } as const;
+    const saved = parseDataset(
+      serializeDataset({
+        predictions: dataset.predictions.map((p) => (p.id === "2" ? { ...p, message: "a different message" } : p)),
+        annotations: { "1": answer, "2": answer },
+      }),
+    );
+
+    expect(Object.keys(annotationsFor(dataset.predictions, saved))).toEqual(["1"]);
   });
 });

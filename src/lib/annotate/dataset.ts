@@ -182,3 +182,45 @@ export function acceptPrediction(prediction: Prediction): Annotation | null {
   }
   return { expectedAction: prediction.predictedAction, expectedParams, note: "" };
 }
+
+const MAX_PARAM_LENGTH = 200;
+const MAX_NOTE_LENGTH = 500;
+
+/**
+ * Check annotations that arrived from the browser before they are written to disk. Server Actions
+ * are public endpoints, so this keeps only known message ids, known actions, the catalog's own
+ * parameter names and bounded text. Throws an Error for anything else.
+ */
+export function sanitizeAnnotations(predictions: Prediction[], raw: unknown): Annotations {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw new Error("Annotations must be an object.");
+  const known = new Set(predictions.map((p) => p.id));
+  const clean: Annotations = {};
+  for (const [id, value] of Object.entries(raw)) {
+    if (!known.has(id)) throw new Error(`Unknown message id ${id}.`);
+    const a = value as Partial<Record<keyof Annotation, unknown>> | null;
+    const action = typeof a?.expectedAction === "string" ? a.expectedAction : "";
+    if (!isExpectedAction(action)) throw new Error(`Message ${id}: "${action}" isn't an action.`);
+    const expectedParams: Record<string, string> = {};
+    if (isActionName(action) && typeof a?.expectedParams === "object" && a.expectedParams !== null) {
+      const given = a.expectedParams as Record<string, unknown>;
+      for (const name of Object.keys(CATALOG[action].params)) {
+        const text = typeof given[name] === "string" ? given[name].trim() : "";
+        if (text) expectedParams[name] = text.slice(0, MAX_PARAM_LENGTH);
+      }
+    }
+    const note = typeof a?.note === "string" ? a.note.trim().slice(0, MAX_NOTE_LENGTH) : "";
+    clean[id] = { expectedAction: action, expectedParams, note };
+  }
+  return clean;
+}
+
+/**
+ * The annotations in a saved file that still belong to these predictions. A row counts only if its
+ * message text is unchanged, so re-running `npm run predict` with different messages can't attach
+ * old answers to new messages that happen to reuse an id.
+ */
+export function annotationsFor(predictions: Prediction[], saved: Dataset): Annotations {
+  const messages = new Map(predictions.map((p) => [p.id, p.message]));
+  const sameMessage = new Set(saved.predictions.filter((p) => messages.get(p.id) === p.message).map((p) => p.id));
+  return Object.fromEntries(Object.entries(saved.annotations).filter(([id]) => sameMessage.has(id)));
+}
