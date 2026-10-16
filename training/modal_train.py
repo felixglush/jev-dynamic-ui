@@ -270,6 +270,19 @@ def to_gguf() -> str:
     return target
 
 
+@app.function(image=modal.Image.debian_slim(python_version="3.12"), timeout=1800, volumes={"/out": volume})
+def snapshot(src: str, dst: str) -> list[str]:
+    """Copy a folder of the volume to a new name (the volume CLI cannot copy folders), so a later run cannot overwrite it."""
+    import shutil
+
+    volume.reload()
+    if Path(f"/out/{dst}").exists():
+        raise SystemExit(f"/out/{dst} already exists; refusing to overwrite it.")
+    shutil.copytree(f"/out/{src}", f"/out/{dst}")
+    volume.commit()
+    return sorted(str(p.relative_to(f"/out/{dst}")) for p in Path(f"/out/{dst}").rglob("*") if p.is_file())
+
+
 def report(name: str, result: dict) -> None:
     print(f"\n{name}")
     print(f"  {'split':6} {'records':>7} {'exact':>7} {'field acc':>10} {'fabricated':>11} {'missed':>8} {'wrong':>7} {'bad json':>9}")
@@ -282,7 +295,10 @@ def report(name: str, result: dict) -> None:
 
 
 @app.local_entrypoint()
-def main(stage: str = "all", epochs: int = 3, lr: float = 2e-4, rank: int = 16, base: str = BASE_MODEL):
+def main(run: str = "latest", stage: str = "all", epochs: int = 3, lr: float = 2e-4, rank: int = 16, base: str = BASE_MODEL):
+    if stage == "snapshot":
+        print("\n".join(snapshot.remote("latest", run)))
+        return
     files = {split: Path(f"data/sft/{split}.jsonl").read_text() for split in ("train", "val", "test")}
     empty = [split for split, text in files.items() if not text.strip()]
     if empty:

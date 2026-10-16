@@ -123,3 +123,41 @@ describe("train-only rows", () => {
     expect(trainOnly.some((id) => heldOut.has(id))).toBe(false);
   });
 });
+
+describe("pinned rows (meta.split) and versions", () => {
+  const approved = approveAll(rows);
+  const stripped = (list: SftRecord[]) => list.map((r) => ({ id: r.meta.id, messages: r.messages }));
+  const synthetic = (id: string, message: string, extra: Record<string, unknown> = {}) =>
+    ({ ...approved[0]!, messages: [approved[0]!.messages[0], { role: "user" as const, content: message }, approved[0]!.messages[2]], meta: { ...approved[0]!.meta, id, ...extra } }) as ExampleRecord;
+
+  it("rebuild the v1 sets exactly as frozen in data/sft/v1/, with the v2 rows added", () => {
+    const { files: v1 } = buildSplits(rows, { version: "v1" });
+    for (const split of ["train", "val", "test"] as const) {
+      const frozen = readFileSync(`data/sft/v1/${split}.jsonl`, "utf8").trim().split("\n").map((l) => JSON.parse(l) as SftRecord);
+      expect(stripped(v1[split]), split).toEqual(stripped(frozen));
+    }
+  });
+
+  it("send a pinned row to its split and leave every hash-split row where it was", () => {
+    const base = buildSplits(approved).files;
+    const extra = [synthetic("pin-val", "pinned val message", { split: "val" }), synthetic("pin-test", "pinned test message", { split: "test" }), synthetic("pin-train", "pinned train message", { split: "train" })];
+    const more = buildSplits([...approved, ...extra]).files;
+    const ids = (list: SftRecord[]) => list.map((r) => r.meta.id);
+    expect(ids(more.val)).toEqual([...ids(base.val), "pin-val"]);
+    expect(ids(more.test)).toEqual([...ids(base.test), "pin-test"]);
+    expect(ids(more.train)).toEqual([...ids(base.train), "pin-train"]);
+  });
+
+  it("still honour trainOnly, and let meta.split win over it", () => {
+    const files = buildSplits([...approved, synthetic("old", "old train-only message", { trainOnly: true }), synthetic("both", "split beats trainOnly", { trainOnly: true, split: "val" })]).files;
+    expect(files.train.some((r) => r.meta.id === "old")).toBe(true);
+    expect(files.val.some((r) => r.meta.id === "both")).toBe(true);
+  });
+
+  it("only pin v2 rows, and use known pattern names", () => {
+    const pinned = rows.filter((r) => r.meta.split);
+    expect(pinned.every((r) => r.meta.version === "v2")).toBe(true);
+    const patterns = new Set(["spelled-amount", "company-name", "email-no-name", "past-event-date", "lowercase-name", "today-date", "cancel-email-only"]);
+    for (const r of rows) if (r.meta.pattern) expect(patterns.has(r.meta.pattern), r.meta.id).toBe(true);
+  });
+});

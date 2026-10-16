@@ -21,6 +21,12 @@ export const VAL_PERCENT = 15;
 /** A group smaller than this is all train: holding out one of two rows would leave almost nothing to learn from. */
 export const MIN_GROUP_SIZE = 4;
 
+/**
+ * The split a row is pinned to, if any. `meta.split` wins; the older `meta.trainOnly` flag means "train".
+ * A pinned row skips the hash split, so adding one never moves another row between splits.
+ */
+export const pinnedSplit = (meta: { split?: Split; trainOnly?: boolean }): Split | undefined => meta.split ?? (meta.trainOnly ? "train" : undefined);
+
 export const groupOf = (meta: { action: string; vague?: boolean }) => meta.action + (meta.vague ? " (vague)" : "");
 
 const order = (id: string) => createHash("sha256").update(`${SPLIT_SALT}:${id}`).digest("hex");
