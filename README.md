@@ -43,6 +43,19 @@ npm run lint
 
 The fake Jev (`e2e/fake-jev.mts`) is a crude rule-based stand-in. These tests check the wiring (questions built, candidates offered, answers turned into forms) but say nothing about how accurate the real model is. First run of the browser tests needs a Chromium: `npx playwright install chromium`, or set `PW_CHROMIUM_PATH` to one you already have.
 
+## Extracting values with a local model (experimental)
+
+`src/lib/extract/` asks a small local model, [LiquidAI's LFM2.5-230M](https://huggingface.co/LiquidAI/LFM2.5-230M-GGUF) running in [Ollama](https://ollama.com), for the free-text values of one action (names, emails, phones, amounts, dates, account numbers; choices stay with Jev). It is not wired into the chat yet: the plan is to add its values to the candidates Jev picks from, and to fine-tune the model later.
+
+```bash
+scripts/ollama/setup.sh                     # downloads the Q8_0 GGUF (~235 MB) and runs `ollama create lfm25-230m`
+npm run extract:eval                        # data/sample-messages.txt -> extractions.csv, one row per field
+```
+
+The setup script downloads from huggingface.co directly because `ollama run hf.co/...` needs the `hf.co` host. Ollama's installer needs `zstd`. `OLLAMA_URL` and `OLLAMA_MODEL` override the defaults.
+
+Zero-shot, this model fills every field whether or not the message states it (invented emails, "John Doe", a constant date). So `ground.ts` checks each value against the message and drops anything not literally there (spelled-out amounts like "two hundred" and "$1.5k" are understood); dropped and empty fields stay blank for the customer to fill in. On the sample messages that removes the inventions, at about 0.35 s per message on 4 CPU cores. Fine-tuning should teach the model to leave absent fields empty itself.
+
 ## Validating Jev's predictions
 
 ```bash

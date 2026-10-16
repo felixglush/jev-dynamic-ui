@@ -21,3 +21,4 @@ npm-debug.log*
 /playwright-report/
 annotate-preview.html
 /e2e-output/
+extractions.csv
