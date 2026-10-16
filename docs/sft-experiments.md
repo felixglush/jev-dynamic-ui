@@ -124,7 +124,7 @@ Date: 2026-10-16. Replaces the plan in [handoff-fair-eval.md](handoff-fair-eval.
 | today-date | 9 / 1 / 1 | 5 / 5 |
 | cancel-email-only | 1 / 0 / 1 | 5 / 5 |
 
-v2 sets: val 133 (98 v1 + 35 new), test 133 (98 + 35), train 583 until Run 3's rows are added.
+v2 sets: val 133 (98 v1 + 35 new), test 133 (98 + 35), train 583 (Runs 2 and earlier) and 653 after Run 3's 70 rows (`47b1a97`).
 
 **Caveats that apply to every v2 number**
 
@@ -132,13 +132,73 @@ v2 sets: val 133 (98 v1 + 35 new), test 133 (98 + 35), train 583 until Run 3's r
 - Five rows per pattern per split means one row is 20 points on a single cell. Read patterns as pass counts, not percentages, and do not rank models on differences of one or two rows.
 - The v1 part of val and test was already read (errors from Run 1 and Run 2), so only the v2 rows are clean.
 
+## v2 results
+
+All on the v2 sets (val 133, test 133), greedy schema-constrained decoding, one seed. Raw output: `training/out/v2-<label>.json` (not committed; test files hold counts only). Pass = exact record match. Cells are passed/records for the **v2 rows only** (5 per pattern per split); "all v1 rows" is the 98 older rows per split, which were already read.
+
+| Pattern (v2 rows) | Base val / test | Run 1 recipe val / test | Run 2 val / test | Run 3 val / test |
+| --- | --- | --- | --- | --- |
+| spelled-amount | 2/5, 1/5 | 1/5, 5/5 | 2/5, 3/5 | 5/5, 5/5 |
+| company-name | 1/5, 1/5 | 5/5, 5/5 | 5/5, 5/5 | 5/5, 5/5 |
+| email-no-name | 0/5, 1/5 | 4/5, 4/5 | 4/5, 5/5 | 5/5, 5/5 |
+| past-event-date | 0/5, 1/5 | 2/5, 3/5 | 3/5, 4/5 | 5/5, 5/5 |
+| lowercase-name | 0/5, 1/5 | 2/5, 2/5 | 5/5, 2/5 | 5/5, 3/5 |
+| today-date | 3/5, 2/5 | 4/5, 4/5 | 5/5, 5/5 | 4/5, 4/5 |
+| cancel-email-only | 0/5, 0/5 | 3/5, 4/5 | 3/5, 5/5 | 3/5, 4/5 |
+| **all v2 rows** | 6/35, 7/35 | 21/35, 27/35 | 27/35, 29/35 | 32/35, 31/35 |
+| all v1 rows (98) | 23, 30 | 94, 94 | 93, 96 | 97, 96 |
+
+Overall (v2 sets):
+
+| Model | Train rows | Val exact | Val fabricated | Test exact | Test fabricated | Test missed / wrong |
+| --- | --- | --- | --- | --- | --- | --- |
+| Base | 0 | 21.8% | 88.5% | 27.8% | 84.7% | 1.1% / 8.0% |
+| Run 1 recipe | 449 | 86.5% | 4.2% | 91.0% | 4.5% | 3.2% / 0.0% |
+| Run 2 (saved weights, not retrained) | 583 | 90.2% | 3.6% | 94.0% | 1.9% | 1.6% / 1.6% |
+| Run 3 | 653 | 97.0% | 1.2% | 95.5% | 1.9% | 1.6% / 0.5% |
+
+Each pattern also has older rows in val and test (tagged by rule); the full tables with them are in the `training/out` files.
+
+**Caveats**
+
+- Every new row is AI-written by the author who knew what failed; passes show the fixes generalise within these patterns, not accuracy on real messages. No new row was reviewed by a person.
+- 5 rows per cell: one row is 20 points. Differences of one or two rows are noise. The Run 1 recipe passing `spelled-amount` 5/5 on test but 1/5 on val shows how much a cell moves.
+- **Val is not clean for Run 3.** Run 3's 70 rows were chosen from what failed on val (`ten thousand`, `cancelled on <date>`), so its val gain is partly the fix being aimed at val. The sealed v2 test rows are the fairer number (Run 2 29/35, Run 3 31/35: two rows, not a significant gain).
+- The test set was scored for four models (counts only). That is more than "once per final candidate"; treat Run 3 as the candidate and the others as reference points.
+- The Run 1 recipe retrain (seed 0, 449 rows) reproduced Run 1's v1 numbers on the old rows (94/98 on val and on test, 95.9% as before), so training is stable across Modal runs at this scale.
+
+### Base model, re-scored on v2
+
+2026-10-16, `--stage baseline --run base-v2`. Val 21.8% exact, test 27.8%; fabrication 88.5% / 84.7%; 2 invalid JSON per split. The same picture as v1 (23.5% / 30.6%): it fills in almost everything.
+
+### Run 1 recipe, retrained on v2
+
+2026-10-16, `--stage train --train-subset run1 --run run1recipe`. Same settings as Run 1 (rank 16, alpha 32, lr 2e-4, 3 epochs, batch 16, seed 0); 449 train rows (no `trainOnly`, no v2 rows). Validation loss 0.0401, 0.0317, 0.0310 (on the larger v2 val, so not comparable with Run 1's 0.0100). Val 86.5% exact, test 91.0%. Val errors read (18 records): spelled-out amounts (`two hundred and fifty` as 150 and 450, `fifteen hundred` as 15000, `twenty five hundred` as 250, `nine hundred and eighty` as 180), `Fortis BC` truncated, the Hulu `cancelled on` date kept, past-event and cancellation dates kept, lowercase names dropped, a name taken from an email, `today` dropped on a dispute, and the recipient filled with the email on cancel rows.
+
+### Run 2, re-scored on v2
+
+2026-10-16, `--stage score --run run2` (weights copied to `run2/` in the volume before any retraining). Val 90.2%, test 94.0%. Val errors read (13 records): `ten thousand` as 1000 (twice), `nine hundred and eighty` as 900, `a hundred and sixty` as 60; `cancelled on <date>` kept as the date (three times); a name taken from `tomas_h@outlook.com`; `dave` dropped next to an email; `Bell internet bill` as payee; `autodeposit` put in the email field; the recipient filled with the email on two cancel rows. Run 2's own training rows moved the company, email-only and lowercase patterns (compare with the Run 1 recipe) but not large amounts or `cancelled on`.
+
+### Run 3: Run 2 plus 70 train-only rows for the two patterns that still failed
+
+2026-10-16, `--stage train --run run3`, commit `47b1a97`. Settings as Run 1; 653 train rows = Run 2's 583 + 70 new (`meta.split: "train"`, `meta.version: "v2"`): 46 large spelled-out amounts across all actions (`ten thousand`, `twenty thousand`, `twelve thousand five hundred`, `fifteen hundred`, `twenty-five hundred`, `nine hundred and eighty`, `a hundred and sixty` forms) and 24 dispute messages with `cancelled on <date>` (date left blank, or the charge date kept when one is given). New messages, none a copy of a held-out row. Validation loss 0.0216, 0.0112, 0.0102 (best epoch the last).
+
+Result: val 97.0% exact, test 95.5%; fabrication 1.2% / 1.9%. Val errors read (4 records): `put dave at dave99@gmail.com` (name dropped, as in Run 2), `dispute the $23 Lyft charge from today` (date dropped), and the recipient filled with the email on two cancel rows. Test errors were not read.
+
+Patterns that moved (v2 rows, val / test): `spelled-amount` 2/5, 3/5 to 5/5, 5/5; `past-event-date` 3/5, 4/5 to 5/5, 5/5; `email-no-name` 4/5, 5/5 to 5/5, 5/5.
+
+### Which fixes held up
+
+- **Held up:** large spelled-out amounts and `cancelled on <date>` after adding rows for them (val 8/8 and 6/6 including old rows, test 7/7 and 6/6, with the caveat above that the val rows are the ones the data was aimed at, and test is two or three rows better than Run 2). Multi-word company names and company-in-phrase (`Bell internet bill`, `Hydro One`, `Great-West Life`): 5/5 on val and test already from Run 2 on. Email with no name: 5/5 and 5/5 in Run 3.
+- **Did not hold or not fixed:** `cancel-email-only` (3/5 val and 4/5 test in Run 3; the model puts the email in `recipient`; no rows were added for it, so this is the largest known gap). `lowercase-name` next to an email (`put dave at dave99@gmail.com` fails in every run since Run 2; test 3/5). `today-date` regressed from 5/5, 5/5 (Run 2) to 4/5, 4/5 (Run 3), but these were not targeted and the change is one row per split, so it is noise until shown otherwise. A name taken from an email (`tomas_h`) was fixed in Run 3 on val but is a rule-2 failure to watch.
+
 ## Ideas to try next
 
-- More data: train is 449 rows against a target of about 2,000; several fields have under 20 stated examples (`setup_autodeposit.phone` 9, `transfer_between_accounts.date` 11, `pay_bill.date` 12).
-- Real user messages for val and test, so scores aren't measured on AI-written text.
-- Fair evaluation: treat val as the dev set (read its errors) and keep test sealed. Write new held-out rows per failure pattern (8 to 10 each, tagged in `meta`, written without looking at the train batch), pin them to val or test, version the sets (v1, v2) and re-score every candidate on the current version. Report pass rate per pattern as well as overall. Needs a `meta.split` pin and a per-pattern report in `modal_train.py`.
-- Large spelled-out amounts (`ten thousand`) and `cancelled on <date>` still fail after the Run 2 rows; they need more and more varied examples, or a different approach.
+- Add train rows for the gaps found on v2 val: cancel rows that give only an email (recipient must stay blank), a lowercase name written next to an email (`put dave at dave99@gmail.com`), `today` kept as the date on dispute messages, and a name derived from an underscore email. Then re-score on v2 and compare only with Run 3. Keep the 5 held-out rows per pattern fixed; add more held-out rows if a pattern needs a finer reading.
+- More held-out rows per pattern (5 per split is one-row-equals-20-points), and real user messages for val and test, so scores are not measured on AI-written text.
+- Have a person review the 70 v2 held-out rows and the 140 v2 train rows on `/annotate`.
+- More data: train is 653 rows against a target of about 2,000; several fields have under 20 stated examples (`setup_autodeposit.phone` 9, `transfer_between_accounts.date` 11, `pay_bill.date` 12).
+- Repeat the Run 1 recipe, Run 2 and Run 3 with two or three seeds to see how much of a one-row difference is seed noise.
 - Learning rate, epochs and LoRA rank sweeps, choosing on val only.
-- Add train rows for the error patterns above: spelled-out amounts over 100, multi-word company names, an email given without a name, past-event dates, lowercase names.
-- Fetch the GGUF, run it in Ollama through the real extractor (`extract:eval`) and compare with the Modal numbers.
+- Fetch the GGUF (`run3/LFM2.5-230M-SFT-Q8_0.gguf` once exported with `--stage gguf --run run3`), run it in Ollama through the real extractor (`extract:eval`) and compare with the Modal numbers.
 - Install `causal_conv1d` in the training image for faster convolution layers.

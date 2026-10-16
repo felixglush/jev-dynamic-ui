@@ -76,7 +76,7 @@ Sample and synthetic rows are treated the same: both are AI-written and both nee
 Rules that keep the test honest:
 
 - **No message in two splits.** A train row that repeats a val/test message is dropped (`sft:build` lists them), so a paraphrase-free copy of a test message can never be trained on (checked in `dataset.test.ts`).
-- **Test is never tuned on**: it is read once per candidate model, val is for choosing settings.
+- **Test is sealed**: its errors are never read (the report prints counts only), val is the dev set. Rows can be pinned to a split with `meta.split` (`sft:add --split`), tagged with `meta.pattern`, and versioned with `meta.version`; see [sft-experiments.md](sft-experiments.md), "Fair evaluation v2".
 - The counts come from each group's size, so the split shifts slightly as rows are approved. Build the files once review is done, and change `SPLIT_SALT` only on purpose (it reshuffles the held-out sets).
 - Everything is AI-generated so far, so val and test are not yet real user messages. Treat the scores as a check on the pipeline; add real messages with `sft:add -- batch.txt --source sample` before trusting small differences between models.
 
