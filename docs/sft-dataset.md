@@ -24,6 +24,31 @@ Why this shape:
 - **Each action has its own system prompt and field list**, so the model learns per-action groups (Felix's requirement). Choice fields (which account, which card, how much of a card balance to pay) stay with Jev, which picks from the supported options in the catalog, and are not in the answer.
 - `meta` is for humans and the split script. Train on the `messages` column only.
 
+### Per-action system prompt and schema
+
+The prompt and the schema both depend on the action. The prompt wording is the same for every action; only the field list in its first sentence changes:
+
+> Extract these fields from the user's banking message: **\<fields\>**. Only copy information that is actually written in the message. If a field is not stated, leave it empty. Never invent names, emails, phone numbers or dates.
+
+The schema (`schemaFor(action)` in `src/lib/extract/ollama.ts`) is an object with exactly the action's fields, in this order, all required, `additionalProperties: false`. Amounts are `number` (`0` = not stated); every other field is `string` (`""` = not stated). The model never picks the action: Jev does, and passes it in as the field list and schema. Scoring builds the same schema from each record's label (`answer_schema` in `training/modal_train.py`).
+
+| Action | Fields (in schema order; `$` = number, rest string) |
+| --- | --- |
+| `send_etransfer` | `recipient`, `recipient_email`, `amount`$, `date` |
+| `request_etransfer` | `from_person`, `from_email`, `amount`$ |
+| `cancel_etransfer` | `recipient`, `amount`$ |
+| `add_etransfer_contact` | `name`, `email`, `phone` |
+| `setup_autodeposit` | `email`, `phone` |
+| `pay_bill` | `payee`, `amount`$, `date` |
+| `add_payee` | `biller`, `account_number` |
+| `pay_credit_card` | `amount`$ |
+| `open_account` | `initial_deposit`$ |
+| `transfer_between_accounts` | `amount`$, `date` |
+| `dispute_transaction` | `merchant`, `amount`$, `date` |
+| `update_contact_info` | `new_email`, `new_phone` |
+
+`manage_card` and `view_account` have no free-text fields, so they have no schema and no training rows. Choice fields (which account, which card, how much of a card balance) are not in any schema; see the "detour to avoid" note below.
+
 ## 2. Labeling rules
 
 These decide what "correct" means, so they matter more than the example count.
