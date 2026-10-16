@@ -40,6 +40,9 @@ function formatLiquid(spec: ParamSpec, value: string | number | null | undefined
     const number = Number(String(value).replaceAll(/[$,\s]/g, ""));
     return Number.isFinite(number) && number > 0 ? number.toFixed(2) : "";
   }
+  // The extractor copies dates as written ("tomorrow"), which a date input can't show and which
+  // wouldn't match Jev's ISO dates when scoring. Only a real date is used; otherwise Jev's stays.
+  if (spec.type === "date") return /^\d{4}-\d{2}-\d{2}$/.test(String(value).trim()) ? String(value).trim() : "";
   return String(value).trim();
 }
 

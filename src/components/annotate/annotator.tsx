@@ -292,7 +292,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
   });
 
   // Nothing to read when Jev picked no action; "off" also covers the static preview.
-  const extraction: Extraction = !extract || !current || !isActionName(current.predictedAction)
+  const extraction: Extraction = !extract || !current?.message || !isActionName(current.predictedAction)
     ? { status: "off" }
     : (extractions[extractionKey(current.predictedAction, current.message)] ?? { status: "loading" });
 

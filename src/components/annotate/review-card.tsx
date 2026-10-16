@@ -77,8 +77,9 @@ export function ReviewCard({ prediction, extraction, annotation, position, total
   // Jev's answer and LiquidFM's, merged field by field. Empty when Jev picked no action.
   const fields = isActionName(predictedAction) ? combineFields(predictedAction, prediction, extraction) : [];
   const accepted = acceptCombined(prediction, fields);
-  // Until LiquidFM answers, the pre-filled values would change under the annotator's hands.
-  const waiting = extraction.status === "loading" && !annotation;
+  // Until LiquidFM answers, the pre-filled values would change under the annotator's hands (and
+  // "Correct" would save Jev-only values), so a message waits even if it was answered before.
+  const waiting = extraction.status === "loading";
   const start = annotation ?? accepted;
   const [expectedAction, setExpectedAction] = useState<ExpectedAction>(start?.expectedAction ?? "none");
   const lowConfidence = prediction.actionConfidence !== null && prediction.actionConfidence < LOW_CONFIDENCE;
