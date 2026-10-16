@@ -73,10 +73,33 @@ Caveats, so the number is not over-read:
 - The best epoch was picked on val loss, so val is slightly optimistic. Test is the cleaner number.
 - Read test only once per candidate model; this run's test numbers are now spent on Run 1.
 
+## Run 2: Run 1 settings, plus 134 train-only rows for Run 1's errors
+
+Date: 2026-10-16. Same settings and the same val and test files as Run 1. Train grew from 449 to 583 rows (commit `74a3f6f`). The new rows are tagged `meta.trainOnly`, so they never enter val or test. They target: spelled-out amounts of 100 or more, multi-word company names, an email with no name, past-event and cancellation dates left blank, lowercase names, `today` kept as a date.
+
+| Split | Exact | Fabricated | Missed | Wrong | Bad JSON |
+| --- | --- | --- | --- | --- | --- |
+| val | 94.9% (Run 1: 95.9%) | 0.8% (1) | 0.9% (1) | 2.6% (3) | 0 |
+| test | 98.0% (Run 1: 95.9%) | 0.8% (1) | 0.0% | 0.8% (1) | 0 |
+
+Validation loss 0.0181, 0.0112, 0.0104; best epoch the last.
+
+Errors (8 records):
+
+- **Still wrong, same pattern as Run 1:** `ten thousand` became 1000 (val and test); the Hulu `cancelled on October 20` date was kept (val).
+- **Fixed from Run 1:** `two hundred and fifty` (now right), `Fortis BC`, `nanny.jo@gmail.com` with no name, `dinner last night`, `jordan` in lowercase, `send it today`.
+- **New errors:** `put dave at dave99@gmail.com` gave a blank name (label `dave`); `pay my Bell internet bill` gave payee `Bell internet bill`; `Scotia Insurance` came back with a leading space; `autodeposit for 438-555-0120 and kay.d@gmail.com` put the word `autodeposit` in `email`; `cancel e-transfer to ben@gmail.com` put the email in `recipient`.
+
+Reading: the net change is not distinguishable from noise. Val went from 6 wrong records to 5 and test from 4 to 2, but the errors moved around: some patterns are fixed, new ones appeared, and the two worst (large spelled-out amounts, cancellation dates) did not move. Fabrication stayed at 1 to 2 fields. One record is 1 point on each set.
+
+**Do not read the test gain as proof the fixes work.** Run 1's test errors were read and the new rows were written for them, so test is no longer a clean held-out set. Val and test are retired as the final measure until new held-out rows exist (see below).
+
 ## Ideas to try next
 
 - More data: train is 449 rows against a target of about 2,000; several fields have under 20 stated examples (`setup_autodeposit.phone` 9, `transfer_between_accounts.date` 11, `pay_bill.date` 12).
 - Real user messages for val and test, so scores aren't measured on AI-written text.
+- Fair evaluation: treat val as the dev set (read its errors) and keep test sealed. Write new held-out rows per failure pattern (8 to 10 each, tagged in `meta`, written without looking at the train batch), pin them to val or test, version the sets (v1, v2) and re-score every candidate on the current version. Report pass rate per pattern as well as overall. Needs a `meta.split` pin and a per-pattern report in `modal_train.py`.
+- Large spelled-out amounts (`ten thousand`) and `cancelled on <date>` still fail after the Run 2 rows; they need more and more varied examples, or a different approach.
 - Learning rate, epochs and LoRA rank sweeps, choosing on val only.
 - Add train rows for the error patterns above: spelled-out amounts over 100, multi-word company names, an email given without a name, past-event dates, lowercase names.
 - Fetch the GGUF, run it in Ollama through the real extractor (`extract:eval`) and compare with the Modal numbers.
