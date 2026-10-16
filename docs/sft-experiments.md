@@ -94,6 +94,10 @@ Reading: the net change is not distinguishable from noise. Val went from 6 wrong
 
 **Do not read the test gain as proof the fixes work.** Run 1's test errors were read and the new rows were written for them, so test is no longer a clean held-out set. Val and test are retired as the final measure until new held-out rows exist (see below).
 
+## Fair evaluation v2 (planned, handed off)
+
+Status: not started. Decision (2026-10-16): val becomes the dev set (errors may be read), test is sealed and scored once per final candidate, and the current test is retired as `dev-2` because its errors were read before Run 2's rows were written. New held-out rows will be written per failure pattern (8 to 10 each, tagged, split between val and test), the sets versioned (v1 = current, v2 = new), and every candidate re-scored on the current version, with a per-pattern pass rate in the report. Run 1 and Run 2 numbers above are v1 and are not comparable to v2. Full brief for the new chat: [handoff-fair-eval.md](handoff-fair-eval.md). That chat appends its results to this log.
+
 ## Ideas to try next
 
 - More data: train is 449 rows against a target of about 2,000; several fields have under 20 stated examples (`setup_autodeposit.phone` 9, `transfer_between_accounts.date` 11, `pay_bill.date` 12).
