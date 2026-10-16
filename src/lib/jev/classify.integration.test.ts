@@ -65,6 +65,15 @@ describe("classify", () => {
     });
   });
 
+  it("keeps accented and hyphenated names whole so they can be picked", async () => {
+    const result = await classify("send $5,000.50 to María-José", client);
+    expect(result).toMatchObject({
+      action: "send_etransfer",
+      missing: [],
+      params: { recipient: { value: "María-José" }, amount: { value: "5000.50" } },
+    });
+  });
+
   it("lists required parameters the message did not give", async () => {
     const result = await classify("send $20 to somebody", client);
     expect(result).toMatchObject({ action: "send_etransfer", missing: ["recipient"] });

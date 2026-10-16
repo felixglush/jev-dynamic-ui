@@ -5,6 +5,8 @@ import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 
 /** Shown if rendering a page throws. Only for page crashes: chat failures are handled inside <Chat />. */
+// `retry` is this Next.js version's recommended recovery prop (stable since 16.3; it re-fetches and re-renders).
+// `reset` still exists but only clears the error without re-fetching. See error.md in the bundled docs.
 export default function Error({ error, retry }: { error: unknown; retry: () => void }) {
   useEffect(() => {
     console.error(error);
