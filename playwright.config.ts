@@ -1,0 +1,37 @@
+import { defineConfig } from "@playwright/test";
+
+const APP_PORT = 3100;
+const FAKE_JEV_PORT = 8787;
+
+export default defineConfig({
+  testDir: "e2e",
+  testMatch: "*.spec.ts",
+  // The SDK retries a failing API call a couple of times before giving up, so the error test is slow.
+  timeout: 60_000,
+  use: {
+    baseURL: `http://localhost:${APP_PORT}`,
+    trace: "retain-on-failure",
+    // Set PW_CHROMIUM_PATH to use an already-installed Chromium instead of Playwright's download.
+    launchOptions: process.env.PW_CHROMIUM_PATH ? { executablePath: process.env.PW_CHROMIUM_PATH } : {},
+  },
+  webServer: [
+    {
+      // The stand-in for the TypeSafe API.
+      command: "node e2e/fake-jev.mts",
+      env: { FAKE_JEV_PORT: String(FAKE_JEV_PORT) },
+      url: `http://localhost:${FAKE_JEV_PORT}`,
+      // The fake only answers POST, so a plain "is the port open" check is what we want.
+      reuseExistingServer: true,
+      stdout: "pipe",
+      wait: { stdout: /fake Jev listening/ },
+    },
+    {
+      // The real app, built for production, pointed at the fake.
+      command: `npm run build && npm run start -- -p ${APP_PORT}`,
+      env: { TYPESAFE_API_KEY: "test-key", TYPESAFE_BASE_URL: `http://localhost:${FAKE_JEV_PORT}` },
+      url: `http://localhost:${APP_PORT}`,
+      reuseExistingServer: !process.env.CI,
+      timeout: 240_000,
+    },
+  ],
+});
