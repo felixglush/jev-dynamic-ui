@@ -68,8 +68,11 @@ def test_breakdowns_separate_v2_rows_and_versions():
     rows = [tagged(True, "a", "v1"), tagged(False, "a", "v2"), tagged(True, "a", "v2"), tagged(True)]
     b = breakdowns(rows)
     assert b["patterns"]["a"]["records"] == 3 and b["patterns"]["a"]["passed"] == 2
-    assert b["patterns_v2_only"]["a"] == {"records": 2, "passed": 1, "pass_rate": 0.5}
+    assert b["patterns_new"]["a"] == {"records": 2, "passed": 1, "pass_rate": 0.5}
     assert b["versions"]["v1"]["records"] == 2 and b["versions"]["v2"]["records"] == 2
+    assert b["newest_version"] == "v2"
+    v3 = breakdowns(rows + [tagged(True, "a", "v3")])
+    assert v3["patterns_new"] == {"a": {"records": 1, "passed": 1, "pass_rate": 1.0}}
 
 
 def test_score_exact_count_agrees_with_record_passes():
@@ -88,7 +91,7 @@ def test_select_train_run1_drops_the_later_additions():
     def rec(i, **meta):
         return json.dumps({"messages": [], "meta": {"id": i, **meta}})
 
-    text = "\n".join([rec("a"), rec("b", trainOnly=True), rec("c", split="train", version="v2"), rec("d", pattern="x")]) + "\n"
+    text = "\n".join([rec("a"), rec("b", trainOnly=True), rec("c", split="train", version="v2"), rec("e", version="v3"), rec("d", pattern="x")]) + "\n"
     kept = [json.loads(line)["meta"]["id"] for line in select_train(text, "run1").splitlines()]
     assert kept == ["a", "d"]
     assert select_train(text, "all") == text

@@ -96,12 +96,16 @@ def pass_rates(rows: list[dict], key) -> dict:
 
 def breakdowns(rows: list[dict]) -> dict:
     """
-    Pass rate per failure pattern (`meta.pattern`), over all rows and over the v2 rows alone, and per
-    set version (`meta.version`, v1 when absent). Rows without a pattern are left out of the pattern tables.
+    Pass rate per failure pattern (`meta.pattern`), over all rows and over the newest version's rows alone
+    (the rows nobody has read errors for yet), and per set version (`meta.version`, v1 when absent). Rows
+    without a pattern are left out of the pattern tables.
     """
+    versions = {r.get("version") or "v1" for r in rows}
+    newest = max(versions, default="v1")
     return {
+        "newest_version": newest,
         "patterns": pass_rates(rows, lambda r: r.get("pattern")),
-        "patterns_v2_only": pass_rates(rows, lambda r: r.get("pattern") if r.get("version") == "v2" else None),
+        "patterns_new": pass_rates(rows, lambda r: r.get("pattern") if (r.get("version") or "v1") == newest else None),
         "versions": pass_rates(rows, lambda r: r.get("version") or "v1"),
     }
 
@@ -109,7 +113,7 @@ def breakdowns(rows: list[dict]) -> dict:
 def select_train(text: str, subset: str = "all") -> str:
     """
     The train rows to fit on. "all" is every row. "run1" is the Run 1 recipe: rows that existed before
-    the train-only additions, i.e. without `meta.trainOnly`, `meta.split` or `meta.version` "v2".
+    the train-only additions, i.e. without `meta.trainOnly`, `meta.split` or any `meta.version`.
     """
     if subset == "all":
         return text
@@ -118,7 +122,7 @@ def select_train(text: str, subset: str = "all") -> str:
     keep = []
     for record in load_records(text):
         meta = record["meta"]
-        if not (meta.get("trainOnly") or meta.get("split") or meta.get("version") == "v2"):
+        if not (meta.get("trainOnly") or meta.get("split") or meta.get("version")):
             keep.append(record)
     return "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in keep)
 
@@ -364,9 +368,9 @@ def report(name: str, result: dict) -> None:
 
 
 def report_patterns(result: dict) -> str:
-    """Pass rate (exact record match) per failure pattern, as passed/records, for val and test; v2 rows alone in brackets."""
+    """Pass rate (exact record match) per failure pattern, as passed/records, for val and test; "new" = the newest version's rows alone."""
     names = sorted({n for split in ("val", "test") for n in result[split].get("patterns", {})})
-    lines = [f"  {'pattern':20} {'val':>12} {'val v2 rows':>12} {'test':>12} {'test v2 rows':>13}"]
+    lines = [f"  {'pattern':20} {'val':>12} {'val new rows':>12} {'test':>12} {'test new rows':>13}"]
 
     def cell(split: str, table: str, name: str) -> str:
         entry = result[split].get(table, {}).get(name)
@@ -374,10 +378,10 @@ def report_patterns(result: dict) -> str:
 
     for name in names:
         lines.append(
-            f"  {name:20} {cell('val', 'patterns', name):>12} {cell('val', 'patterns_v2_only', name):>12} "
-            f"{cell('test', 'patterns', name):>12} {cell('test', 'patterns_v2_only', name):>13}"
+            f"  {name:20} {cell('val', 'patterns', name):>12} {cell('val', 'patterns_new', name):>12} "
+            f"{cell('test', 'patterns', name):>12} {cell('test', 'patterns_new', name):>13}"
         )
-    for version in ("v1", "v2"):
+    for version in sorted({v for split in ("val", "test") for v in result[split].get("versions", {})}):
         lines.append(f"  {'all ' + version + ' rows':20} {cell('val', 'versions', version):>12} {'':>12} {cell('test', 'versions', version):>12}")
     return "\n".join(lines)
 

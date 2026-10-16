@@ -2,7 +2,7 @@
  * Add labeled messages to data/sft/examples.jsonl as pending rows, ready to review on /annotate.
  *
  *   npm run sft:add -- path/to/batch.txt [--source sample|synthetic] [--split train|val|test]
- *                      [--pattern name] [--version v1|v2] [--train-only]    (default source: synthetic)
+ *                      [--pattern name] [--version v1|v2|v3] [--train-only]    (default source: synthetic)
  *
  * The batch is plain text, one example per line: `message => field=value; field=value`, with
  * `# <action>` headers. "sample" rows are real messages that can end up in val or test once approved;
@@ -15,6 +15,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 
 import { parseBatch, validateBatch } from "../src/lib/sft/batch";
+import type { Version } from "../src/lib/sft/build";
 import type { Split } from "../src/lib/sft/split";
 import { addExamples, parseExamples, serializeExamples, type ExampleSource } from "../src/lib/sft/examples";
 
@@ -25,11 +26,11 @@ const value = (name: string) => (args.includes(name) ? args[args.indexOf(name) +
 const trainOnly = args.includes("--train-only");
 const split = value("--split") as Split | undefined;
 const pattern = value("--pattern");
-const version = value("--version") as "v1" | "v2" | undefined;
+const version = value("--version") as Version | undefined;
 const valued = ["--source", "--split", "--pattern", "--version"];
 const batchPath = args.find((arg, index) => !arg.startsWith("--") && !valued.includes(args[index - 1] ?? ""));
-if (!batchPath || (source !== "sample" && source !== "synthetic") || (split && !["train", "val", "test"].includes(split)) || (version && !["v1", "v2"].includes(version))) {
-  console.error("Usage: npm run sft:add -- path/to/batch.txt [--source sample|synthetic] [--split train|val|test] [--pattern name] [--version v1|v2] [--train-only]");
+if (!batchPath || (source !== "sample" && source !== "synthetic") || (split && !["train", "val", "test"].includes(split)) || (version && !["v1", "v2", "v3"].includes(version))) {
+  console.error("Usage: npm run sft:add -- path/to/batch.txt [--source sample|synthetic] [--split train|val|test] [--pattern name] [--version v1|v2|v3] [--train-only]");
   process.exit(1);
 }
 const FILE = "data/sft/examples.jsonl";
