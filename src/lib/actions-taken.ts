@@ -35,7 +35,7 @@ function isTakenAction(value: unknown): value is TakenAction {
   return (
     typeof entry.id === "string" &&
     typeof entry.action === "string" &&
-    entry.action in CATALOG &&
+    Object.hasOwn(CATALOG, entry.action) &&
     typeof entry.title === "string" &&
     typeof entry.summary === "string" &&
     typeof entry.at === "number"

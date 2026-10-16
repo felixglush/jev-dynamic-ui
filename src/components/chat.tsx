@@ -79,6 +79,9 @@ export function Chat() {
     if (!outcome || !dialog?.open) return;
     const active = document.activeElement;
     if (active !== editRef.current && active !== dialog && active !== document.body) return;
+    // defaultValue is the message we sent; a different value means they are revising it, so stay put.
+    const edit = editRef.current;
+    if (edit && active === edit && edit.value !== edit.defaultValue) return;
     const target =
       dialog.querySelector<HTMLElement>('form [aria-invalid="true"]') ??
       dialog.querySelector<HTMLElement>('form button[type="submit"]');

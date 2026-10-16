@@ -293,3 +293,28 @@ test("choosing a custom payment amount makes the amount required", async ({ page
   await page.getByRole("button", { name: "Make Payment" }).click();
   await expect(page.getByRole("status")).not.toHaveText("");
 });
+
+test("a corrupted saved history is ignored instead of crashing the sidebar", async ({ page }) => {
+  const entry = { id: "x", action: "__proto__", title: "Bad", summary: "", at: 1 };
+  await page.evaluate((value) => localStorage.setItem("jev:actions-taken:v1", JSON.stringify([value])), entry);
+  await page.reload();
+  await expect(history(page)).toContainText("Nothing yet");
+});
+
+test("an answer that arrives while the customer is editing the message does not steal focus", async ({ page }) => {
+  // Hold the server's answer until the customer has typed into the card's message box.
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route("**/*", async (route) => {
+    if (route.request().method() === "POST") await held;
+    await route.continue();
+  });
+  await say(page, "send $20 to somebody");
+  await card(page).getByLabel("Edit message").focus();
+  await page.keyboard.type(" please");
+  release();
+
+  await expect(card(page).getByText("Send an e-Transfer")).toBeVisible();
+  await expect(card(page).getByLabel("Edit message")).toBeFocused();
+  await expect(card(page).getByLabel("Edit message")).toHaveValue("send $20 to somebody please");
+});
