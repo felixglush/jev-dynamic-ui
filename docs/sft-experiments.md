@@ -16,7 +16,7 @@ Val is for choosing settings. Test is read once per candidate model. Both are AI
 | | |
 | --- | --- |
 | Base model | `LiquidAI/LFM2.5-230M` |
-| Data | 645 approved rows, all reviewed by Claude and approved in bulk (commit `e56efb1`); split 449 train / 98 val / 98 test, stratified by group |
+| Data | 645 approved rows: labeled by Claude, 62 of the sample rows reviewed one by one by Felix on `/annotate` (10 with notes; see "What review found in the first iteration" in [sft-dataset.md](sft-dataset.md)), the rest approved in bulk (commit `e56efb1`); split 449 train / 98 val / 98 test, stratified by group |
 | Hardware | Modal, L4 GPU, account `felixglush`, env `main` |
 | Tooling | Modal client 1.6.2; `transformers`, `trl`, `peft` unpinned (latest at image build); `xgrammar` for constrained decoding |
 | Scoring script | `training/modal_train.py` at `2ce8a47` |
@@ -93,6 +93,10 @@ Errors (8 records):
 Reading: the net change is not distinguishable from noise. Val went from 6 wrong records to 5 and test from 4 to 2, but the errors moved around: some patterns are fixed, new ones appeared, and the two worst (large spelled-out amounts, cancellation dates) did not move. Fabrication stayed at 1 to 2 fields. One record is 1 point on each set.
 
 **Do not read the test gain as proof the fixes work.** Run 1's test errors were read and the new rows were written for them, so test is no longer a clean held-out set. Val and test are retired as the final measure until new held-out rows exist (see below).
+
+## Human review status
+
+Felix reviewed 62 of the sample rows individually on `/annotate`, 10 of them with notes. That was enough to find the failure modes of the first label set and to improve it (the missing account and payment fields, the `cancel_etransfer` lookup problem, and the rule that choice fields stay out of the answers; details in [sft-dataset.md](sft-dataset.md)). Everything else was **not** reviewed one by one: the other 583 rows of the first 645 were approved in bulk, and the 489 rows added since (134 train-only for Run 2, 140 v2 rows for Run 3, 215 v3 rows for Run 4; approved by Claude after a substring check) have no human review. This applies to every score in this log: the held-out sets are mostly unreviewed AI-written text.
 
 ## Fair evaluation v2
 
