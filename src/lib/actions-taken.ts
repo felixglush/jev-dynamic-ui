@@ -38,7 +38,8 @@ function isTakenAction(value: unknown): value is TakenAction {
     Object.hasOwn(CATALOG, entry.action) &&
     typeof entry.title === "string" &&
     typeof entry.summary === "string" &&
-    typeof entry.at === "number"
+    typeof entry.at === "number" &&
+    Number.isFinite(new Date(entry.at).getTime())
   );
 }
 
@@ -88,6 +89,8 @@ export function useActionsTaken(): TakenAction[] {
 }
 
 export function recordAction(entry: Omit<TakenAction, "id" | "at">) {
+  // Re-read storage first, so an action confirmed in another tab a moment ago isn't overwritten.
+  cache = null;
   write([{ ...entry, id: crypto.randomUUID(), at: Date.now() }, ...read()]);
 }
 

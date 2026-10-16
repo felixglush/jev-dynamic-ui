@@ -79,10 +79,21 @@ test("an example chip sends its message", async ({ page }) => {
 });
 
 test("the form opens in a floating card right away, before Jev answers", async ({ page }) => {
+  // Hold the server's answer so we can see the card while Jev is still thinking.
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route("**/*", async (route) => {
+    if (route.request().method() === "POST") await held;
+    await route.continue();
+  });
   await say(page, "Send $50 to Sam");
   await expect(card(page)).toBeVisible();
   await expect(card(page).getByLabel("Edit message")).toHaveValue("Send $50 to Sam");
+  await expect(card(page).getByText("Thinking…")).toBeVisible();
+
+  release();
   await expect(card(page).getByText("Send an e-Transfer")).toBeVisible();
+  await expect(card(page).getByText("Thinking…")).toHaveCount(0);
 });
 
 test("confirming closes the card, shows the demo notice and adds the action to the sidebar", async ({ page }) => {
@@ -295,8 +306,11 @@ test("choosing a custom payment amount makes the amount required", async ({ page
 });
 
 test("a corrupted saved history is ignored instead of crashing the sidebar", async ({ page }) => {
-  const entry = { id: "x", action: "__proto__", title: "Bad", summary: "", at: 1 };
-  await page.evaluate((value) => localStorage.setItem("jev:actions-taken:v1", JSON.stringify([value])), entry);
+  const bad = [
+    { id: "x", action: "__proto__", title: "Bad", summary: "", at: 1 },
+    { id: "y", action: "send_etransfer", title: "Bad", summary: "", at: 8640000000000001 },
+  ];
+  await page.evaluate((value) => localStorage.setItem("jev:actions-taken:v1", JSON.stringify(value)), bad);
   await page.reload();
   await expect(history(page)).toContainText("Nothing yet");
 });
