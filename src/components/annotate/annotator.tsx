@@ -141,11 +141,13 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: 
           });
         } else {
           fromFile = loaded.annotations ?? {};
-          setFileStatus({ state: "saved", path: loaded.path });
+          // No file yet: stay quiet until the first write creates it.
+          if (loaded.annotations) setFileStatus({ state: "saved", path: loaded.path });
         }
       }
       const merged = { ...fromFile, ...local };
-      if (Object.keys(merged).length > 0) {
+      // If a CSV was imported while the file was loading, these answers belong to the other dataset.
+      if (usingDefaultRef.current && Object.keys(merged).length > 0) {
         // Answers given while the file was loading are newer than anything restored, so they win.
         setDataset((d) => ({ ...d, annotations: { ...merged, ...d.annotations } }));
         writeSaved(storageKey(initial), { ...merged, ...latest.current });
@@ -173,7 +175,12 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: 
         setFileStatus((s) => (s.state === "saved" || s.state === "saving" ? { state: "saving", path: s.path } : { state: "saving", path: "" }));
         const result = await saveToFile(batch).catch(() => null);
         if (result?.ok) path = result.path;
-        else failed = true;
+        else {
+          // Keep these changes for the next try, under anything newer, and stop until the next edit.
+          pending.current = { ...batch, ...(pending.current as Changes | null) };
+          failed = true;
+          break;
+        }
       }
       writing.current = false;
       setFileStatus(

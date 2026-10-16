@@ -36,7 +36,8 @@ export default defineConfig({
         ANNOTATIONS_FILE,
       },
       url: `http://localhost:${APP_PORT}`,
-      reuseExistingServer: !process.env.CI,
+      // Never reuse: a server started elsewhere wouldn't have ANNOTATIONS_FILE set and would write to data/.
+      reuseExistingServer: false,
       timeout: 240_000,
     },
   ],
