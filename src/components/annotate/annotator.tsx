@@ -142,6 +142,12 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ti
   const key = useMemo(() => storageKey(dataset), [dataset]);
   const summary = useMemo(() => summarize(dataset), [dataset]);
   const current = predictions[index];
+  // The squares, one block per group in the order groups first appear. Numbers follow the walk order.
+  const squareGroups = useMemo(() => {
+    const blocks = new Map<string, { p: (typeof predictions)[number]; i: number }[]>();
+    predictions.forEach((p, i) => blocks.set(p.group, [...(blocks.get(p.group) ?? []), { p, i }]));
+    return [...blocks].map(([name, items]) => ({ name, items }));
+  }, [predictions]);
 
   // Restore saved progress once, after the first render. It can't happen during render because the
   // server has no localStorage, and the first browser render must match the server's HTML.
@@ -367,30 +373,41 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ti
         </div>
 
         {/* One square per message: green right, amber wrong values, red wrong action, grey not yet. */}
-        <nav aria-label="Messages" className="flex flex-wrap gap-1">
-          {predictions.map((p, i) => {
-            const a = annotations[p.id];
-            const result = a ? verdict(p, a) : null;
-            return (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => go(i)}
-                aria-label={`Message ${i + 1}${result ? `, ${result.replace("_", " ")}` : ", not reviewed"}`}
-                aria-current={view === "review" && i === index ? "true" : undefined}
-                className={cn(
-                  "size-6 rounded text-[10px] font-medium tabular-nums outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
-                  result === null && "bg-muted text-muted-foreground",
-                  result === "correct" && "bg-success/25 text-foreground",
-                  result === "wrong_values" && "bg-warning/35 text-foreground",
-                  result === "wrong_action" && "bg-destructive/20 text-destructive",
-                  view === "review" && i === index && "ring-2 ring-foreground",
-                )}
-              >
-                {i + 1}
-              </button>
-            );
-          })}
+        <nav aria-label="Messages" className="flex flex-col gap-3">
+          {squareGroups.map(({ name, items }) => (
+            <div key={name} role="group" aria-label={name ? label(name) : "Messages"} className="flex flex-col gap-1">
+              {name && squareGroups.length > 1 && (
+                <span className="text-xs text-muted-foreground">
+                  {label(name)} · {items.filter(({ p }) => annotations[p.id]).length}/{items.length}
+                </span>
+              )}
+              <div className="flex flex-wrap gap-1">
+                {items.map(({ p, i }) => {
+                  const a = annotations[p.id];
+                  const result = a ? verdict(p, a) : null;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => go(i)}
+                      aria-label={`Message ${i + 1}${result ? `, ${result.replace("_", " ")}` : ", not reviewed"}`}
+                      aria-current={view === "review" && i === index ? "true" : undefined}
+                      className={cn(
+                        "size-6 rounded text-[10px] font-medium tabular-nums outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                        result === null && "bg-muted text-muted-foreground",
+                        result === "correct" && "bg-success/25 text-foreground",
+                        result === "wrong_values" && "bg-warning/35 text-foreground",
+                        result === "wrong_action" && "bg-destructive/20 text-destructive",
+                        view === "review" && i === index && "ring-2 ring-foreground",
+                      )}
+                    >
+                      {i + 1}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
 
         <div className="flex flex-wrap items-center gap-2">

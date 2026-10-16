@@ -98,3 +98,11 @@ test("the Group menu walks one group at a time and shows its progress", async ({
   await group.selectOption("");
   await expect(page.getByText("Message 1 of 645")).toBeVisible();
 });
+
+test("the square grid has one labeled block per group", async ({ page }) => {
+  const nav = page.getByRole("navigation", { name: "Messages" });
+  await expect(nav.getByRole("group", { name: "send etransfer", exact: true })).toBeVisible();
+  await expect(nav.getByRole("group", { name: "send etransfer", exact: true }).getByText(/^send etransfer · 0\/\d+$/)).toBeVisible();
+  await page.getByRole("combobox", { name: "Group" }).selectOption("send_etransfer");
+  await expect(nav.getByRole("group")).toHaveCount(1);
+});
