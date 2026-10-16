@@ -132,7 +132,7 @@ describe("pinned rows (meta.split) and versions", () => {
   const synthetic = (id: string, message: string, extra: Record<string, unknown> = {}) =>
     ({ ...approved[0]!, messages: [approved[0]!.messages[0], { role: "user" as const, content: message }, approved[0]!.messages[2]], meta: { ...approved[0]!.meta, id, ...extra } }) as ExampleRecord;
 
-  it.each(["v1", "v2"] as const)("rebuild the %s sets exactly as frozen in data/sft/%s/", (version) => {
+  it.each(["v1", "v2", "v3"] as const)("rebuild the %s sets exactly as frozen in data/sft/%s/", (version) => {
     const { files: built } = buildSplits(rows, { version });
     for (const split of ["train", "val", "test"] as const) {
       const frozen = readFileSync(`data/sft/${version}/${split}.jsonl`, "utf8").trim().split("\n").map((l) => JSON.parse(l) as SftRecord);

@@ -192,13 +192,70 @@ Patterns that moved (v2 rows, val / test): `spelled-amount` 2/5, 3/5 to 5/5, 5/5
 - **Held up:** large spelled-out amounts and `cancelled on <date>` after adding rows for them (val 8/8 and 6/6 including old rows, test 7/7 and 6/6, with the caveat above that the val rows are the ones the data was aimed at, and test is two or three rows better than Run 2). Multi-word company names and company-in-phrase (`Bell internet bill`, `Hydro One`, `Great-West Life`): 5/5 on val and test already from Run 2 on. Email with no name: 5/5 and 5/5 in Run 3.
 - **Did not hold or not fixed:** `cancel-email-only` (3/5 val and 4/5 test in Run 3; the model puts the email in `recipient`; no rows were added for it, so this is the largest known gap). `lowercase-name` next to an email (`put dave at dave99@gmail.com` fails in every run since Run 2; test 3/5). `today-date` regressed from 5/5, 5/5 (Run 2) to 4/5, 4/5 (Run 3), but these were not targeted and the change is one row per split, so it is noise until shown otherwise. A name taken from an email (`tomas_h`) was fixed in Run 3 on val but is a rule-2 failure to watch.
 
+## Fair evaluation v3: bigger, more varied test; Run 4
+
+Date: 2026-10-16. Commits `23ab5ab` (data) and the v3 code commit before it. Files frozen in `data/sft/v3/`; v1 and v2 stay in `data/sft/v1/` and `v2/`.
+
+**Decisions and what changed**
+
+- **Bad example retired.** Felix called `put dave at dave99@gmail.com in my contacts` a bad example (the phrasing is ambiguous). It and my similar v2 row `put theo at theo.l@gmail.com` are `meta.retired: "v3"`: out of v3 and later, still in v1 and v2 so their scores can be reproduced. Retired rows still take part in the hash split, so retiring one moves no other row.
+- **Versions are ordered** (v1 < v2 < v3). `buildSplits(rows, {version})` rebuilds any of them; a test checks v1, v2 and v3 against the frozen files.
+- **Test expanded without reading any test file, row or error.** 133 new test rows (v3) written from scratch across all 12 actions, using the 7 earlier patterns plus new variety tags: `amount-format` (2k, $1.5k, 1,850.50), `two-amounts` (a second or non-money number in the message), `accented-name`, `phone-account`, `relationship-blank`, `date-format`, `typos-slang`, `vague-empty`, and `plain` (ordinary messages, 24). Three duplicates of existing messages were skipped by `sft:add`. v3 test is 266 rows: 98 old (`dev-2`), 35 v2 and 133 v3. The v3 rows are the clean measure; model results are still counts only for test.
+- **Val got 34 new rows** (v3), mostly for the gap patterns and a few of each variety tag. Val is now 165 rows (two retired).
+- **48 train-only rows (v3)** for the gaps found on v2 val: cancel with only an email (16), lowercase name next to an email (12), `today`/`tonight` on disputes and other actions (13), underscore-email with no name (8). Written after the test rows; exact duplicates are impossible (`sft:add` and the build check), near-duplicates are avoided by using different names and phrasing, but I did not compare against test rows beyond what I wrote myself.
+- All 215 new rows were approved by Claude after the substring check, **not reviewed by a person**.
+
+**Why the old models were re-scored:** v3 val and test differ from v2 (new rows, two retired), so v2 numbers cannot be compared with v3. Only Run 4 was trained; the others are inference on saved weights (`base`, `run1recipe`, `run2`, `run3` folders).
+
+**v3 results** (val 165, test 266; test = counts only; "v3 test rows" = the 133 rows nobody has seen errors for)
+
+| Model | Train rows | Val exact | Val fabricated | Test exact | Test fabricated | Test missed / wrong | v3 test rows passed |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Base | 0 | 20.6% | 88.7% | 25.9% | 88.5% | 0.8% / 8.8% | 32/133 |
+| Run 1 recipe | 449 | 82.4% | 5.9% | 88.7% | 4.6% | 4.0% / 0.8% | 115/133 |
+| Run 2 | 583 | 87.3% | 3.9% | 92.5% | 2.3% | 2.0% / 1.5% | 121/133 |
+| Run 3 | 653 | 91.5% | 2.9% | 93.6% | 3.0% | 2.0% / 0.8% | 122/133 |
+| Run 4 | 701 | 94.5% | 2.0% | 95.9% | 1.3% | 1.3% / 0.8% | 125/133 |
+
+Test passed per pattern (all test rows of that pattern, v3 rows only in brackets where the pattern is old). Patterns every model trained on passed fully (`accented-name` 8/8, `amount-format` 14/14, `phone-account` 11/11, `relationship-blank` 8/8, `vague-empty` 12/12) and are omitted; base fails most of them.
+
+| Pattern | Base | Run 1 recipe | Run 2 | Run 3 | Run 4 |
+| --- | --- | --- | --- | --- | --- |
+| cancel-email-only (10; v3 4) | 0 (0) | 6 (1) | 8 (3) | 7 (3) | 10 (4) |
+| lowercase-name (10; v3 4) | 2 (1) | 2 (0) | 4 (1) | 6 (2) | 7 (2) |
+| typos-slang (12, all v3) | 2 | 6 | 8 | 8 | 8 |
+| spelled-amount (11; v3 4) | 2 (0) | 10 (3) | 7 (3) | 11 (4) | 11 (4) |
+| past-event-date (10; v3 4) | 2 (1) | 5 (2) | 7 (2) | 9 (3) | 9 (3) |
+| today-date (10; v3 4) | 4 (2) | 7 (3) | 10 (4) | 8 (3) | 10 (4) |
+| company-name (12; v3 4) | 2 (0) | 11 (3) | 12 (4) | 12 (4) | 12 (4) |
+| email-no-name (15; v3 4) | 1 (0) | 13 (4) | 15 (4) | 15 (4) | 14 (4) |
+| two-amounts (8) / date-format (8) | 2 / 5 | 8 / 8 | 8 / 8 | 7 / 7 | 8 / 8 |
+| plain (24) | 9 | 24 | 23 | 24 | 23 |
+
+### Run 4: Run 3 plus 48 train-only rows for the v2 val gaps
+
+2026-10-16, `--stage train --run run4`. Settings as Run 1 (rank 16, alpha 32, lr 2e-4, 3 epochs, batch 16, seed 0); 701 train rows = Run 3's 653 + 48. Validation loss 0.0310, 0.0233, 0.0218 (on the bigger v3 val). Val 94.5% exact, test 95.9% (255 of 266), fabrication 2.0% / 1.3%.
+
+Val errors read (9 records; test errors not read): the name taken from an email address (`joy` from joy.k@school.edu, `ola` from ola_t@mail.com, `imani` put in the email field); lowercase names dropped when an email is given (`add rohan, rohan.s@gmail.com`, `send 40 to bertrand at bertrand.f@gmail.com`, `ask lena for 55 at lena.w@outlook.com`); `cancel` with an email only still fills the recipient once (`stop the transfer I sent to omar.h@yahoo.ca`); a typo in a copied name (`sned 35 to rafaela` gave `rafela`); `pay teh hydro one bill 140` dropped the payee.
+
+What moved (test, all rows of the pattern): `cancel-email-only` 7 to 10 of 10 and `today-date` 8 to 10 of 10 (the two patterns the new rows aimed at); `lowercase-name` 6 to 7 of 10. Overall Run 4 is 3 rows better than Run 3 on the 133 v3 test rows (125 against 122) and about 2 points better on the whole test.
+
+**Caveats**
+
+- The val gain is partly aimed: the 48 train rows were chosen from v2 val failures and the new val rows probe the same patterns. Val is the dev set, so this is expected, but do not quote 94.5% as accuracy.
+- Three rows out of 133 is within noise. The pattern-level gains (7 to 10 of 10) are the more convincing signal, but each is one to three rows.
+- All 266 test rows and every new row are AI-written by the same author who knows what failed; none has been reviewed by a person. Test was scored for five models (counts only); Run 4 is the candidate.
+- `typos-slang` is the weakest pattern on test: 8 of 12 for Runs 2 to 4, and 0 of 2 on val. No rows were added for it, and I have not read the test failures, so I cannot say which typos fail. It looks like the clearest next gap.
+
 ## Ideas to try next
 
-- Add train rows for the gaps found on v2 val: cancel rows that give only an email (recipient must stay blank), a lowercase name written next to an email (`put dave at dave99@gmail.com`), `today` kept as the date on dispute messages, and a name derived from an underscore email. Then re-score on v2 and compare only with Run 3. Keep the 5 held-out rows per pattern fixed; add more held-out rows if a pattern needs a finer reading.
-- More held-out rows per pattern (5 per split is one-row-equals-20-points), and real user messages for val and test, so scores are not measured on AI-written text.
-- Have a person review the 70 v2 held-out rows and the 140 v2 train rows on `/annotate`.
-- More data: train is 653 rows against a target of about 2,000; several fields have under 20 stated examples (`setup_autodeposit.phone` 9, `transfer_between_accounts.date` 11, `pay_bill.date` 12).
-- Repeat the Run 1 recipe, Run 2 and Run 3 with two or three seeds to see how much of a one-row difference is seed noise.
+- Typos and slang (`sned`, `teh`, `snd 50 bucks`): 8 of 12 on test and 0 of 2 on val. Add train rows from the val failures (copy the name as written even when misspelled; keep a lowercase company payee) and re-score on v3, compared only with Run 4. This is the biggest known gap.
+- Lowercase name next to an email (`add rohan, rohan.s@gmail.com`) still fails 4 of 5 on val despite 12 train rows: try more varied phrasing, or check whether the labels are ambiguous before adding more.
+- A name taken from an email address (`joy` from joy.k@school.edu): a rule-2 error that keeps coming back. Consider a code rule that blanks a name equal to the email's local part.
+- Real user messages for val and test, so scores are not measured on AI-written text; and more rows per cell (most test patterns have 4 to 12 rows).
+- Have a person review the 215 v3 rows and 140 v2 rows on `/annotate`.
+- More data: train is 701 rows against a target of about 2,000; several fields have under 20 stated examples (`setup_autodeposit.phone` 9, `transfer_between_accounts.date` 11, `pay_bill.date` 12).
+- Repeat the Run 1 recipe, Run 3 and Run 4 with two or three seeds to see how much of a one-row difference is seed noise.
 - Learning rate, epochs and LoRA rank sweeps, choosing on val only.
-- Fetch the GGUF (`run3/LFM2.5-230M-SFT-Q8_0.gguf` once exported with `--stage gguf --run run3`), run it in Ollama through the real extractor (`extract:eval`) and compare with the Modal numbers.
+- Fetch the GGUF (`--stage gguf --run run4`), run it in Ollama through the real extractor (`extract:eval`) and compare with the Modal numbers.
 - Install `causal_conv1d` in the training image for faster convolution layers.
