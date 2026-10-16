@@ -5,8 +5,8 @@
 # send_etransfer
 Send $50 to Sam for dinner last night => recipient=Sam; amount=50
 e-transfer 120 to jordan for the concert tickets => recipient=jordan; amount=120
-can you etransfer my landlord $1,850 for rent from chequing => recipient=landlord; amount=1850
-send mom 200 bucks => recipient=mom; amount=200
+can you etransfer my landlord $1,850 for rent from chequing => amount=1850
+send mom 200 bucks => amount=200
 pay Alex 75.50 via interac => recipient=Alex; amount=75.5
 transfer $300 to priya.k@example.com => recipient_email=priya.k@example.com; amount=300
 send money to Chris => recipient=Chris
@@ -14,7 +14,7 @@ etransfer 40 to my roommate Dana from savings => recipient=Dana; amount=40
 interac my brother Kevin $60 for the gas => recipient=Kevin; amount=60
 can you send 15 dollars to taylor@outlook.com => recipient_email=taylor@outlook.com; amount=15
 I need to e-transfer $2,400 to my contractor Mike from my chequing account => recipient=Mike; amount=2400
-send Grandma 100 for her birthday => recipient=Grandma; amount=100
+send Grandma 100 for her birthday => amount=100
 send $5,000.50 to María-José => recipient=María-José; amount=5000.5
 e-transfer 20 CAD to bob => recipient=bob; amount=20
 send two hundred dollars to Sam => recipient=Sam; amount=200
@@ -22,23 +22,23 @@ send $1.5k to Noah => recipient=Noah; amount=1500
 etransfer seventy-five dollars to Chloé => recipient=Chloé; amount=75
 send Ana Lúcia $45 at ana.lucia+bank@gmail.com => recipient=Ana Lúcia; recipient_email=ana.lucia+bank@gmail.com; amount=45
 send $50 to Sam every week => recipient=Sam; amount=50
-e-transfer my landlord $1,850 on the 1st of every month from chequing => recipient=landlord; amount=1850; date=the 1st
+e-transfer my landlord $1,850 on the 1st of every month from chequing => amount=1850; date=the 1st
 send Priya $100 on December 24 => recipient=Priya; amount=100; date=December 24
-send Mom 200 bucks on friday => recipient=Mom; amount=200; date=friday
+send Mom 200 bucks on friday => amount=200; date=friday
 transfer $75 to Alex tomorrow => recipient=Alex; amount=75; date=tomorrow
 # send_etransfer (vague)
 can you get Sam his 40 bucks back => recipient=Sam; amount=40
 I need to pay back my friend Alicia => recipient=Alicia
 send it to Jordan => recipient=Jordan
-give my son some money for lunch => recipient=son
+give my son some money for lunch
 I want to split the dinner bill with Tom, he's owed $35 => recipient=Tom; amount=35
-transfer money to my mom => recipient=mom
+transfer money to my mom
 can you pay Priya => recipient=Priya
 # add_etransfer_contact
 add my sister Priya, priya.k@example.com, so I can e-transfer her => name=Priya; email=priya.k@example.com
 save Marcus as a contact, his number is 416-555-0199 => name=Marcus; phone=416-555-0199
 add a new e-transfer recipient: Lena Ortiz lena.o@mail.com => name=Lena Ortiz; email=lena.o@mail.com
-I need to add my landlord to e-transfer => name=landlord
+I need to add my landlord to e-transfer
 put dave at dave99@gmail.com in my contacts => name=dave; email=dave99@gmail.com
 add Jamal as a new interac contact => name=Jamal
 new payee for e-transfers: Sofia Rossi, 647-555-0142 => name=Sofia Rossi; phone=647-555-0142
@@ -47,11 +47,11 @@ set up my nephew Leo as an e-transfer recipient, his email is leo.m@gmail.com =>
 register Hannah's phone number 905-555-0177 for interac => name=Hannah; phone=905-555-0177
 save Zoë's number (416) 555-0123 => name=Zoë; phone=(416) 555-0123
 # add_etransfer_contact (vague)
-I want to be able to send money to my new roommate => name=roommate
-my cousin's email is raj.p@yahoo.ca => name=cousin; email=raj.p@yahoo.ca
+I want to be able to send money to my new roommate
+my cousin's email is raj.p@yahoo.ca => email=raj.p@yahoo.ca
 remember Olivia's number for next time: 289-555-0110 => name=Olivia; phone=289-555-0110
 set up Kim so I can pay her later => name=Kim
-can my babysitter get money from me by email? it's nanny.jo@gmail.com => name=babysitter; email=nanny.jo@gmail.com
+can my babysitter get money from me by email? it's nanny.jo@gmail.com => email=nanny.jo@gmail.com
 add Tyler => name=Tyler
 I'll be paying my piano teacher every week, her name is Ms. Chen => name=Ms. Chen
 # pay_credit_card
@@ -157,7 +157,7 @@ Sam owes me money => from_person=Sam
 get my money back from Alicia => from_person=Alicia
 ask Mike to pay me => from_person=Mike
 can you collect $50 from Dana => from_person=Dana; amount=50
-send a payment request to my friend => from_person=friend
+send a payment request to my friend
 # cancel_etransfer
 cancel the e-transfer I sent yesterday
 cancel my $200 e-transfer to Sam => recipient=Sam; amount=200
