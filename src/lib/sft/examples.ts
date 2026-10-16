@@ -2,8 +2,8 @@
  * Every labeled example and its review state, kept in one JSONL file (data/sft/examples.jsonl). Same
  * record format as the other SFT files, plus review fields in `meta`:
  *
- *   source    "sample" (a real message from data/sample-messages.txt, eligible for val and test) or
- *             "synthetic" (generated, train only)
+ *   source    "sample" (the first batch, from data/sample-messages.txt) or
+ *             "synthetic" (generated later). Both are AI-written and treated the same
  *   status    "pending" (not looked at), "approved" (goes into training) or "rejected" (never used)
  *   original  what the generator wrote, kept once a reviewer changes it, so the page can show the
  *             correction and "undo" can restore it

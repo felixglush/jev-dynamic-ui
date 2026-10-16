@@ -39,7 +39,7 @@ These decide what "correct" means, so they matter more than the example count.
 
 ## 3. Coverage targets
 
-The 187 sample rows (real messages from `data/sample-messages.txt`) plus 458 generated rows are the starting point, not the finish, and **none of it counts until a person approves it on `/annotate`**: all labels so far were written by Claude. Targets for the final set, counted per field in the **train** split (the "written so far" column counts all rows, approved or not) (`npm run sft:build` prints this table once rows are approved):
+The 187 sample rows (from `data/sample-messages.txt`) plus 458 generated rows are the starting point, not the finish, and **none of it counts until a person approves it on `/annotate`**: all labels so far were written by Claude. Targets for the final set, counted per field in the **train** split (the "written so far" column counts all rows, approved or not) (`npm run sft:build` prints this table once rows are approved):
 
 | What | Target | Written so far (not yet approved) |
 | --- | --- | --- |
@@ -56,10 +56,10 @@ Run `npm run sft:build` after a review session to see the real counts. Why a few
 
 Everything lives in one file, `data/sft/examples.jsonl`. Each row is a training record plus review fields in `meta`: `source` (`sample` or `synthetic`), `status` (`pending`, `approved`, `rejected`), `original` (what Claude wrote, kept once you change it) and `note`.
 
-1. **Sample rows.** 187 real messages from `sample-messages.txt` (the same text the base model was evaluated on, so base-model numbers stay comparable), labeled by Claude using the rules above. Only these can become val or test.
-2. **Synthetic rows.** Claude Sonnet 5.5 wrote 458 more messages, aimed at the thin fields (an email with no name, a date with no amount, "relationship only" blanks, typos, spelled-out numbers, accented names) and some fully empty answers. They were written in a Claude Code session, not through the API, because that environment has no `ANTHROPIC_API_KEY`. They only ever train. To add a batch, write lines like `message => field=value; field=value` (with `# <action>` headers) and run `npm run sft:add -- batch.txt` (or `--source sample` for real messages). It adds **pending** rows, skips messages already in the file and never touches reviewed rows.
+1. **Sample rows.** 187 messages from `sample-messages.txt` (the same text the base model was evaluated on, so base-model numbers stay comparable), labeled by Claude using the rules above.
+2. **Synthetic rows.** Claude Sonnet 5.5 wrote 458 more messages, aimed at the thin fields (an email with no name, a date with no amount, "relationship only" blanks, typos, spelled-out numbers, accented names) and some fully empty answers. They were written in a Claude Code session, not through the API, because that environment has no `ANTHROPIC_API_KEY`. To add a batch, write lines like `message => field=value; field=value` (with `# <action>` headers) and run `npm run sft:add -- batch.txt` (or `--source sample` for real messages). It adds **pending** rows, skips messages already in the file and never touches reviewed rows.
 3. **Automatic filter.** `sft:add` checks structure only (known field, positive amount, no duplicates). There is no text-match check, so review matters: look first at any label whose text isn't a substring of its message.
-4. **Human review on `/annotate`.** Switch to **Fine-tuning data**. It opens `data/sft/examples.jsonl` on the **Fields only** view (the model's fields with blanks marked), sample rows first; **Full** shows the whole card. Press **Y** to approve a row, **N** to correct it (change values, or pick another action), or choose action `none` to reject it. Every answer is written straight into the row in the file:
+4. **Human review on `/annotate`.** Switch to **Fine-tuning data**. It opens `data/sft/examples.jsonl` on the **Fields only** view (the model's fields with blanks marked); use the **Group** menu to work through one group at a time (it shows reviewed/total); **Full** shows the whole card. Press **Y** to approve a row, **N** to correct it (change values, or pick another action), or choose action `none` to reject it. Every answer is written straight into the row in the file:
    - `meta.status` becomes `approved` or `rejected`, and the row's answer and system prompt are rewritten if you corrected it;
    - `meta.original` keeps what Claude wrote the first time you change a row, and **Clear all** (or taking an answer back) restores it, so the Summary shows how often Claude's labels were wrong;
    - there is no browser-only copy for this file; the file is the source of truth.
@@ -69,25 +69,16 @@ Everything lives in one file, `data/sft/examples.jsonl`. Each row is a training 
 
 ## 5. Split
 
-`src/lib/sft/split.ts`: each **approved sample row** is assigned by a hash of its id: 15% test, 15% val, 70% train. Because it depends on the id alone, a row's split never changes when other rows are approved or added, so val and test stay the same messages from run to run. The hash salt was picked so that, with every sample row approved, each action has at least one val and one test row (checked in `dataset.test.ts`).
+`src/lib/sft/split.ts`: **group-stratified**. A group is an action, plus "(vague)" for messages that don't say enough: the same label the `/annotate` Group menu shows. Each group is split on its own: its approved rows are ordered by a hash of their id, the first 15% go to **test**, the next 15% to **val**, the rest to **train**. So every group appears in all three files in about the same proportions, instead of one action missing from val by bad luck. A group with fewer than 4 approved rows stays all train.
+
+Sample and synthetic rows are treated the same: both are AI-written and both need your review, so nothing about a row's source decides its split.
 
 Rules that keep the test honest:
 
-- **Test and val are real messages you approved.** Synthetic rows only ever go to train (and are dropped if they repeat a val/test message), so a paraphrase of a test message can never be in training.
+- **No message in two splits.** A train row that repeats a val/test message is dropped (`sft:build` lists them), so a paraphrase-free copy of a test message can never be trained on (checked in `dataset.test.ts`).
 - **Test is never tuned on**: it is read once per candidate model, val is for choosing settings.
-- **No message in two splits** (checked in `dataset.test.ts`).
-- With 187 sample rows, val and test get about 28 each, so each field has only a handful of cases and the numbers are noisy. Add more real messages with `sft:add -- batch.txt --source sample` before trusting small differences between models.
-
-## 5. Split
-
-`src/lib/sft/split.ts`: per action, sort by a hash of the id, take 15% as **test**, the next 15% as **val**, the rest as **train** (at least one each once an action has 5 examples). It is deterministic, so rerunning never moves an example, and per action so every action is tested.
-
-Rules that keep the test honest:
-
-- **Test and val are human-written only.** Synthetic rows only ever go to train (and are dropped if they repeat a val/test message), so a paraphrase of a test message can never be in training.
-- **Test is never tuned on**: it is read once per candidate model, val is for choosing settings. Both are rebuilt only by adding new lines at the end of a group (ids are line order, so appending keeps existing ids).
-- **No message in two splits** (checked in `dataset.test.ts`).
-- At 30 test examples each field has a handful of cases, which is noisy. Grow the held-out set to 100 to 150 hand-written messages before trusting small differences between models.
+- The counts come from each group's size, so the split shifts slightly as rows are approved. Build the files once review is done, and change `SPLIT_SALT` only on purpose (it reshuffles the held-out sets).
+- Everything is AI-generated so far, so val and test are not yet real user messages. Treat the scores as a check on the pipeline; add real messages with `sft:add -- batch.txt --source sample` before trusting small differences between models.
 
 ## 6. Training (LoRA on Modal)
 

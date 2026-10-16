@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight, Download, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import type { LoadResult, SaveResult } from "@/app/annotate/actions";
-import { parseAnyDataset, serializeDataset, serializeLabels, type Annotation, type Annotations, type Dataset } from "@/lib/annotate/dataset";
+import { label, parseAnyDataset, serializeDataset, serializeLabels, type Annotation, type Annotations, type Dataset } from "@/lib/annotate/dataset";
 import { saveFile } from "@/lib/annotate/save-file";
 import { summarize, verdict } from "@/lib/annotate/summary";
 import { cn } from "@/lib/utils";
@@ -107,6 +107,8 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ti
   const [index, setIndex] = useState(0);
   const [view, setView] = useState<"review" | "summary">("review");
   const [mode, setMode] = useState<ReviewMode>(defaultMode);
+  // Which group of messages to walk through ("" = all of them).
+  const [group, setGroup] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
   const [restored, setRestored] = useState(false);
   // False in the server's HTML; true once the browser has taken over and shortcuts work.
@@ -124,7 +126,19 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ti
   const latest = useRef<Annotations>({});
   const writing = useRef(false);
 
-  const { predictions, annotations } = dataset;
+  const { predictions: allPredictions, annotations } = dataset;
+  const groups = useMemo(() => {
+    const tally = new Map<string, { total: number; reviewed: number }>();
+    for (const p of allPredictions) {
+      const t = tally.get(p.group) ?? { total: 0, reviewed: 0 };
+      t.total += 1;
+      if (annotations[p.id]) t.reviewed += 1;
+      tally.set(p.group, t);
+    }
+    return [...tally].sort(([a], [b]) => a.localeCompare(b));
+  }, [allPredictions, annotations]);
+  // The messages being walked through: one group, or everything. Progress and the summary stay global.
+  const predictions = useMemo(() => (group ? allPredictions.filter((p) => p.group === group) : allPredictions), [allPredictions, group]);
   const key = useMemo(() => storageKey(dataset), [dataset]);
   const summary = useMemo(() => summarize(dataset), [dataset]);
   const current = predictions[index];
@@ -234,6 +248,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ti
       usingDefaultRef.current = false;
       setUsingDefault(false);
       setIndex(0);
+      setGroup("");
       setView("review");
       setImportError(null);
       setRestored(Object.keys(saved).length > 0);
@@ -273,7 +288,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ti
   });
 
   const done = summary.reviewed;
-  const percent = Math.round((done / predictions.length) * 100);
+  const percent = Math.round((done / allPredictions.length) * 100);
 
   return (
     <div className="flex flex-col gap-6" data-interactive={interactive || undefined}>
@@ -282,7 +297,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ti
           <div className="flex flex-col gap-1">
             <h1 className="text-2xl font-semibold tracking-tight text-balance">{title}</h1>
             <p className="text-sm text-muted-foreground">
-              <span className="font-mono">{source}</span> · {predictions.length} messages
+              <span className="font-mono">{source}</span> · {allPredictions.length} messages
               {restored && " · restored your saved progress"}
             </p>
           </div>
@@ -334,7 +349,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ti
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between text-sm">
             <span className="tabular-nums" data-testid="progress">
-              {done} of {predictions.length} reviewed
+              {done} of {allPredictions.length} reviewed
             </span>
             <FileStatusText status={fileStatus} enabled={Boolean(saveToFile)} usingDefault={usingDefault} />
             <span className="text-muted-foreground tabular-nums">{percent}%</span>
@@ -343,7 +358,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ti
             role="progressbar"
             aria-label="Reviewed"
             aria-valuemin={0}
-            aria-valuemax={predictions.length}
+            aria-valuemax={allPredictions.length}
             aria-valuenow={done}
             className="h-1.5 overflow-hidden rounded-full bg-muted"
           >
@@ -408,6 +423,25 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ti
               </Button>
             ))}
           </div>
+          {groups.length > 1 && (
+            <select
+              aria-label="Group"
+              value={group}
+              onChange={(event) => {
+                setGroup(event.target.value);
+                setIndex(0);
+                setView("review");
+              }}
+              className="h-8 rounded-md border bg-background px-2 text-sm"
+            >
+              <option value="">All groups ({allPredictions.length})</option>
+              {groups.map(([name, t]) => (
+                <option key={name} value={name}>
+                  {label(name)} ({t.reviewed}/{t.total})
+                </option>
+              ))}
+            </select>
+          )}
           <Button
             variant={view === "summary" ? "secondary" : "ghost"}
             size="sm"
@@ -431,7 +465,11 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ti
       {view === "summary" ? (
         <SummaryView
           summary={summary}
-          onOpen={(id) => go(predictions.findIndex((p) => p.id === id))}
+          onOpen={(id) => {
+            setGroup("");
+            setIndex(allPredictions.findIndex((p) => p.id === id));
+            setView("review");
+          }}
         />
       ) : (
         current && (

@@ -4,8 +4,8 @@
  *   npm run sft:build            write data/sft/{train,val,test}.jsonl and print a coverage table
  *   npm run sft:build -- --check fail if the files on disk are stale (for CI / before committing)
  *
- * Reads data/sft/examples.jsonl. Only approved rows count: sample rows are split into train, val
- * and test by id (src/lib/sft/split.ts), synthetic rows go to train. Pending and rejected rows are
+ * Reads data/sft/examples.jsonl. Only approved rows count: rows are split into train, val and
+ * test per group (src/lib/sft/split.ts), sample and synthetic alike. Pending and rejected rows are
  * ignored, so the files are empty until something is approved.
  */
 import { readFile, writeFile } from "node:fs/promises";

@@ -84,3 +84,17 @@ test("Clear all takes every review back", async ({ page }) => {
   await expect(page.getByTestId("file-status")).toHaveText(`Saved to ${SFT_REVIEW_FILE}`);
   expect((await rows()).every((r) => r.meta.status === "pending")).toBe(true);
 });
+
+test("the Group menu walks one group at a time and shows its progress", async ({ page }) => {
+  const group = page.getByRole("combobox", { name: "Group" });
+  await group.selectOption("send_etransfer");
+  await expect(page.getByTestId("predicted-action")).toHaveText("send_etransfer");
+  await expect(page.getByText(/Message 1 of \d+/)).not.toContainText("of 645");
+  // Overall progress stays global.
+  await expect(page.getByTestId("progress")).toHaveText(/^0 of 645 reviewed$/);
+  await page.keyboard.press("y");
+  await expect(group.locator("option:checked")).toHaveText(/^send etransfer \(1\//);
+  await expect(page.getByTestId("progress")).toHaveText("1 of 645 reviewed");
+  await group.selectOption("");
+  await expect(page.getByText("Message 1 of 645")).toBeVisible();
+});
