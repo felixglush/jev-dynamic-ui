@@ -3,7 +3,7 @@
  * plus the expected answers a person fills in. Reading and writing it as CSV lives here so the
  * server page, the import button and the export button all agree on the format.
  */
-import { CATALOG } from "@/lib/jev/catalog";
+import { CATALOG, type ParamSpec } from "@/lib/jev/catalog";
 import type { ActionName, ParamValue } from "@/lib/jev/types";
 import { parseCsv, toCsv } from "./csv";
 
@@ -76,6 +76,84 @@ function formatExpectedParams(params: Record<string, string>): string {
   return Object.entries(params)
     .map(([name, value]) => `${name}=${encodeValue(value)}`)
     .join("; ");
+}
+
+/** The parameters the extractor model fills in: everything except choices (which Jev answers). */
+export function freeTextParams(action: ActionName): [string, ParamSpec][] {
+  return Object.entries(CATALOG[action].params as Record<string, ParamSpec>).filter(([, spec]) => spec.type !== "choice");
+}
+
+/**
+ * Read a fine-tuning file (JSONL, one record per line, as `npm run sft:build` and `npm run
+ * extract:eval -- x x.jsonl` write them). Each record becomes a row to review: the assistant's JSON
+ * answer is the "output" (a training label, or what the model said), and blank fields stay blank.
+ */
+export function parseSftJsonl(text: string): Dataset {
+  const predictions: Prediction[] = [];
+  const seen = new Set<string>();
+  for (const [index, raw] of text.replace(/^\uFEFF/, "").split("\n").entries()) {
+    const line = raw.trim();
+    if (!line) continue;
+    const where = `Line ${index + 1}`;
+    let record: { messages?: { role?: string; content?: string }[]; meta?: { id?: string; action?: string; vague?: boolean } };
+    try {
+      record = JSON.parse(line);
+    } catch {
+      throw new Error(`${where}: not valid JSON.`);
+    }
+    const message = record.messages?.find((m) => m.role === "user")?.content;
+    const answerText = record.messages?.find((m) => m.role === "assistant")?.content;
+    const action = record.meta?.action ?? "";
+    if (typeof message !== "string" || typeof answerText !== "string") throw new Error(`${where}: needs user and assistant messages.`);
+    if (!isActionName(action)) throw new Error(`${where}: meta.action "${action}" isn't an action.`);
+    let answer: Record<string, unknown>;
+    try {
+      answer = JSON.parse(answerText);
+    } catch {
+      throw new Error(`${where}: the assistant message isn't JSON.`);
+    }
+    const id = String(record.meta?.id ?? index + 1);
+    if (seen.has(id)) throw new Error(`${where}: id ${id} appears more than once.`);
+    seen.add(id);
+
+    const params: Record<string, ParamValue> = {};
+    const missing: string[] = [];
+    for (const [name, spec] of freeTextParams(action)) {
+      const value = answer[name];
+      const stated = typeof value === "string" ? value.trim() : typeof value === "number" && value !== 0 ? String(value) : "";
+      if (stated) params[name] = { value: stated, confidence: null };
+      else if (spec.required) missing.push(name);
+    }
+    predictions.push({ id, group: action + (record.meta?.vague ? " (vague)" : ""), message, predictedAction: action, actionConfidence: null, params, missing, note: "" });
+  }
+  if (predictions.length === 0) throw new Error("The file has no records.");
+  return { predictions, annotations: {} };
+}
+
+/** A predictions CSV or an SFT JSONL file: JSONL lines start with "{". */
+export function parseAnyDataset(text: string): Dataset {
+  return text.replace(/^\uFEFF/, "").trimStart().startsWith("{") ? parseSftJsonl(text) : parseDataset(text);
+}
+
+/**
+ * The reviewed answers as lines of the seed file (data/sft/seed-labeled.txt): `message => field=value`,
+ * grouped under `# <action>`. Rows marked "none", or not reviewed yet, are left out.
+ */
+export function serializeLabels({ predictions, annotations }: Dataset): string {
+  const byAction = new Map<string, string[]>();
+  for (const p of predictions) {
+    const a = annotations[p.id];
+    if (!a || !isActionName(a.expectedAction)) continue;
+    const clean = (text: string) => text.replaceAll(/\s*;\s*/g, " ").replaceAll("=>", "->").replaceAll(/\s+/g, " ").trim();
+    const labels = Object.entries(a.expectedParams)
+      .filter(([name]) => freeTextParams(a.expectedAction as ActionName).some(([free]) => free === name))
+      .map(([name, value]) => `${name}=${clean(value)}`)
+      .join("; ");
+    const lines = byAction.get(a.expectedAction) ?? [];
+    lines.push(labels ? `${clean(p.message)} => ${labels}` : clean(p.message));
+    byAction.set(a.expectedAction, lines);
+  }
+  return [...byAction].map(([action, lines]) => `# ${action}\n${lines.join("\n")}`).join("\n") + "\n";
 }
 
 const REQUIRED_COLUMNS = ["id", "message", "predicted_action"];

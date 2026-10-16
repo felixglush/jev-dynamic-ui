@@ -1,8 +1,10 @@
+import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 
 import { describe, expect, test } from "vitest";
 
-import { acceptPrediction, annotationsFor, parseDataset, sanitizeAnnotations, serializeDataset } from "./dataset";
+import { parseSeed } from "@/lib/sft/seed";
+import { acceptPrediction, annotationsFor, parseAnyDataset, parseDataset, sanitizeAnnotations, serializeDataset, serializeLabels } from "./dataset";
 import { summarize } from "./summary";
 
 // Runs on the real predictions file the annotation page loads, not a hand-made sample.
@@ -76,5 +78,37 @@ describe("the predictions CSV", () => {
     );
 
     expect(Object.keys(annotationsFor(dataset.predictions, saved))).toEqual(["1"]);
+  });
+});
+
+describe("fine-tuning files in the annotator", () => {
+  const sft = readFileSync(new URL("../../../data/sft/train.jsonl", import.meta.url), "utf8");
+
+  test("an SFT JSONL file becomes reviewable rows, with blank fields left out of the values", () => {
+    const { predictions, annotations } = parseAnyDataset(sft);
+    expect(predictions).toHaveLength(sft.trim().split("\n").length);
+    expect(annotations).toEqual({});
+    const row = predictions.find((p) => p.message === "transfer $300 to priya.k@example.com")!;
+    expect(row.predictedAction).toBe("send_etransfer");
+    expect(Object.keys(row.params)).toEqual(["recipient_email", "amount"]);
+    expect(row.params.amount).toEqual({ value: "300", confidence: null });
+    expect(row.missing).toEqual(["recipient"]); // required, and the message doesn't name anyone
+  });
+
+  test("a predictions CSV still goes through the CSV reader", () => {
+    expect(parseAnyDataset(text).predictions).toHaveLength(100);
+  });
+
+  test("reviewed answers come out as seed-file lines that the dataset build reads back", () => {
+    const dataset = parseAnyDataset(sft);
+    const target = dataset.predictions.find((p) => p.message === "transfer $300 to priya.k@example.com")!;
+    dataset.annotations[target.id] = { expectedAction: "send_etransfer", expectedParams: { recipient: "Priya", amount: "300", from_account: "chequing" }, note: "" };
+    const lines = serializeLabels(dataset);
+    expect(lines).toBe("# send_etransfer\ntransfer $300 to priya.k@example.com => recipient=Priya; amount=300\n");
+    expect(parseSeed(lines)[0]).toMatchObject({ action: "send_etransfer", fields: { recipient: "Priya", amount: 300 } });
+  });
+
+  test("a broken file says which line is wrong", () => {
+    expect(() => parseAnyDataset('{"messages": []}')).toThrow(/Line 1/);
   });
 });

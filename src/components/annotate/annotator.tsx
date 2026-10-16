@@ -5,11 +5,11 @@ import { ChevronLeft, ChevronRight, Download, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import type { LoadResult, SaveResult } from "@/app/annotate/actions";
-import { parseDataset, serializeDataset, type Annotation, type Annotations, type Dataset } from "@/lib/annotate/dataset";
+import { parseAnyDataset, serializeDataset, serializeLabels, type Annotation, type Annotations, type Dataset } from "@/lib/annotate/dataset";
 import { saveFile } from "@/lib/annotate/save-file";
 import { summarize, verdict } from "@/lib/annotate/summary";
 import { cn } from "@/lib/utils";
-import { ReviewCard } from "./review-card";
+import { ReviewCard, type ReviewMode } from "./review-card";
 import { SummaryView } from "./summary-view";
 
 type Props = {
@@ -100,6 +100,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: 
   const [source, setSource] = useState(initialSource);
   const [index, setIndex] = useState(0);
   const [view, setView] = useState<"review" | "summary">("review");
+  const [mode, setMode] = useState<ReviewMode>("full");
   const [importError, setImportError] = useState<string | null>(null);
   const [restored, setRestored] = useState(false);
   // False in the server's HTML; true once the browser has taken over and shortcuts work.
@@ -216,7 +217,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: 
 
   async function importFile(file: File) {
     try {
-      const imported = parseDataset(await file.text());
+      const imported = parseAnyDataset(await file.text());
       // Work saved in this browser for the same messages is newer than the file, so it wins.
       const key = storageKey(imported);
       const saved = readSaved(key) ?? {};
@@ -283,7 +284,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: 
             <input
               ref={fileInput}
               type="file"
-              accept=".csv,text/csv"
+              accept=".csv,.jsonl,text/csv,application/jsonl,application/json"
               className="sr-only"
               aria-label="Import predictions CSV"
               tabIndex={-1}
@@ -295,7 +296,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: 
             />
             <Button variant="outline" size="sm" onClick={() => fileInput.current?.click()}>
               <Upload aria-hidden="true" />
-              Import CSV
+              Import file
             </Button>
             <Button
               variant="outline"
@@ -306,6 +307,15 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: 
             >
               <Download aria-hidden="true" />
               Download CSV
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              title="Reviewed answers as lines for data/sft/seed-labeled.txt"
+              onClick={() => void saveFile(`labels-${new Date().toISOString().slice(0, 10)}.txt`, serializeLabels(dataset))}
+            >
+              <Download aria-hidden="true" />
+              Download labels
             </Button>
           </div>
         </div>
@@ -376,6 +386,22 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: 
             Next
             <ChevronRight aria-hidden="true" />
           </Button>
+          <div role="group" aria-label="What to show" className="flex rounded-md border">
+            {(["full", "fields"] as const).map((option) => (
+              <Button
+                key={option}
+                variant={mode === option ? "secondary" : "ghost"}
+                size="sm"
+                aria-pressed={mode === option}
+                onClick={() => {
+                  setMode(option);
+                  setView("review");
+                }}
+              >
+                {option === "full" ? "Full" : "Fields only"}
+              </Button>
+            ))}
+          </div>
           <Button
             variant={view === "summary" ? "secondary" : "ghost"}
             size="sm"
@@ -405,7 +431,8 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: 
         current && (
           <ReviewCard
             // A new key per message (and per saved answer) resets the form's pre-filled values.
-            key={`${current.id}:${JSON.stringify(annotations[current.id] ?? null)}`}
+            key={`${current.id}:${mode}:${JSON.stringify(annotations[current.id] ?? null)}`}
+            mode={mode}
             prediction={current}
             annotation={annotations[current.id]}
             position={index + 1}
