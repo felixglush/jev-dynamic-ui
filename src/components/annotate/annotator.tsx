@@ -4,8 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import type { LoadResult, SaveResult } from "@/app/annotate/actions";
-import { parseDataset, serializeDataset, type Annotation, type Annotations, type Dataset } from "@/lib/annotate/dataset";
+import type { ExtractResult, LoadResult, SaveResult } from "@/app/annotate/actions";
+import type { Extraction } from "@/lib/annotate/combine";
+import { isActionName, parseDataset, serializeDataset, type Annotation, type Annotations, type Dataset } from "@/lib/annotate/dataset";
 import { saveFile } from "@/lib/annotate/save-file";
 import { summarize, verdict } from "@/lib/annotate/summary";
 import { cn } from "@/lib/utils";
@@ -19,6 +20,8 @@ type Props = {
   loadFromFile?: () => Promise<LoadResult>;
   /** Write every annotation to that file. Left out in the static preview. */
   saveToFile?: (changes: Changes) => Promise<SaveResult>;
+  /** Ask the LiquidFM extractor for an action's typed-in values. Left out in the static preview. */
+  extract?: (action: string, message: string) => Promise<ExtractResult>;
 };
 
 /** Where the annotations last went: a file on the server, or only this browser. */
@@ -39,6 +42,8 @@ type FileStatus =
   | { state: "saving"; path: string }
   | { state: "saved"; path: string }
   | { state: "error"; message: string };
+
+const extractionKey = (action: string, message: string) => `${action}\t${message}`;
 
 /** A short fingerprint of the messages, so saved progress is only restored for the same file. */
 function storageKey(dataset: Dataset): string {
@@ -95,7 +100,7 @@ function isTyping(target: EventTarget | null) {
  * The annotation screen: one message at a time, a progress strip to jump around, and a summary.
  * Annotations autosave in this browser and can be downloaded as CSV (and imported again).
  */
-export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: Props) {
+export function Annotator({ initial, initialSource, loadFromFile, saveToFile, extract }: Props) {
   const [dataset, setDataset] = useState(initial);
   const [source, setSource] = useState(initialSource);
   const [index, setIndex] = useState(0);
@@ -116,6 +121,10 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: 
   const pending = useRef<Changes | null>(null);
   const latest = useRef<Annotations>({});
   const writing = useRef(false);
+
+  // What LiquidFM found, by action + message. A message with no entry yet is still being read.
+  const [extractions, setExtractions] = useState<Record<string, Extraction>>({});
+  const requested = useRef(new Set<string>());
 
   const { predictions, annotations } = dataset;
   const key = useMemo(() => storageKey(dataset), [dataset]);
@@ -159,6 +168,23 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: 
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once; the props are stable
   }, [initial]);
+
+  // Read the message with LiquidFM the first time it is shown, once per (action, message). The
+  // answer arrives after an await, so setting state here isn't the "set state in an effect" trap.
+  const currentAction = current?.predictedAction;
+  const currentMessage = current?.message;
+  useEffect(() => {
+    if (!extract || !currentMessage || !currentAction || !isActionName(currentAction)) return;
+    const k = extractionKey(currentAction, currentMessage);
+    if (requested.current.has(k)) return;
+    requested.current.add(k);
+    void extract(currentAction, currentMessage)
+      .catch((): ExtractResult => ({ ok: false, error: "the server didn't answer" }))
+      .then((result) => {
+        const entry: Extraction = result.ok ? { status: "ready", fields: result.fields } : { status: "error", message: result.error };
+        setExtractions((all) => ({ ...all, [k]: entry }));
+      });
+  }, [extract, currentAction, currentMessage]);
 
   /** Send changed answers to the file. Changes made while a save is running go out together in the next one. */
   function queueFileSave(changes: Changes) {
@@ -264,6 +290,11 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   });
+
+  // Nothing to read when Jev picked no action; "off" also covers the static preview.
+  const extraction: Extraction = !extract || !current || !isActionName(current.predictedAction)
+    ? { status: "off" }
+    : (extractions[extractionKey(current.predictedAction, current.message)] ?? { status: "loading" });
 
   const done = summary.reviewed;
   const percent = Math.round((done / predictions.length) * 100);
@@ -404,9 +435,11 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: 
       ) : (
         current && (
           <ReviewCard
-            // A new key per message (and per saved answer) resets the form's pre-filled values.
-            key={`${current.id}:${JSON.stringify(annotations[current.id] ?? null)}`}
+            // A new key per message (and per saved answer, and once LiquidFM has answered) resets
+            // the form's pre-filled values.
+            key={`${current.id}:${JSON.stringify(annotations[current.id] ?? null)}:${extraction.status}`}
             prediction={current}
+            extraction={extraction}
             annotation={annotations[current.id]}
             position={index + 1}
             total={predictions.length}

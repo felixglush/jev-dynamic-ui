@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 
-import { loadSavedAnnotations, saveAnnotationsToFile } from "@/app/annotate/actions";
+import { extractMessageFields, loadSavedAnnotations, saveAnnotationsToFile } from "@/app/annotate/actions";
 import { Annotator } from "@/components/annotate/annotator";
 import { DEFAULT_PREDICTIONS_FILE, loadDefaultDataset } from "@/lib/annotate/load";
 
 export const metadata: Metadata = {
   title: "Annotate predictions",
-  description: "Mark each of Jev's predictions right or wrong, and see how accurate it is.",
+  description: "Mark each of Jev's and LiquidFM's predictions right or wrong, and see how accurate it is.",
 };
 
 // A Server Component: it reads predictions.csv on the server and hands the parsed rows to the
@@ -21,6 +21,7 @@ export default async function AnnotatePage() {
         initialSource={DEFAULT_PREDICTIONS_FILE}
         loadFromFile={loadSavedAnnotations}
         saveToFile={saveAnnotationsToFile}
+        extract={extractMessageFields}
       />
     </main>
   );
