@@ -158,7 +158,6 @@ export const CATALOG = {
           gic: "A Guaranteed Investment Certificate (GIC) or term deposit.",
           credit_card: "A new credit card.",
         },
-        extract: "the kind of account or product to open, as written in the message, e.g. 'TFSA', 'savings' or 'GIC'",
       },
       initial_deposit: {
         type: "amount",
