@@ -251,6 +251,10 @@ What moved (test, all rows of the pattern): `cancel-email-only` 7 to 10 of 10 an
 - All 266 test rows and every new row are AI-written by the same author who knows what failed; none has been reviewed by a person. Test was scored for five models (counts only); Run 4 is the candidate.
 - `typos-slang` is the weakest pattern on test: 8 of 12 for Runs 2 to 4, and 0 of 2 on val. No rows were added for it, and I have not read the test failures, so I cannot say which typos fail. It looks like the clearest next gap.
 
+## Release: Run 4 on Hugging Face
+
+2026-10-16. Run 4 (701 train rows, v3: val 94.5%, test 95.9%) was exported to Q8_0 GGUF (`modal run training/modal_train.py --stage gguf --run run4`, 246,598,048 bytes) and uploaded with a model card and the LFM Open License v1.0 to the **private** repo `felixglush156/LFM2.5-230M-banking-extractor-GGUF`. The card states the 62 human-reviewed rows, that the rest of the data is AI-written and unreviewed, and that the scores were measured on the merged bf16 weights, not on the GGUF. The GGUF has not been scored or run in Ollama yet (see ideas below).
+
 ## Ideas to try next
 
 - Typos and slang (`sned`, `teh`, `snd 50 bucks`): 8 of 12 on test and 0 of 2 on val. Add train rows from the val failures (copy the name as written even when misspelled; keep a lowercase company payee) and re-score on v3, compared only with Run 4. This is the biggest known gap.
