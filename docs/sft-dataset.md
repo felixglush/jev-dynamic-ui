@@ -89,7 +89,7 @@ LoRA trains small add-on matrices next to the frozen model instead of changing a
 3. **Score.** The merged model answers every val and test message with greedy decoding, and the script reports per field: *fabricated* (label blank, model filled it in), *missed*, *wrong*, plus exact-record match and invalid JSON. Fabrication rate is the number to watch. The misses are saved to `training/out/*.json` to read.
 4. **GGUF.** Converts the merged model to Q8_0 with llama.cpp. Fetch it with `modal volume get jev-sft latest/LFM2.5-230M-SFT-Q8_0.gguf scripts/ollama/models/`, run `scripts/ollama/use-tuned.sh`, and point the extractor at it with `OLLAMA_MODEL=lfm25-230m-sft`.
 
-You need a Modal account and `modal setup` once (the token stays on your machine). The scoring code has tests (`python3 -m pytest training`); the Modal run itself hasn't been run yet, so expect a library-version tweak on the first try (the image installs the latest `transformers`, `trl` and `peft`; the model was exported with transformers 5.2). Ollama does not apply the `format` schema during this training, so the tuned model is still decoded with it at run time, as before.
+You need a Modal account and `modal setup` once (the token stays on your machine). The scoring code has tests (`python3 -m pytest training`); the Modal run itself hasn't been run yet, so expect a library-version tweak on the first try (the image installs the latest `transformers`, `trl` and `peft`; the model was exported with transformers 5.2).
 
 ## Decisions (Felix, 2026-10-16)
 
