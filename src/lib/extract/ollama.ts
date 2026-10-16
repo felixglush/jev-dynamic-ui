@@ -26,7 +26,7 @@ export type ExtractedField = {
   status: ExtractStatus;
 };
 
-const HINTS: Record<Exclude<FreeTextSpec["type"], "text">, string> = {
+const HINTS: Record<FreeTextSpec["type"], string> = {
   name: "a person's or company's name exactly as written in the message",
   email: "an email address exactly as written in the message",
   phone: "a phone number exactly as written in the message",
@@ -42,7 +42,7 @@ export function schemaFor(action: keyof typeof CATALOG) {
     properties[name] =
       spec.type === "amount"
         ? { type: "number", description: `${HINTS.amount}; 0 if the message doesn't state one` }
-        : { type: "string", description: `${spec.type === "text" ? spec.hint : HINTS[spec.type]}; "" if the message doesn't state it` };
+        : { type: "string", description: `${HINTS[spec.type]}; "" if the message doesn't state it` };
   }
   return { type: "object", properties, required: Object.keys(properties), additionalProperties: false };
 }

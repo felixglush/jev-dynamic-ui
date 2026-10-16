@@ -32,7 +32,6 @@ const INPUT_TYPE = {
   amount: "number",
   date: "text",
   account_number: "text",
-  text: "text",
 } as const;
 
 const VERDICT_BADGE = {
@@ -221,22 +220,18 @@ export function ReviewCard({ mode, prediction, annotation, position, total, onSa
           // `key` remounts the fields when the action changes, so their pre-filled values reset.
           <div key={expectedAction} className="grid gap-4 sm:grid-cols-2">
             {Object.entries(CATALOG[expectedAction].params as Record<string, ParamSpec>)
-              .filter(([, spec]) => !fieldsOnly || spec.type !== "choice" || spec.extract)
-              .map(([name, spec]) => {
-                // The fields view asks for what the model copies, so a choice it copies as text is a text box.
-                const asText = spec.type === "choice" && fieldsOnly;
-                return (
+              .filter(([, spec]) => !fieldsOnly || spec.type !== "choice")
+              .map(([name, spec]) => (
               <ParamField
                 key={name}
                 idPrefix="expected"
                 name={name}
                 label={label(name)}
                 param={{ value: defaults[name] ?? null, confidence: null }}
-                type={spec.type === "choice" ? (asText ? "text" : undefined) : INPUT_TYPE[spec.type]}
-                options={spec.type === "choice" && !asText ? spec.options : undefined}
+                type={spec.type === "choice" ? undefined : INPUT_TYPE[spec.type]}
+                options={spec.type === "choice" ? spec.options : undefined}
               />
-                );
-              })}
+            ))}
           </div>
         )}
         <div className="grid gap-1.5">

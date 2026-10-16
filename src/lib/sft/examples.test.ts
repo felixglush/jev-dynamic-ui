@@ -57,7 +57,7 @@ describe("reviewing a row", () => {
 
   it("a correction rewrites the answer, keeps the generator's first answer, and undo restores it", () => {
     const fixed = applyReview(target, { expectedAction: "send_etransfer", expectedParams: { recipient: "Marcus", amount: "$850", date: "tomorrow" }, note: "was 85" });
-    expect(answer(fixed)).toEqual({ recipient: "Marcus", recipient_email: "", amount: 850, from_account: "", date: "tomorrow" });
+    expect(answer(fixed)).toEqual({ recipient: "Marcus", recipient_email: "", amount: 850, date: "tomorrow" });
     expect(fixed.meta).toMatchObject({ status: "approved", note: "was 85", present: ["recipient", "amount", "date"] });
     // A second correction still remembers what the generator first wrote.
     const again = applyReview(fixed, { expectedAction: "send_etransfer", expectedParams: { recipient: "Marcus", amount: "86" } });

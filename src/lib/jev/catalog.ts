@@ -12,17 +12,7 @@
 /** How a parameter's value is found. See candidates.ts for the non-choice types. */
 export type ParamSpec =
   | { type: "name" | "email" | "phone" | "amount" | "date" | "account_number"; question: string; required?: boolean }
-  | {
-      type: "choice";
-      question: string;
-      required?: boolean;
-      options: Record<string, string>;
-      /**
-       * Set when the extractor model should also copy this choice from the message as text (for example
-       * "savings"). Jev still makes the real pick; the text is a hint for the form. The string tells the model what to copy.
-       */
-      extract?: string;
-    };
+  | { type: "choice"; question: string; required?: boolean; options: Record<string, string> };
 
 export type ActionSpec = {
   /** Shown to Jev as the description of this action, so it should say when the action applies. */
@@ -56,9 +46,6 @@ export const FREQUENCY_OPTIONS = {
   biweekly: "Repeats every two weeks.",
   monthly: "Repeats every month.",
 } as const;
-
-const SOURCE_ACCOUNT_HINT =
-  "the account the money comes out of, as written in the message, e.g. 'chequing' or 'savings'";
 
 const DATE_QUESTION =
   "On what date does the customer want the payment in `query` to happen (or start, if it repeats)? Pick none if it should happen right away.";
@@ -108,7 +95,6 @@ export const CATALOG = {
         type: "choice",
         question: "Which of the customer's accounts should the e-Transfer in `query` come out of?",
         options: ACCOUNT_OPTIONS,
-        extract: SOURCE_ACCOUNT_HINT,
       },
       date: { type: "date", question: DATE_QUESTION },
       frequency: { type: "choice", question: FREQUENCY_QUESTION, options: FREQUENCY_OPTIONS },
@@ -138,7 +124,6 @@ export const CATALOG = {
         question:
           "Which of the customer's accounts should the credit card payment in `query` come out of?",
         options: ACCOUNT_OPTIONS,
-        extract: SOURCE_ACCOUNT_HINT,
       },
     },
   },
@@ -168,7 +153,6 @@ export const CATALOG = {
         type: "choice",
         question: "Which of the customer's accounts should the opening deposit in `query` come out of?",
         options: ACCOUNT_OPTIONS,
-        extract: SOURCE_ACCOUNT_HINT,
       },
     },
   },
@@ -181,14 +165,12 @@ export const CATALOG = {
         required: true,
         question: "Which of the customer's own accounts should the money in `query` come out of?",
         options: OWN_ACCOUNT_OPTIONS,
-        extract: "the account the money moves out of, as written in the message, e.g. 'chequing' or 'TFSA'",
       },
       to_account: {
         type: "choice",
         required: true,
         question: "Which of the customer's own accounts should the money in `query` go into?",
         options: OWN_ACCOUNT_OPTIONS,
-        extract: "the account the money moves into, as written in the message, e.g. 'savings' or 'TFSA'",
       },
       amount: {
         type: "amount",
@@ -217,7 +199,6 @@ export const CATALOG = {
         type: "choice",
         question: "Which of the customer's accounts should the bill payment in `query` come out of?",
         options: ACCOUNT_OPTIONS,
-        extract: SOURCE_ACCOUNT_HINT,
       },
       date: { type: "date", question: DATE_QUESTION },
       frequency: { type: "choice", question: FREQUENCY_QUESTION, options: FREQUENCY_OPTIONS },

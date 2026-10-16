@@ -21,7 +21,7 @@ Why this shape:
 - **Same conversation the extractor sends.** The system prompt comes from `systemPromptFor()` in `src/lib/extract/ollama.ts` (I split it out of `extractFields` so both use one function). If training and run time word the prompt differently, the tuning helps less. A test pins this.
 - **The schema is not in the text.** Ollama forces the output to match the JSON schema while decoding (`format`), so the model only needs to learn the values, not the JSON syntax. Training text stays short, which matters for a 230M model.
 - **The answer has every field, in schema order**, with `""` for absent text and `0` for absent amounts. That is exactly the "required but may be empty" contract in `schemaFor()`, and the extractor already treats `""`/`0` as blank.
-- **Each action has its own system prompt and field list**, so the model learns per-action groups (Felix's requirement). Choice fields stay with Jev and are not in the answer, except the ones marked `extract` in the catalog: the source and destination account (`from_account`, `to_account`) and how much of a card balance to pay (`payment_option`). The model copies those as text and Jev still makes the real pick. `manage_card` and `view_account` have no free-text fields, so they have no training examples.
+- **Each action has its own system prompt and field list**, so the model learns per-action groups (Felix's requirement). Choice fields (which account, which card, how much of a card balance to pay) stay with Jev, which picks from the supported options in the catalog, and are not in the answer.
 - `meta` is for humans and the split script. Train on the `messages` column only.
 
 ## 2. Labeling rules
@@ -35,8 +35,7 @@ These decide what "correct" means, so they matter more than the example count.
 5. **Dates are copied as written** (`tomorrow`, `the 1st`, `December 24`, `2026-11-05`, `03/04`). No converting to ISO, no checking validity (`February 30` stays; the form validates). Keep the day only: `the 1st of every month` → `the 1st`; "every week/month" is the frequency choice, not a date. A past event used as a reason (`dinner last night`) is not a schedule date. For `dispute_transaction` the date is the charge date.
 6. **Phones and account numbers as written**, minus trailing words (`416 555 0123 ext 2` → `416 555 0123`).
 7. **Several people in one message** (`send 50 to Sam and 30 to Priya`) are left out of the data. The UI handles one transfer at a time (Felix's call).
-8. **Accounts are copied as written**: `from chequing` → `from_account: chequing`, `into my TFSA` → `to_account: TFSA`. Blank when the message doesn't say which account. A destination is `to_account` only for `transfer_between_accounts`; `open_account.from_account` is the account funding the opening deposit.
-9. **Vague messages stay in.** `send it to Jordan` still has a name; `pay my bills` has nothing. Mostly-empty answers are the lesson, so they are kept on purpose (rows with `meta.vague`).
+8. **Vague messages stay in.** `send it to Jordan` still has a name; `pay my bills` has nothing. Mostly-empty answers are the lesson, so they are kept on purpose (rows with `meta.vague`).
 
 ## 3. Coverage targets
 

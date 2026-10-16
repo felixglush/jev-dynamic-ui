@@ -40,7 +40,7 @@ describe("the examples file", () => {
 
   it("leaves fields the message doesn't state blank (empty string, 0 for amounts)", () => {
     const row = rows.find((r) => r.messages[1].content === "transfer $300 to priya.k@example.com")!;
-    expect(JSON.parse(row.messages[2].content)).toEqual({ recipient: "", recipient_email: "priya.k@example.com", amount: 300, from_account: "", date: "" });
+    expect(JSON.parse(row.messages[2].content)).toEqual({ recipient: "", recipient_email: "priya.k@example.com", amount: 300, date: "" });
   });
 });
 
