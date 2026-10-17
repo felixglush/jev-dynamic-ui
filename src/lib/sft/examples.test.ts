@@ -62,7 +62,7 @@ describe("reviewing a row", () => {
     // A second correction still remembers what the generator first wrote.
     const again = applyReview(fixed, { expectedAction: "send_etransfer", expectedParams: { recipient: "Marcus", amount: "86" } });
     expect(JSON.parse(again.meta.original!.answer)).toEqual(answer(target));
-    expect(applyReview(again, null)).toEqual({ ...target, meta: { ...target.meta, note: undefined } });
+    expect(applyReview(again, null)).toEqual({ ...target, meta: { ...target.meta, note: undefined, reviewedBy: undefined } });
   });
 
   it("changing the action rebuilds the prompt and the field list for that action", () => {

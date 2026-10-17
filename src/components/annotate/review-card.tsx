@@ -72,6 +72,8 @@ export type ReviewMode = "full" | "fields";
 type Props = {
   mode: ReviewMode;
   prediction: Prediction;
+  /** The file this message is in, when the fine-tuning data holds it: train, val, test, or pending. */
+  split?: string;
   /** What the LiquidFM extractor read from this message (see lib/annotate/combine.ts). */
   extraction: Extraction;
   annotation: Annotation | undefined;
@@ -81,7 +83,7 @@ type Props = {
 };
 
 /** One message: what Jev predicted, one-click "correct", and a form to write the right answer. */
-export function ReviewCard({ mode, prediction, extraction, annotation, position, total, onSave }: Props) {
+export function ReviewCard({ mode, prediction, split, extraction, annotation, position, total, onSave }: Props) {
   const predictedAction = prediction.predictedAction;
   const fieldsOnly = mode === "fields";
   // Jev's answer and LiquidFM's, merged field by field. Empty when Jev picked no action. The
@@ -127,6 +129,11 @@ export function ReviewCard({ mode, prediction, extraction, annotation, position,
             Message {position} of {total}
           </h2>
           {prediction.group && <Badge variant="outline">{prediction.group}</Badge>}
+          {split && (
+            <Badge data-testid="split-badge" variant={split === "val" || split === "test" ? "warning" : "secondary"}>
+              {split === "val" || split === "test" ? `${split}: held out, never trained on` : split === "pending" ? "in fine-tuning data (not approved yet)" : split}
+            </Badge>
+          )}
           {result && <Badge variant={VERDICT_BADGE[result].variant}>{VERDICT_BADGE[result].text}</Badge>}
         </div>
         <blockquote className="rounded-2xl rounded-bl-sm bg-primary px-4 py-3 text-base break-words text-primary-foreground">

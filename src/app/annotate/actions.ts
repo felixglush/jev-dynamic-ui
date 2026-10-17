@@ -2,7 +2,7 @@
 
 import { annotationsLabel, readAnnotationsFile, writeAnnotationChanges } from "@/lib/annotate/store";
 import { isActionName, type Annotation, type Annotations, type Dataset } from "@/lib/annotate/dataset";
-import { addApprovedExample as appendApprovedExample, readReviewDataset, sftLabel, writeReviewChanges } from "@/lib/annotate/sft-store";
+import { addApprovedExample as appendApprovedExample, readReviewDataset, splitsOfMessages, sftLabel, writeReviewChanges } from "@/lib/annotate/sft-store";
 import { extractFields } from "@/lib/extract/ollama";
 import { MAX_MESSAGE_LENGTH } from "@/lib/jev/catalog";
 
@@ -96,9 +96,21 @@ export async function addApprovedExample(row: { action: string; message: string;
   try {
     const result = await appendApprovedExample(row);
     if ("id" in result) return { ok: true, message: `Added to the fine-tuning data (${result.id}, ${sftLabel()})` };
-    return { ok: true, message: result.skipped === "no-fields" ? "Not added: this action has no typed-in fields for the extractor to read" : "Already in the fine-tuning data" };
+    if (result.skipped === "no-fields") return { ok: true, message: "Not added: this action has no typed-in fields for the extractor to read" };
+    const where = result.split === "val" || result.split === "test" ? `, held out in ${result.split}, so never trained on` : result.split ? ` (${result.split})` : "";
+    return { ok: true, message: `Already in the fine-tuning data${where}` };
   } catch (error) {
     console.error("addApprovedExample failed:", error);
     return { ok: false, error: error instanceof Error ? error.message : "Couldn't write the file." };
+  }
+}
+
+/** Where the fine-tuning file already holds each message (train, val, test or pending), so held-out ones can be flagged. */
+export async function messageSplits(messages: string[]): Promise<Record<string, string>> {
+  try {
+    return await splitsOfMessages(messages);
+  } catch (error) {
+    console.error("messageSplits failed:", error);
+    return {};
   }
 }

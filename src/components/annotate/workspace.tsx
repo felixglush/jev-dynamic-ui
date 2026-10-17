@@ -17,6 +17,7 @@ type Props = {
     saveToFile: (changes: Changes) => Promise<SaveResult>;
     /** Left out in the static preview. */
     extract?: (action: string, message: string) => Promise<ExtractResult>;
+    lookupSplits?: (messages: string[]) => Promise<Record<string, string>>;
     addToTraining?: (row: { action: string; message: string; params: Record<string, string>; kind: string; note: string }) => Promise<TrainingResult>;
   };
   sft: {
@@ -66,6 +67,7 @@ export function Workspace({ jev, sft }: Props) {
           saveToFile={jev.saveToFile}
           extract={jev.extract}
           addToTraining={jev.addToTraining}
+          lookupSplits={jev.lookupSplits}
         />
       ) : loaded.state === "ready" ? (
         <Annotator

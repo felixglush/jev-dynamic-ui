@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { addApprovedExample, extractMessageFields, loadSavedAnnotations, loadSftAnnotations, loadSftReviews, saveAnnotationsToFile, saveSftReviews } from "@/app/annotate/actions";
+import { addApprovedExample, extractMessageFields, loadSavedAnnotations, messageSplits, loadSftAnnotations, loadSftReviews, saveAnnotationsToFile, saveSftReviews } from "@/app/annotate/actions";
 import { Workspace } from "@/components/annotate/workspace";
 import { DEFAULT_PREDICTIONS_FILE, loadDefaultDataset } from "@/lib/annotate/load";
 
@@ -24,6 +24,7 @@ export default async function AnnotatePage() {
           saveToFile: saveAnnotationsToFile,
           extract: extractMessageFields,
           addToTraining: addApprovedExample,
+          lookupSplits: messageSplits,
         }}
         sft={{ load: loadSftReviews, loadAnnotations: loadSftAnnotations, save: saveSftReviews }}
       />

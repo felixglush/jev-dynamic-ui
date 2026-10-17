@@ -13,6 +13,8 @@
  *   trainOnly older spelling of `split: "train"`; still honoured
  *   pattern   the failure pattern the row probes (e.g. "spelled-amount"); training/modal_train.py reports
  *             pass rate per pattern on val and test
+ *   reviewedBy "human" when a person approved, corrected or rejected the row on /annotate, "claude" for rows
+ *             approved in bulk by Claude without a human look. Absent while pending
  *   kind      what kind of example it is (typo, accented-name, worded-number...; see kinds.ts). Editable in
  *             review and independent of `pattern`, which stays frozen for evaluation
  *   version   which evaluation set the row was added for: "v1" (the default when absent), "v2", "v3", "v4" or "v5".
@@ -34,7 +36,7 @@ export type ExampleSource = "sample" | "synthetic";
 export type ReviewStatus = "pending" | "approved" | "rejected";
 
 export type ExampleRecord = SftRecord & {
-  meta: SftRecord["meta"] & { source: ExampleSource; status: ReviewStatus; original?: { action: string; answer: string }; note?: string; trainOnly?: boolean; split?: Split; pattern?: string; kind?: Kind; version?: Version; retired?: Version };
+  meta: SftRecord["meta"] & { source: ExampleSource; status: ReviewStatus; original?: { action: string; answer: string }; note?: string; trainOnly?: boolean; split?: Split; pattern?: string; kind?: Kind; reviewedBy?: "human" | "claude"; version?: Version; retired?: Version };
 };
 
 /** What a reviewer decided: an action ("none" rejects the row) and the values, as the annotate form gives them. */
@@ -125,7 +127,8 @@ function exampleFrom(record: ExampleRecord, action: Action, params: Record<strin
 
 /** Apply one review to a row. `null` takes the review back: the row goes to pending with the generator's answer. */
 export function applyReview(record: ExampleRecord, review: Review | null): ExampleRecord {
-  const { original, ...meta } = record.meta;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- taking a review back also drops who reviewed it
+  const { original, reviewedBy: _reviewedBy, ...meta } = record.meta;
   if (review === null) {
     if (!original) return { ...record, meta: { ...meta, status: "pending", note: undefined } };
     const answer = JSON.parse(original.answer) as Record<string, string | number>;
@@ -140,7 +143,7 @@ export function applyReview(record: ExampleRecord, review: Review | null): Examp
   }
   const note = review.note?.trim() || undefined;
   const kind = isKind(review.kind) ? review.kind : record.meta.kind;
-  if (review.expectedAction === "none") return { ...record, meta: { ...record.meta, status: "rejected", note, ...(kind ? { kind } : {}) } };
+  if (review.expectedAction === "none") return { ...record, meta: { ...record.meta, status: "rejected", note, reviewedBy: "human" as const, ...(kind ? { kind } : {}) } };
   if (!(review.expectedAction in CATALOG)) throw new Error(`${record.meta.id}: "${review.expectedAction}" isn't an action.`);
 
   const action = review.expectedAction as Action;
@@ -152,6 +155,7 @@ export function applyReview(record: ExampleRecord, review: Review | null): Examp
       ...rebuilt.meta,
       source: record.meta.source,
       status: "approved",
+      reviewedBy: "human" as const,
       note,
       ...(record.meta.trainOnly ? { trainOnly: true } : {}),
       ...(record.meta.split ? { split: record.meta.split } : {}),

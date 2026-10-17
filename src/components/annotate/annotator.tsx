@@ -25,6 +25,8 @@ type Props = {
   extract?: (action: string, message: string) => Promise<ExtractResult>;
   /** Add an approved or corrected answer to the fine-tuning data. Only the real predictions page passes this. */
   addToTraining?: (row: { action: string; message: string; params: Record<string, string>; kind: string; note: string }) => Promise<TrainingResult>;
+  /** Where the fine-tuning file already holds each message (train, val, test, pending). The predictions page passes this to flag held-out messages. */
+  lookupSplits?: (messages: string[]) => Promise<Record<string, string>>;
   /** Heading above the progress. */
   title?: string;
   /** Which view opens first. */
@@ -112,7 +114,7 @@ function isTyping(target: EventTarget | null) {
  * The annotation screen: one message at a time, a progress strip to jump around, and a summary.
  * Annotations autosave in this browser and can be downloaded as CSV (and imported again).
  */
-export function Annotator({ initial, initialSource, loadFromFile, saveToFile, extract, addToTraining, title = "Annotate Jev's predictions", defaultMode = "full", persistLocal = true }: Props) {
+export function Annotator({ initial, initialSource, loadFromFile, saveToFile, extract, addToTraining, lookupSplits, title = "Annotate Jev's predictions", defaultMode = "full", persistLocal = true }: Props) {
   const [dataset, setDataset] = useState(initial);
   const [source, setSource] = useState(initialSource);
   const [index, setIndex] = useState(0);
@@ -123,6 +125,9 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
   const [group, setGroup] = useState("");
   // Fine-tuning rows can also be walked through one kind at a time ("" = all kinds).
   const [kindFilter, setKindFilter] = useState("");
+  const [splitFilter, setSplitFilter] = useState("");
+  // Messages the fine-tuning file already holds, by text (only asked for on the predictions page).
+  const [looked, setLooked] = useState<Record<string, string>>({});
   const [trainingStatus, setTrainingStatus] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
   const [restored, setRestored] = useState(false);
@@ -145,6 +150,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
   const [extractions, setExtractions] = useState<Record<string, Extraction>>({});
   const requested = useRef(new Set<string>());
 
+  const splitOf = (p: { split?: string; message: string }) => p.split ?? looked[p.message];
   const { predictions: allPredictions, annotations } = dataset;
   const groups = useMemo(() => {
     const tally = new Map<string, { total: number; reviewed: number }>();
@@ -158,9 +164,23 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
   }, [allPredictions, annotations]);
   // The messages being walked through: one group, or everything. Progress and the summary stay global.
   const predictions = useMemo(
-    () => allPredictions.filter((p) => (!group || p.group === group) && (!kindFilter || p.kind === kindFilter)),
-    [allPredictions, group, kindFilter],
+    () => allPredictions.filter((p) => (!group || p.group === group) && (!kindFilter || p.kind === kindFilter) && (!splitFilter || splitOf(p) === splitFilter)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- splitOf only reads `looked`
+    [allPredictions, group, kindFilter, splitFilter, looked],
   );
+  const splitCounts = useMemo(() => {
+    const tally = new Map<string, { total: number; reviewed: number }>();
+    for (const p of allPredictions) {
+      const split = splitOf(p);
+      if (!split) continue;
+      const t = tally.get(split) ?? { total: 0, reviewed: 0 };
+      t.total += 1;
+      if (annotations[p.id]) t.reviewed += 1;
+      tally.set(split, t);
+    }
+    return tally;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- splitOf only reads `looked`
+  }, [allPredictions, annotations, looked]);
   const kindCounts = useMemo(() => {
     const tally = new Map<string, { total: number; reviewed: number }>();
     for (const p of allPredictions) {
@@ -234,6 +254,18 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once; the props are stable
   }, [initial]);
+
+  // Ask which of these messages the fine-tuning file already holds, so val and test ones can be flagged.
+  useEffect(() => {
+    if (!lookupSplits) return;
+    let live = true;
+    void lookupSplits(initial.predictions.map((p) => p.message))
+      .catch(() => ({}))
+      .then((found) => live && setLooked(found));
+    return () => {
+      live = false;
+    };
+  }, [lookupSplits, initial]);
 
   // Read the message with LiquidFM the first time it is shown, once per (action, message). The
   // answer arrives after an await, so setting state here isn't the "set state in an effect" trap.
@@ -332,6 +364,8 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
       setIndex(0);
       setGroup("");
       setKindFilter("");
+      setSplitFilter("");
+      setLooked({});
       setView("review");
       setImportError(null);
       setRestored(Object.keys(saved).length > 0);
@@ -553,6 +587,25 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
               ))}
             </select>
           )}
+          {splitCounts.size > 0 && (
+            <select
+              aria-label="Split"
+              value={splitFilter}
+              onChange={(event) => {
+                setSplitFilter(event.target.value);
+                setIndex(0);
+                setView("review");
+              }}
+              className="h-8 rounded-md border bg-background px-2 text-sm"
+            >
+              <option value="">All splits ({allPredictions.length})</option>
+              {["train", "val", "test", "pending"].filter((name) => splitCounts.has(name)).map((name) => (
+                <option key={name} value={name}>
+                  {name} ({splitCounts.get(name)!.reviewed}/{splitCounts.get(name)!.total})
+                </option>
+              ))}
+            </select>
+          )}
           {kindCounts.size > 0 && (
             <select
               aria-label="Kind"
@@ -598,6 +651,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
           onOpen={(id) => {
             setGroup("");
             setKindFilter("");
+            setSplitFilter("");
             setIndex(allPredictions.findIndex((p) => p.id === id));
             setView("review");
           }}
@@ -610,6 +664,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
             key={`${current.id}:${mode}:${JSON.stringify(annotations[current.id] ?? null)}:${extraction.status}`}
             mode={mode}
             prediction={current}
+            split={splitOf(current)}
             extraction={extraction}
             annotation={annotations[current.id]}
             position={index + 1}
