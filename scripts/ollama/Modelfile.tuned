@@ -1,0 +1,2 @@
+FROM ./models/LFM2.5-350M-SFT-Q8_0.gguf
+PARAMETER temperature 0

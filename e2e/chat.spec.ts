@@ -1,14 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
 
 async function say(page: Page, message: string) {
-  await page.getByLabel("Message", { exact: true }).fill(message);
+  await composer(page).fill(message);
   await page.getByRole("button", { name: "Send", exact: true }).click();
 }
 
 /** The floating card that opens after each message. */
 const card = (page: Page) => page.getByRole("dialog", { name: "Your request" });
-/** The sidebar list of confirmed actions (the desktop column). */
-const history = (page: Page) => page.getByRole("complementary", { name: "Actions taken" });
+const composer = (page: Page) => page.getByLabel("Message", { exact: true });
 
 test.beforeEach(async ({ page }) => {
   await page.goto("/");
@@ -88,7 +87,7 @@ test("the form opens in a floating card right away, before Jev answers", async (
   });
   await say(page, "Send $50 to Sam");
   await expect(card(page)).toBeVisible();
-  await expect(card(page).getByLabel("Edit message")).toHaveValue("Send $50 to Sam");
+  await expect(composer(page)).toHaveValue("Send $50 to Sam");
   await expect(card(page).getByText("Thinking…")).toBeVisible();
 
   release();
@@ -96,99 +95,47 @@ test("the form opens in a floating card right away, before Jev answers", async (
   await expect(card(page).getByText("Thinking…")).toHaveCount(0);
 });
 
-test("confirming closes the card, shows the demo notice and adds the action to the sidebar", async ({ page }) => {
+test("confirming closes the card and sums up what was confirmed", async ({ page }) => {
   await say(page, "Send $50 to Sam");
   await page.getByRole("button", { name: "Send Money" }).click();
 
   await expect(card(page)).toBeHidden();
   await expect(page.getByRole("status")).toContainText("nothing was submitted");
-  const entries = history(page).getByRole("listitem");
-  await expect(entries).toHaveCount(1);
-  await expect(entries.first()).toContainText("Send an e-Transfer");
-  await expect(entries.first()).toContainText("$50.00 to Sam");
+  await expect(page.getByRole("status")).toContainText("Send an e-Transfer: $50.00 to Sam");
+  await expect(composer(page)).toHaveValue("");
 });
 
 test("Return confirms on the spot: focus lands on the confirm button when nothing is missing", async ({ page }) => {
-  await page.getByLabel("Message", { exact: true }).fill("pay the minimum on my credit card from savings");
-  await page.getByLabel("Message", { exact: true }).press("Enter");
+  await composer(page).fill("pay the minimum on my credit card from savings");
+  await composer(page).press("Enter");
 
   await expect(card(page).getByRole("button", { name: "Make Payment" })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(card(page)).toBeHidden();
-  await expect(history(page).getByRole("listitem").first()).toContainText("minimum payment from savings");
+  await expect(page.getByRole("status")).toContainText("minimum payment from savings");
 });
 
 test("focus lands on the missing field, so typing it and pressing Return confirms", async ({ page }) => {
-  await page.getByLabel("Message", { exact: true }).fill("send $20 to somebody");
-  await page.getByLabel("Message", { exact: true }).press("Enter");
+  await composer(page).fill("send $20 to somebody");
+  await composer(page).press("Enter");
 
   await expect(page.getByLabel("To")).toBeFocused();
   await page.keyboard.type("Sam");
   await page.keyboard.press("Enter");
-  await expect(history(page).getByRole("listitem").first()).toContainText("$20.00 to Sam");
+  await expect(page.getByRole("status")).toContainText("$20.00 to Sam");
 });
 
-test("Esc dismisses the card without recording anything and returns to the message box", async ({ page }) => {
+test("Esc dismisses the card, empties the message box and keeps focus there", async ({ page }) => {
   await say(page, "Send $50 to Sam");
   await expect(page.getByLabel("To")).toHaveValue("Sam");
   await page.keyboard.press("Escape");
 
   await expect(card(page)).toBeHidden();
-  await expect(page.getByLabel("Message", { exact: true })).toBeFocused();
-  await expect(history(page).getByRole("listitem")).toHaveCount(0);
+  await expect(composer(page)).toBeFocused();
+  await expect(composer(page)).toHaveValue("");
+  await expect(page.getByRole("status")).toHaveText("");
   // The old form's fields are gone from the page once the card has closed.
   await expect(page.getByLabel("To")).toHaveCount(0);
-});
-
-test("the dismiss button and a click outside the card both close it", async ({ page }) => {
-  await say(page, "Send $50 to Sam");
-  await card(page).getByRole("button", { name: "Dismiss" }).click();
-  await expect(card(page)).toBeHidden();
-
-  await say(page, "Send $50 to Sam");
-  await expect(page.getByLabel("To")).toHaveValue("Sam");
-  await page.mouse.click(5, 5);
-  await expect(card(page)).toBeHidden();
-});
-
-test("editing the message in the card and pressing Return asks again", async ({ page }) => {
-  await say(page, "Send $50 to Sam");
-  await expect(card(page).getByText("Send an e-Transfer")).toBeVisible();
-
-  await card(page).getByLabel("Edit message").fill("I want to open a TFSA");
-  await card(page).getByLabel("Edit message").press("Enter");
-  await expect(card(page).getByText("Open a New Account")).toBeVisible();
-  await expect(card(page).getByText("Send an e-Transfer")).toHaveCount(0);
-});
-
-test("confirmed actions stay in the sidebar after a reload, newest first, until cleared", async ({ page }) => {
-  await say(page, "Send $50 to Sam");
-  await page.getByRole("button", { name: "Send Money" }).click();
-  await say(page, "I want to open a TFSA and put 2k in it");
-  await page.getByRole("button", { name: "Open Account" }).click();
-
-  await page.reload();
-  const entries = history(page).getByRole("listitem");
-  await expect(entries).toHaveCount(2);
-  await expect(entries.nth(0)).toContainText("tfsa with $2,000.00");
-  await expect(entries.nth(1)).toContainText("$50.00 to Sam");
-
-  await history(page).getByRole("button", { name: "Clear" }).click();
-  await expect(entries).toHaveCount(0);
-  await expect(history(page)).toContainText("Nothing yet");
-});
-
-test("on a phone the sidebar becomes a panel behind a button", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await expect(history(page)).toBeHidden();
-  await say(page, "Send $50 to Sam");
-  await page.getByRole("button", { name: "Send Money" }).click();
-
-  await page.getByRole("button", { name: /Actions taken/ }).click();
-  const drawer = page.getByRole("dialog", { name: "Actions taken" });
-  await expect(drawer.getByRole("listitem")).toContainText("$50.00 to Sam");
-  await drawer.getByRole("button", { name: "Close" }).click();
-  await expect(drawer).toBeHidden();
 });
 
 test("an API failure shows a friendly error and keeps the chat usable", async ({ page }) => {
@@ -201,10 +148,11 @@ test("an API failure shows a friendly error and keeps the chat usable", async ({
 });
 
 test("sends on Enter, like a normal chat box", async ({ page }) => {
-  await page.getByLabel("Message", { exact: true }).fill("I want to open a TFSA");
-  await page.getByLabel("Message", { exact: true }).press("Enter");
+  await composer(page).fill("I want to open a TFSA");
+  await composer(page).press("Enter");
   await expect(page.getByLabel("Account type")).toHaveValue("tfsa");
-  await expect(page.getByLabel("Message", { exact: true })).toHaveValue("");
+  // The message stays in the bar so it can be refined while the card is open.
+  await expect(composer(page)).toHaveValue("I want to open a TFSA");
 });
 
 test("a request that fails to reach the server shows an error instead of hanging on Thinking", async ({ page }) => {
@@ -234,9 +182,8 @@ test("a screen reader hears why a field needs attention", async ({ page }) => {
   await expect(page.getByLabel("Amount (CAD)")).toHaveAccessibleDescription("Please check");
 });
 
-test("headings stay in order: one h1 for the page, an h2 for the sidebar and one for the form", async ({ page }) => {
+test("headings stay in order: one h1 for the page and one h2 for the form", async ({ page }) => {
   await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
-  await expect(history(page).getByRole("heading", { level: 2, name: "Actions taken" })).toBeVisible();
   await say(page, "Send $50 to Sam");
   await expect(card(page).getByRole("heading", { level: 2 })).toHaveCount(1);
 });
@@ -250,9 +197,9 @@ test("keyboard users get a skip link, and the message bar shows focus", async ({
   await expect(page).toHaveURL(/#main$/);
 
   // The text box draws no ring itself, so the surrounding bar must change when it is focused.
-  const bar = page.locator("form").filter({ has: page.getByLabel("Message", { exact: true }) });
+  const bar = page.locator("form").filter({ has: composer(page) });
   const before = await bar.evaluate((el) => getComputedStyle(el).boxShadow);
-  await page.getByLabel("Message", { exact: true }).focus();
+  await composer(page).focus();
   const after = await bar.evaluate((el) => getComputedStyle(el).boxShadow);
   expect(after).not.toBe(before);
 });
@@ -305,34 +252,6 @@ test("choosing a custom payment amount makes the amount required", async ({ page
   await expect(page.getByRole("status")).not.toHaveText("");
 });
 
-test("a corrupted saved history is ignored instead of crashing the sidebar", async ({ page }) => {
-  const bad = [
-    { id: "x", action: "__proto__", title: "Bad", summary: "", at: 1 },
-    { id: "y", action: "send_etransfer", title: "Bad", summary: "", at: 8640000000000001 },
-  ];
-  await page.evaluate((value) => localStorage.setItem("jev:actions-taken:v1", JSON.stringify(value)), bad);
-  await page.reload();
-  await expect(history(page)).toContainText("Nothing yet");
-});
-
-test("an answer that arrives while the customer is editing the message does not steal focus", async ({ page }) => {
-  // Hold the server's answer until the customer has typed into the card's message box.
-  let release: () => void = () => {};
-  const held = new Promise<void>((resolve) => (release = resolve));
-  await page.route("**/*", async (route) => {
-    if (route.request().method() === "POST") await held;
-    await route.continue();
-  });
-  await say(page, "send $20 to somebody");
-  await card(page).getByLabel("Edit message").focus();
-  await page.keyboard.type(" please");
-  release();
-
-  await expect(card(page).getByText("Send an e-Transfer")).toBeVisible();
-  await expect(card(page).getByLabel("Edit message")).toBeFocused();
-  await expect(card(page).getByLabel("Edit message")).toHaveValue("send $20 to somebody please");
-});
-
 test("transfer_between_accounts: fills both accounts and a start date", async ({ page }) => {
   await say(page, "move $300 from chequing to savings every month starting 2030-01-15");
 
@@ -342,6 +261,24 @@ test("transfer_between_accounts: fills both accounts and a start date", async ({
   await expect(page.getByLabel("Amount (CAD)")).toHaveValue("300.00");
   await expect(page.getByLabel("Repeats")).toHaveValue("monthly");
   await expect(page.getByLabel("Date (optional)")).toHaveValue("2030-01-15");
+});
+
+test("date fields open a calendar, and picking a day fills the field", async ({ page }) => {
+  await say(page, "pay my Hydro One bill $112.30 on 2030-02-01");
+  const date = page.getByLabel("Date (optional)");
+  await date.focus();
+  // The calendar opens on the month of the date Jev found, with that day marked.
+  await expect(page.getByRole("group", { name: "February 2030" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "February 1, 2030" })).toHaveAttribute("aria-pressed", "true");
+
+  await page.getByRole("button", { name: "Next month" }).click();
+  await page.getByRole("button", { name: "March 15, 2030" }).click();
+  await expect(date).toHaveValue("2030-03-15");
+  await expect(page.getByRole("group", { name: "March 2030" })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Open calendar" }).click();
+  await page.getByRole("button", { name: "Clear date" }).click();
+  await expect(date).toHaveValue("");
 });
 
 test("pay_bill: a scheduled bill keeps its date", async ({ page }) => {
@@ -460,16 +397,151 @@ test("view_account: a credit card balance is understood", async ({ page }) => {
   await expect(page.getByLabel("Account", { exact: true })).toHaveValue("credit_card");
 });
 
-test("a confirmed transfer between accounts is summed up in the sidebar with its schedule", async ({ page }) => {
+test("a confirmed transfer between accounts is summed up with its schedule", async ({ page }) => {
   await say(page, "move $300 from chequing to savings every month starting 2030-01-15");
   await card(page).getByRole("button", { name: "Transfer" }).click();
 
-  await expect(history(page)).toContainText("Transfer Between Your Accounts");
-  await expect(history(page)).toContainText("$300.00 from chequing to savings on 2030-01-15 monthly");
+  await expect(page.getByRole("status")).toContainText("Transfer Between Your Accounts");
+  await expect(page.getByRole("status")).toContainText("$300.00 from chequing to savings on 2030-01-15 monthly");
 });
 
 test("view_account opens in the floating card without a second card around it", async ({ page }) => {
   await say(page, "what's my savings balance");
   await expect(card(page).getByText("savings balance", { exact: true })).toBeVisible();
   await expect(card(page).getByRole("heading", { level: 2, name: "Your Account" })).toBeVisible();
+});
+
+test("a click outside the card dismisses it", async ({ page }) => {
+  await say(page, "Send $50 to Sam");
+  await expect(page.getByLabel("To")).toHaveValue("Sam");
+  await page.mouse.click(5, 5);
+  await expect(card(page)).toBeHidden();
+  await expect(composer(page)).toHaveValue("");
+});
+
+test("the card opens by itself while typing, and refills as more is said", async ({ page }) => {
+  await composer(page).pressSequentially("Send some money");
+  // No Return pressed: the first detected intent opens the form, with nothing to fill in yet.
+  await expect(card(page).getByText("Send an e-Transfer")).toBeVisible();
+  await expect(page.getByLabel("To")).toHaveValue("");
+
+  await composer(page).pressSequentially(" to Sam, $50");
+  await expect(page.getByLabel("To")).toHaveValue("Sam");
+  await expect(page.getByLabel("Amount (CAD)")).toHaveValue("50.00");
+  // The customer never left the message bar.
+  await expect(composer(page)).toBeFocused();
+});
+
+test("typing in quick bursts asks Jev once, after the pause", async ({ page }) => {
+  let asked = 0;
+  page.on("request", (request) => request.method() === "POST" && asked++);
+  await composer(page).pressSequentially("Send $50 to Sam for dinner last night");
+  await expect(page.getByLabel("To")).toHaveValue("Sam");
+  await page.waitForTimeout(800);
+  expect(asked).toBe(1);
+});
+
+test("a field the customer already edited keeps their value when more is typed", async ({ page }) => {
+  await composer(page).pressSequentially("Send some money");
+  await expect(page.getByLabel("To")).toHaveValue("");
+  await page.getByLabel("To").fill("Alex");
+
+  await composer(page).focus();
+  await composer(page).pressSequentially(" to Sam, $50");
+  await expect(page.getByLabel("Amount (CAD)")).toHaveValue("50.00");
+  await expect(page.getByLabel("To")).toHaveValue("Alex");
+});
+
+test("saying something else swaps the form, and clearing the message closes the card", async ({ page }) => {
+  await composer(page).fill("Send $50 to Sam");
+  await expect(card(page).getByText("Send an e-Transfer")).toBeVisible();
+
+  await composer(page).fill("I want to open a TFSA");
+  await expect(card(page).getByText("Open a New Account")).toBeVisible();
+  await expect(card(page).getByText("Send an e-Transfer")).toHaveCount(0);
+
+  await composer(page).fill("");
+  await expect(card(page)).toBeHidden();
+});
+
+test("an answer to something typed earlier never overwrites the form for what is typed now", async ({ page }) => {
+  // Hold the first two answers separately, so the older one can land while the newer one is pending.
+  const releases: (() => void)[] = [];
+  const holds = [0, 1].map(() => new Promise<void>((resolve) => releases.push(resolve)));
+  let posts = 0;
+  await page.route("**/*", async (route) => {
+    if (route.request().method() === "POST") await holds[posts++];
+    await route.continue();
+  });
+  const firstAsked = page.waitForRequest((request) => request.method() === "POST");
+  await composer(page).fill("Send $50 to Sam");
+  await firstAsked;
+  await composer(page).fill("I want to open a TFSA");
+
+  // Next runs a page's server actions one after another, so the older answer lands first. It must
+  // be dropped, because by then the customer has typed something else.
+  releases[0]!();
+  await page.waitForTimeout(400);
+  await expect(card(page)).toBeHidden();
+  await expect(page.getByLabel("To")).toHaveCount(0);
+
+  releases[1]!();
+  await expect(card(page).getByText("Open a New Account")).toBeVisible();
+  await expect(card(page).getByText("Send an e-Transfer")).toHaveCount(0);
+});
+
+test("while typing, a message that is not an action stays quiet; Return explains", async ({ page }) => {
+  await composer(page).fill("what time does the branch close");
+  await page.waitForTimeout(1200);
+  await expect(card(page)).toBeHidden();
+
+  await composer(page).press("Enter");
+  await expect(card(page).getByText("I can help with e-Transfers")).toBeVisible();
+});
+
+test("replacing the message with a non-action takes the old form away", async ({ page }) => {
+  await composer(page).fill("Send $50 to Sam");
+  await expect(card(page).getByText("Send an e-Transfer")).toBeVisible();
+
+  await composer(page).fill("what time does the branch close");
+  await expect(card(page)).toBeHidden();
+  // Nothing is left on the page to confirm by mistake.
+  await expect(page.getByLabel("To")).toHaveCount(0);
+});
+
+test("clearing the message while an answer is on its way keeps that answer from opening a card", async ({ page }) => {
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route("**/*", async (route) => {
+    if (route.request().method() === "POST") await held;
+    await route.continue();
+  });
+  const asked = page.waitForRequest((request) => request.method() === "POST");
+  await composer(page).fill("Send $50 to Sam");
+  await asked;
+  await composer(page).fill("");
+
+  release();
+  await page.waitForTimeout(500);
+  await expect(card(page)).toBeHidden();
+});
+
+test("pressing Return before the newest answer arrives does not focus the older form", async ({ page }) => {
+  await composer(page).fill("Send $50 to Sam");
+  await expect(card(page).getByText("Send an e-Transfer")).toBeVisible();
+
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route("**/*", async (route) => {
+    if (route.request().method() === "POST") await held;
+    await route.continue();
+  });
+  const asked = page.waitForRequest((request) => request.method() === "POST");
+  await composer(page).fill("I want to open a TFSA");
+  await asked;
+  await composer(page).press("Enter");
+  await expect(card(page).getByRole("button", { name: "Send Money" })).not.toBeFocused();
+
+  release();
+  await expect(card(page).getByRole("button", { name: "Open Account" })).toBeFocused();
 });

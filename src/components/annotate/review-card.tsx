@@ -11,6 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { acceptCombined, combineFields, type CombinedField, type Extraction, type FieldSource } from "@/lib/annotate/combine";
 import {
+  freeTextParams,
+  acceptPrediction,
   isActionName,
   label,
   type Annotation,
@@ -24,18 +26,19 @@ import type { ActionCall, ActionName, ParamValue } from "@/lib/jev/types";
 
 const ACTIONS = Object.keys(CATALOG) as ActionName[];
 
-/** The <input type> for each kind of parameter. */
+/** The <input type> for each kind of parameter. Dates are plain text: the fine-tuning data keeps them as written ("tomorrow", "the 1st"). */
 const INPUT_TYPE = {
   name: "text",
   email: "email",
   phone: "tel",
   amount: "number",
-  date: "date",
+  date: "text",
   account_number: "text",
 } as const;
 
 const VERDICT_BADGE = {
   correct: { text: "Correct", variant: "success" },
+  fixed: { text: "Fixed", variant: "warning" },
   wrong_action: { text: "Wrong action", variant: "destructive" },
   wrong_values: { text: "Wrong values", variant: "warning" },
 } as const;
@@ -61,7 +64,11 @@ const SOURCE_STYLE: Record<FieldSource, { badge: string; row: string; text: stri
   blank: { badge: "border-warning/40 bg-warning/15", row: "bg-warning/10", text: "Blank" },
 };
 
+/** "full" is the whole picture; "fields" is only what the extractor model fills in. */
+export type ReviewMode = "full" | "fields";
+
 type Props = {
+  mode: ReviewMode;
   prediction: Prediction;
   /** What the LiquidFM extractor read from this message (see lib/annotate/combine.ts). */
   extraction: Extraction;
@@ -72,11 +79,13 @@ type Props = {
 };
 
 /** One message: what Jev predicted, one-click "correct", and a form to write the right answer. */
-export function ReviewCard({ prediction, extraction, annotation, position, total, onSave }: Props) {
+export function ReviewCard({ mode, prediction, extraction, annotation, position, total, onSave }: Props) {
   const predictedAction = prediction.predictedAction;
-  // Jev's answer and LiquidFM's, merged field by field. Empty when Jev picked no action.
-  const fields = isActionName(predictedAction) ? combineFields(predictedAction, prediction, extraction) : [];
-  const accepted = acceptCombined(prediction, fields);
+  const fieldsOnly = mode === "fields";
+  // Jev's answer and LiquidFM's, merged field by field. Empty when Jev picked no action. The
+  // fine-tuning rows ("fields" view) aren't Jev's, so they keep the plain extractor output.
+  const fields = !fieldsOnly && isActionName(predictedAction) ? combineFields(predictedAction, prediction, extraction) : [];
+  const accepted = fieldsOnly ? acceptPrediction(prediction) : acceptCombined(prediction, fields);
   // Until LiquidFM answers, the pre-filled values would change under the annotator's hands (and
   // "Correct" would save Jev-only values), so a message waits even if it was answered before.
   const waiting = extraction.status === "loading";
@@ -84,6 +93,10 @@ export function ReviewCard({ prediction, extraction, annotation, position, total
   const [expectedAction, setExpectedAction] = useState<ExpectedAction>(start?.expectedAction ?? "none");
   const lowConfidence = prediction.actionConfidence !== null && prediction.actionConfidence < LOW_CONFIDENCE;
   const result = annotation ? verdict(prediction, annotation) : null;
+  // Fields view: one row per field the extractor model fills in, blanks included, so a missing value is visible.
+  const outputRows: [string, ParamValue | undefined][] = isActionName(predictedAction)
+    ? freeTextParams(predictedAction).map(([name]) => [name, prediction.params[name]])
+    : [];
 
   // Values to pre-fill for the chosen action: the saved answer if it is for that action, else the
   // combined Jev + LiquidFM values if Jev picked that action, else nothing.
@@ -120,19 +133,42 @@ export function ReviewCard({ prediction, extraction, annotation, position, total
       <section aria-labelledby="prediction-heading" className="flex flex-col gap-3 rounded-xl border bg-card p-5">
         <div className="flex flex-wrap items-center gap-2">
           <h3 id="prediction-heading" className="text-sm font-medium text-muted-foreground">
-            Jev picked
+            {fieldsOnly ? "Extractor output" : "Jev predicted"}
           </h3>
           <span data-testid="predicted-action" className="font-mono text-sm font-semibold">
             {predictedAction}
           </span>
-          {prediction.actionConfidence !== null && (
+          {!fieldsOnly && prediction.actionConfidence !== null && (
             <Badge variant={lowConfidence ? "warning" : "secondary"} className="tabular-nums">
               {Math.round(prediction.actionConfidence * 100)}% sure
             </Badge>
           )}
         </div>
         {prediction.note && <p className="text-sm text-destructive">{prediction.note}</p>}
-        {fields.length > 0 ? (
+        {fieldsOnly && outputRows.length > 0 ? (
+          <table className="w-full text-sm">
+            <thead className="sr-only">
+              <tr>
+                <th>Parameter</th>
+                <th>Value</th>
+                <th>Confidence</th>
+              </tr>
+            </thead>
+            <tbody>
+              {outputRows.map(([name, p]) => (
+                <tr key={name} className="border-t first:border-t-0">
+                  <td className="py-1.5 pr-3 text-muted-foreground">{label(name)}</td>
+                  <td className="py-1.5 pr-3 font-medium break-all">
+                    {p?.value || <span className="rounded bg-warning/15 px-1.5 text-muted-foreground">blank</span>}
+                  </td>
+                  <td className="py-1.5 text-right text-muted-foreground tabular-nums">
+                    {p?.confidence == null ? "" : `${Math.round(p.confidence * 100)}%`}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : !fieldsOnly && fields.length > 0 ? (
           <>
             <p className="text-xs text-muted-foreground" data-testid="extractor-status">
               {extraction.status === "off" && "Values are Jev's."}
@@ -180,7 +216,7 @@ export function ReviewCard({ prediction, extraction, annotation, position, total
         ) : (
           <p className="text-sm text-muted-foreground">No values extracted.</p>
         )}
-        {prediction.missing.length > 0 && (
+        {!fieldsOnly && prediction.missing.length > 0 && (
           <p className="text-sm text-muted-foreground">
             Would ask the customer for: {prediction.missing.map(label).join(", ")}
           </p>
@@ -246,7 +282,9 @@ export function ReviewCard({ prediction, extraction, annotation, position, total
         {isActionName(expectedAction) && (
           // `key` remounts the fields when the action changes, so their pre-filled values reset.
           <div key={expectedAction} className="grid gap-4 sm:grid-cols-2">
-            {Object.entries(CATALOG[expectedAction].params as Record<string, ParamSpec>).map(([name, spec]) => (
+            {Object.entries(CATALOG[expectedAction].params as Record<string, ParamSpec>)
+              .filter(([, spec]) => !fieldsOnly || spec.type !== "choice")
+              .map(([name, spec]) => (
               <ParamField
                 key={name}
                 idPrefix="expected"
@@ -272,7 +310,7 @@ export function ReviewCard({ prediction, extraction, annotation, position, total
         </fieldset>
       </form>
 
-      {isActionName(predictedAction) && (
+      {!fieldsOnly && isActionName(predictedAction) && (
         <details className="group flex flex-col gap-3">
           <summary className="cursor-pointer text-sm text-muted-foreground hover:text-foreground">
             Show the form the customer would get

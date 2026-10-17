@@ -353,3 +353,35 @@ test.describe("autosave to a file", () => {
     await expect.poll(async () => ((await savedFile()) ?? "").includes("recipient=Sam; amount")).toBe(false);
   });
 });
+
+test.describe("fine-tuning files", () => {
+  const sft = { name: "examples.jsonl", mimeType: "application/jsonl" };
+
+  test("an SFT file imports, and Fields only shows just the model's fields with blanks marked", async ({ page }) => {
+    const buffer = await readFile("e2e/fixtures/examples.jsonl");
+    await page.getByLabel("Import predictions CSV").setInputFiles({ ...sft, buffer });
+    await expect(page.getByTestId("file-status")).toHaveText("Imported file: saved in this browser only");
+    await expect(page.getByRole("heading", { name: /Message 1 of 48/ })).toBeVisible();
+
+    // Full view: the usual card, with the customer's form available.
+    await expect(page.getByText("Jev predicted")).toBeVisible();
+    await expect(page.getByText("Show the form the customer would get")).toBeVisible();
+
+    await page.getByRole("group", { name: "What to show" }).getByRole("button", { name: "Fields only" }).click();
+    await expect(page.getByText("Extractor output")).toBeVisible();
+    await expect(page.getByText("Show the form the customer would get")).toHaveCount(0);
+    await expect(page.getByText("blank").first()).toBeVisible();
+    // Choice fields (which account) belong to Jev, so the fix-it form has none of them.
+    await expect(page.getByLabel("from account")).toHaveCount(0);
+  });
+
+  test("reviewed answers download as seed-file lines", async ({ page }) => {
+    const buffer = await readFile("e2e/fixtures/examples.jsonl");
+    await page.getByLabel("Import predictions CSV").setInputFiles({ ...sft, buffer });
+    await expect(page.getByRole("heading", { name: /Message 1 of 48/ })).toBeVisible();
+    await page.keyboard.press("y"); // accept the first row as is
+    const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Download labels" }).click()]);
+    const text = await readFile((await download.path())!, "utf8");
+    expect(text).toMatch(/^# \w+\n.+/);
+  });
+});

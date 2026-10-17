@@ -1,10 +1,11 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DateField } from "./date-field";
 import { LOW_CONFIDENCE } from "@/lib/jev/catalog";
 import type { ParamValue } from "@/lib/jev/types";
 
@@ -17,9 +18,9 @@ type Props = {
   options?: Record<string, string>;
   /** What the dropdown's empty choice says; "Choose…" unless leaving it empty has its own meaning. */
   emptyLabel?: string;
-  /** Called when the customer picks a different dropdown option. */
+  /** Called with the field's value when it changes, whether the customer or Jev changed it. */
   onSelect?: (value: string) => void;
-  /** Called with the current value on every edit, for forms where one field's need depends on another. */
+  /** Same as onSelect; reads better on text fields whose neighbours' "required" depends on them. */
   onValue?: (value: string) => void;
   type?: React.ComponentProps<"input">["type"];
   placeholder?: string;
@@ -37,6 +38,19 @@ export function ParamField({ name, label, param, required, options, emptyLabel =
   // Mirror what is typed so the badges react to the customer's edits, not only to Jev's guess.
   const [current, setCurrent] = useState(param.value ?? "");
   const [edited, setEdited] = useState(false);
+  // Jev can answer again while the customer keeps typing in the chat, so a new guess replaces the
+  // old one, unless the customer has already changed this field by hand. Setting state during
+  // render like this is React's way to "reset state when a prop changes" without an extra pass.
+  const [seen, setSeen] = useState(param.value);
+  if (param.value !== seen) {
+    setSeen(param.value);
+    if (!edited) setCurrent(param.value ?? "");
+  }
+  // Tell the form what the field holds now, whether Jev or the customer last changed it.
+  useEffect(() => {
+    onSelect?.(current);
+    onValue?.(current);
+  }, [current, onSelect, onValue]);
   const missing = required && current.trim() === "";
   // Once the customer has touched a value they have checked it themselves.
   const uncertain = !edited && param.value !== null && param.confidence !== null && param.confidence < LOW_CONFIDENCE;
@@ -46,7 +60,6 @@ export function ParamField({ name, label, param, required, options, emptyLabel =
   function track(value: string) {
     setCurrent(value);
     setEdited(true);
-    onValue?.(value);
   }
 
   return (
@@ -68,14 +81,11 @@ export function ParamField({ name, label, param, required, options, emptyLabel =
         <select
           id={id}
           name={name}
-          defaultValue={param.value ?? ""}
+          value={current}
           required={required}
           aria-invalid={missing || undefined}
           aria-describedby={describedBy}
-          onChange={(event) => {
-            track(event.target.value);
-            onSelect?.(event.target.value);
-          }}
+          onChange={(event) => track(event.target.value)}
           // Explicit colors: native dropdowns ignore the page theme in some browsers' dark mode.
           className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive"
         >
@@ -86,12 +96,22 @@ export function ParamField({ name, label, param, required, options, emptyLabel =
             </option>
           ))}
         </select>
+      ) : type === "date" ? (
+        <DateField
+          id={id}
+          name={name}
+          value={current}
+          onValue={track}
+          required={required}
+          aria-invalid={missing || undefined}
+          aria-describedby={describedBy}
+        />
       ) : (
         <Input
           id={id}
           name={name}
           type={type}
-          defaultValue={param.value ?? ""}
+          value={current}
           placeholder={placeholder}
           required={required}
           aria-invalid={missing || undefined}
