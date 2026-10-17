@@ -10,6 +10,7 @@ import { readFile, writeFile } from "node:fs/promises";
 
 import { classify } from "../src/lib/jev/classify";
 import type { ClassifyResult } from "../src/lib/jev/types";
+import { csvCell, describe, HEADER } from "../src/lib/annotate/predictions-csv";
 
 const [inputPath = "data/sample-messages.txt", outputPath = "predictions.csv"] = process.argv.slice(2);
 const CONCURRENCY = 4;
@@ -32,32 +33,6 @@ function parseMessages(text: string): Item[] {
   return items;
 }
 
-function csvCell(value: string | number | null): string {
-  const text = value === null ? "" : String(value);
-  return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
-}
-
-function describe(result: ClassifyResult | Error) {
-  if (result instanceof Error) {
-    return { action: "ERROR", confidence: "", params: "", missing: "", note: result.message };
-  }
-  if (result.action === null) {
-    return { action: "none", confidence: result.confidence.toFixed(3), params: "", missing: "", note: "" };
-  }
-  // result.params has a different shape per action, so view it generically for printing.
-  const params = Object.entries(result.params as Record<string, { value: string | null; confidence: number | null }>)
-    .filter(([, p]) => p.value !== null)
-    .map(([name, p]) => `${name}=${p.value}${p.confidence === null ? "" : ` (${p.confidence.toFixed(2)})`}`)
-    .join("; ");
-  return {
-    action: result.action,
-    confidence: result.confidence.toFixed(3),
-    params,
-    missing: result.missing.join("; "),
-    note: "",
-  };
-}
-
 const items = parseMessages(await readFile(inputPath, "utf8"));
 const results = new Array<ClassifyResult | Error>(items.length);
 
@@ -78,12 +53,11 @@ await Promise.all(
   }),
 );
 
-const header = ["id", "group", "message", "predicted_action", "action_confidence", "params", "missing_required", "expected_action", "note"];
 const rows = items.map((item, i) => {
   const d = describe(results[i] ?? new Error("No result"));
   return [item.id, item.group, item.message, d.action, d.confidence, d.params, d.missing, "", d.note];
 });
-await writeFile(outputPath, [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n") + "\n");
+await writeFile(outputPath, [HEADER, ...rows].map((row) => row.map(csvCell).join(",")).join("\n") + "\n");
 
 const failed = results.filter((r) => r instanceof Error).length;
 console.log(`Wrote ${rows.length} predictions to ${outputPath}${failed ? ` (${failed} errors, see the note column)` : ""}`);

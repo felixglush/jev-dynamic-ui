@@ -8,7 +8,7 @@ import { acceptPrediction, annotationsFor, parseAnyDataset, parseDataset, saniti
 import { summarize } from "./summary";
 
 // Runs on the real predictions file the annotation page loads, not a hand-made sample.
-const text = await readFile(new URL("../../../predictions.csv", import.meta.url), "utf8");
+const text = await readFile(new URL("../../../e2e/fixtures/predictions.csv", import.meta.url), "utf8");
 
 describe("the predictions CSV", () => {
   test("parses every message with its values and confidences", () => {

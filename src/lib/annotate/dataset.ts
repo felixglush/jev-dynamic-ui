@@ -7,6 +7,8 @@ import { freeTextParams } from "@/lib/extract/prompt";
 import { CATALOG } from "@/lib/jev/catalog";
 import type { ActionName, ParamValue } from "@/lib/jev/types";
 import { reviewOf, type Review, type ExampleRecord } from "@/lib/sft/examples";
+import { isKind, type Kind } from "@/lib/sft/kinds";
+import type { Split } from "@/lib/sft/split";
 import { parseCsv, toCsv } from "./csv";
 
 export type Prediction = {
@@ -20,6 +22,14 @@ export type Prediction = {
   missing: string[];
   /** The predict script's note, e.g. an error message. */
   note: string;
+  /** What the extractor read when the chat logged this message (blank value = found nothing). Absent for older rows. */
+  extracted?: Record<string, string>;
+  /** For fine-tuning rows: the kind of example it is (typo, accented-name...). */
+  kind?: Kind;
+  /** For fine-tuning rows: which file the row ends up in (train, val or test). Absent until it is approved. */
+  split?: Split;
+  /** For fine-tuning rows: whether a person reviewed the row or Claude approved it in bulk. */
+  reviewedBy?: "human" | "claude";
 };
 
 /** "none" means the message should not open any form. */
@@ -30,6 +40,8 @@ export type Annotation = {
   /** Only the parameters that have a value. */
   expectedParams: Record<string, string>;
   note: string;
+  /** The kind of example, set when the answer goes into the fine-tuning data. Not part of the CSV. */
+  kind?: Kind;
 };
 
 /** Annotations are keyed by prediction id. */
@@ -53,6 +65,16 @@ export function isExpectedAction(value: string): value is ExpectedAction {
 export const label = (name: string) => name.replaceAll("_", " ");
 
 /** "recipient=Sam (1.00); amount=50.00 (0.98)" → { recipient: { value: "Sam", confidence: 1 }, ... } */
+/** "recipient=Sam; amount=50; date=" as written by the chat log. */
+export function parseExtracted(text: string): Record<string, string> {
+  return Object.fromEntries(
+    text.split(";").flatMap((part) => {
+      const at = part.indexOf("=");
+      return at === -1 ? [] : [[part.slice(0, at).trim(), part.slice(at + 1).trim()]];
+    }),
+  );
+}
+
 export function parseParams(text: string): Record<string, ParamValue> {
   const params: Record<string, ParamValue> = {};
   for (const part of text.split(";")) {
@@ -94,7 +116,7 @@ export function parseSftJsonl(text: string): Dataset {
     const line = raw.trim();
     if (!line) continue;
     const where = `Line ${index + 1}`;
-    let record: { messages?: { role?: string; content?: string }[]; meta?: { id?: string; action?: string; vague?: boolean } };
+    let record: { messages?: { role?: string; content?: string }[]; meta?: { id?: string; action?: string; vague?: boolean; kind?: string; reviewedBy?: string } };
     try {
       record = JSON.parse(line);
     } catch {
@@ -123,7 +145,7 @@ export function parseSftJsonl(text: string): Dataset {
       if (stated) params[name] = { value: stated, confidence: null };
       else if (spec.required) missing.push(name);
     }
-    predictions.push({ id, group: action + (record.meta?.vague ? " (vague)" : ""), message, predictedAction: action, actionConfidence: null, params, missing, note: "" });
+    predictions.push({ id, group: action + (record.meta?.vague ? " (vague)" : ""), message, predictedAction: action, actionConfidence: null, params, missing, note: "", ...(isKind(record.meta?.kind) ? { kind: record.meta.kind } : {}), ...(record.meta?.reviewedBy === "human" || record.meta?.reviewedBy === "claude" ? { reviewedBy: record.meta.reviewedBy } : {}) });
   }
   if (predictions.length === 0) throw new Error("The file has no records.");
   return { predictions, annotations: {} };
@@ -134,25 +156,28 @@ export function parseSftJsonl(text: string): Dataset {
  * answer, even after a reviewer corrected it), and rows already approved or rejected come back as
  * annotations, so the page picks up where the file says review stands.
  */
-export function datasetFromReviews(records: ExampleRecord[]): Dataset {
+export function datasetFromReviews(records: ExampleRecord[], splits: Map<string, Split> = new Map()): Dataset {
   const asGenerated = records.map(({ meta: { original, ...meta }, messages }) =>
     JSON.stringify({
       messages: [messages[0], messages[1], { role: "assistant", content: original?.answer ?? messages[2].content }],
       meta: { ...meta, action: original?.action ?? meta.action },
     }),
   );
-  const { predictions } = parseSftJsonl(asGenerated.join("\n"));
+  const { predictions: parsed } = parseSftJsonl(asGenerated.join("\n"));
+  const predictions = parsed.map((p) => (splits.has(p.id) ? { ...p, split: splits.get(p.id)! } : p));
   const annotations: Annotations = {};
   for (const record of records) {
     const review: Review | null = reviewOf(record);
-    if (review) annotations[record.meta.id] = { expectedAction: review.expectedAction as ExpectedAction, expectedParams: review.expectedParams, note: review.note ?? "" };
+    if (review) annotations[record.meta.id] = { expectedAction: review.expectedAction as ExpectedAction, expectedParams: review.expectedParams, note: review.note ?? "", ...(isKind(review.kind) ? { kind: review.kind } : {}) };
   }
   return { predictions, annotations };
 }
 
 /** A predictions CSV or an SFT JSONL file: JSONL lines start with "{". */
+export const isJsonl = (text: string) => text.replace(/^\uFEFF/, "").trimStart().startsWith("{");
+
 export function parseAnyDataset(text: string): Dataset {
-  return text.replace(/^\uFEFF/, "").trimStart().startsWith("{") ? parseSftJsonl(text) : parseDataset(text);
+  return isJsonl(text) ? parseSftJsonl(text) : parseDataset(text);
 }
 
 /**
@@ -215,6 +240,7 @@ export function parseDataset(text: string): Dataset {
       params: parseParams(column(row, "params")),
       missing: column(row, "missing_required").split(";").map((s) => s.trim()).filter(Boolean),
       note: column(row, "note"),
+      ...(column(row, "extractor") ? { extracted: parseExtracted(column(row, "extracted")) } : {}),
     });
 
     const expected = column(row, "expected_action");
@@ -307,7 +333,7 @@ export function sanitizeAnnotations(predictions: Prediction[], raw: unknown): An
       }
     }
     const note = typeof a?.note === "string" ? a.note.trim().slice(0, MAX_NOTE_LENGTH) : "";
-    clean[id] = { expectedAction: action, expectedParams, note };
+    clean[id] = { expectedAction: action, expectedParams, note, ...(isKind(a?.kind) ? { kind: a.kind } : {}) };
   }
   return clean;
 }

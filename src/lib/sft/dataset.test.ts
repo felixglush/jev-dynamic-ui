@@ -173,3 +173,16 @@ describe("pinned rows (meta.split) and versions", () => {
     for (const r of rows) if (r.meta.pattern) expect(patterns.has(r.meta.pattern), r.meta.id).toBe(true);
   });
 });
+
+describe("contamination", () => {
+  it("never trains on a message that sits in val or test, for any version and under any action", async () => {
+    const { VERSIONS } = await import("./build");
+    const { normalizeMessage } = await import("./examples");
+    for (const version of VERSIONS) {
+      const { files } = buildSplits(rows, { version });
+      const heldOut = new Set([...files.val, ...files.test].map((r) => normalizeMessage(r.messages[1].content)));
+      const leaked = files.train.filter((r) => heldOut.has(normalizeMessage(r.messages[1].content)));
+      expect(leaked.map((r) => r.meta.id), version).toEqual([]);
+    }
+  });
+});

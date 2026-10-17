@@ -92,6 +92,12 @@ Everything lives in one file, `data/sft/examples.jsonl`. Each row is a training 
 5. **Build.** `npm run sft:build` writes `train.jsonl`, `val.jsonl` and `test.jsonl` from the **approved** rows only, so they stay empty until you approve something. Pending and rejected rows are ignored.
 6. **Check against the base model.** `training/modal_train.py` scores the base model and the tuned one on val and test (section 6).
 
+### Where rows come from
+
+- **Suggested by Claude:** `npm run sft:add` writes pending rows, which you approve on the **Fine-tuning data** view.
+- **Approved on the real predictions page:** pressing Y (or saving a fix) on a message there also adds it to `data/sft/examples.jsonl` as an approved row with the **Kind of example** you picked. These rows are `trainOnly`, so they never land in val or test and scored sets stay comparable. A message already in the file is not added twice, and "none" answers are not added. Clearing the answer later does not remove the row; reject it on the Fine-tuning data view.
+- On the Fine-tuning data view, the **Kind** menu walks one kind at a time and the **Kind of example** menu on each card changes it.
+
 ## 5. Split
 
 `src/lib/sft/split.ts`: **group-stratified**. A group is an action, plus "(vague)" for messages that don't say enough: the same label the `/annotate` Group menu shows. Each group is split on its own: its approved rows are ordered by a hash of their id, the first 15% go to **test**, the next 15% to **val**, the rest to **train**. So every group appears in all three files in about the same proportions, instead of one action missing from val by bad luck. A group with fewer than 4 approved rows stays all train.
@@ -101,7 +107,7 @@ Sample and synthetic rows are treated the same: both are AI-written and both nee
 Rules that keep the test honest:
 
 - **No message in two splits.** A train row that repeats a val/test message is dropped (`sft:build` lists them), so a paraphrase-free copy of a test message can never be trained on (checked in `dataset.test.ts`).
-- **Test is sealed**: its errors are never read (the report prints counts only), val is the dev set. Rows can be pinned to a split with `meta.split` (`sft:add --split`), tagged with `meta.pattern`, and versioned with `meta.version`; see [sft-experiments.md](sft-experiments.md), "Fair evaluation v2".
+- **Test is sealed**: its errors are never read (the report prints counts only), val is the dev set. Every row also has a `meta.kind`, the kind of example it is (typo, accented name, unusual name, worded number, amount format, date, multiple numbers, distractor, email or phone, missing info, plain; list in `src/lib/sft/kinds.ts`). It is separate from `meta.pattern`, which stays frozen for evaluation, so a reviewer can change a kind freely. `npm run sft:kind` gives a first guess to rows without one, and `sft:add` accepts `--kind` and `# kind:` lines. Rows can be pinned to a split with `meta.split` (`sft:add --split`), tagged with `meta.pattern`, and versioned with `meta.version`; see [sft-experiments.md](sft-experiments.md), "Fair evaluation v2".
 - The counts come from each group's size, so the split shifts slightly as rows are approved. Build the files once review is done, and change `SPLIT_SALT` only on purpose (it reshuffles the held-out sets).
 - Everything is AI-generated so far, so val and test are not yet real user messages. Treat the scores as a check on the pipeline; add real messages with `sft:add -- batch.txt --source sample` before trusting small differences between models.
 
@@ -131,3 +137,9 @@ Felix's first pass on `/annotate` (62 sample rows approved, 10 of them with a no
 1. Multi-recipient messages stay out of the data.
 2. Relationship-only names are blank.
 3. Claude generates the synthetic messages; Felix reviews them on the `/annotate` page.
+
+## Who reviewed a row, and keeping the splits clean
+
+`meta.reviewedBy` is `human` when the review came from the annotate page and `claude` when Claude approved the row. The 62 rows approved by hand before the first training run were recovered from git (`e56efb1^`); everything else was approved by Claude. Taking a review back drops the field.
+
+`npm run sft:check` (and a vitest assertion for every version) fails if any message is in train and also in val or test, under any action. It also lists messages that sit in both val and test; v5 has six (for example "k" and "tell me about mortgages"). They never train, so they are only reported, and v5's val and test stay as scored.

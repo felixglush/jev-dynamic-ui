@@ -5,7 +5,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { ANNOTATIONS_FILE } from "./paths";
 
-// These run against the real predictions.csv at the project root (100 messages from a live
+// These run against the fixed 100-message copy of predictions.csv (e2e/fixtures/predictions.csv) (100 messages from a live
 // Jev run), served by the production build. No Jev calls are made on this page.
 
 /** Open the page and wait until it is interactive: the HTML shows up before keys do anything. */
@@ -58,6 +58,10 @@ test("fixing a value marks the prediction as wrong values", async ({ page }) => 
   await square(page, 3).click(); // "can you etransfer my landlord $1,850 for rent from chequing"
   // Jev picked "my landlord"; LiquidFM read "landlord", and LiquidFM's value is the one pre-filled.
   await expect(page.getByLabel("recipient", { exact: true })).toHaveValue("landlord");
+  // Every field says who filled it: the action is Jev's, the typed-in recipient is LiquidFM's.
+  await expect(page.getByTestId("action-source")).toHaveText("Jev");
+  await expect(page.locator('tr[data-field="recipient"]')).toHaveAttribute("data-source", "liquid");
+  await expect(page.locator('tr[data-field="recipient"]').getByText("LiquidFM")).toBeVisible();
 
   await page.keyboard.press("n");
   await expect(page.getByLabel("Action", { exact: true })).toBeFocused();
@@ -233,7 +237,7 @@ test("Clear all asks for a second click before wiping every answer", async ({ pa
 });
 
 test("re-importing a file keeps the progress saved in this browser", async ({ page }) => {
-  const csv = await readFile("predictions.csv", "utf8");
+  const csv = await readFile("e2e/fixtures/predictions.csv", "utf8");
   const file = { name: "predictions-copy.csv", mimeType: "text/csv", buffer: Buffer.from(csv) };
   await page.getByLabel("Import predictions CSV").setInputFiles(file);
   await accept(page);
@@ -314,7 +318,7 @@ test.describe("autosave to a file", () => {
     await expect(page.getByTestId("file-status")).toHaveText(/^Saved to/);
     const before = await savedFile();
 
-    const csv = await readFile("predictions.csv", "utf8");
+    const csv = await readFile("e2e/fixtures/predictions.csv", "utf8");
     await page.getByLabel("Import predictions CSV").setInputFiles({ name: "other.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
     await expect(page.getByTestId("file-status")).toHaveText("Imported file: saved in this browser only");
     await accept(page);
@@ -379,9 +383,24 @@ test.describe("fine-tuning files", () => {
     const buffer = await readFile("e2e/fixtures/examples.jsonl");
     await page.getByLabel("Import predictions CSV").setInputFiles({ ...sft, buffer });
     await expect(page.getByRole("heading", { name: /Message 1 of 48/ })).toBeVisible();
+    // The file's own answers are what gets reviewed: LiquidFM is not asked to replace them.
+    await expect(page.getByTestId("extractor-status")).toContainText("imported file's own answers");
+    await expect(page.getByTestId("action-source")).toHaveCount(0);
     await page.keyboard.press("y"); // accept the first row as is
     const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Download labels" }).click()]);
     const text = await readFile((await download.path())!, "utf8");
     expect(text).toMatch(/^# \w+\n.+/);
   });
+});
+
+test("a logged message shows what the extractor read at the time, without asking it again", async ({ page }) => {
+  await open(page);
+  const csv = [
+    "id,group,message,predicted_action,action_confidence,params,missing_required,expected_action,note,extracted,extractor",
+    // The fake extractor would read "Sam" from this message; the stored answer says Zed, so Zed proves the stored one is used.
+    "live-1,live,Send $50 to Sam,send_etransfer,0.930,recipient=Sam (0.93); amount=50.00 (0.55),,,,recipient=Zed; amount=50,test-model",
+  ].join("\n");
+  await page.getByLabel("Import predictions CSV").setInputFiles({ name: "live.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
+  await expect(page.getByText("Message 1 of 1")).toBeVisible();
+  await expect(page.getByText("Zed").first()).toBeVisible();
 });

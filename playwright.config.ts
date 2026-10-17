@@ -1,6 +1,6 @@
 import { defineConfig } from "@playwright/test";
 
-import { ANNOTATIONS_FILE, SFT_REVIEW_FILE } from "./e2e/paths";
+import { ANNOTATIONS_FILE, PREDICTIONS_LOG, SFT_REVIEW_FILE } from "./e2e/paths";
 
 // Something else may hold 3100 on a dev machine; PW_APP_PORT picks another.
 const APP_PORT = Number(process.env.PW_APP_PORT ?? 3100);
@@ -46,6 +46,8 @@ export default defineConfig({
         TYPESAFE_BASE_URL: `http://localhost:${FAKE_JEV_PORT}`,
         OLLAMA_URL: `http://127.0.0.1:${FAKE_OLLAMA_PORT}`,
         ANNOTATIONS_FILE,
+        PREDICTIONS_FILE: "e2e/fixtures/predictions.csv",
+        PREDICTIONS_LOG_FILE: PREDICTIONS_LOG,
         SFT_REVIEW_FILE,
       },
       url: `http://localhost:${APP_PORT}`,

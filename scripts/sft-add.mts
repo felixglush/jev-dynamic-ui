@@ -2,7 +2,7 @@
  * Add labeled messages to data/sft/examples.jsonl as pending rows, ready to review on /annotate.
  *
  *   npm run sft:add -- path/to/batch.txt [--source sample|synthetic] [--split train|val|test]
- *                      [--pattern name] [--version v1|v2|v3|v4|v5] [--train-only]    (default source: synthetic)
+ *                      [--pattern name] [--kind name] [--version v1|v2|v3|v4|v5] [--train-only]    (default source: synthetic)
  *
  * The batch is plain text, one example per line: `message => field=value; field=value`, with
  * `# <action>` headers. "sample" rows are real messages that can end up in val or test once approved;
@@ -17,6 +17,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { parseBatch, validateBatch } from "../src/lib/sft/batch";
 import type { Version } from "../src/lib/sft/build";
 import type { Split } from "../src/lib/sft/split";
+import { isKind, type Kind } from "../src/lib/sft/kinds";
 import { addExamples, parseExamples, serializeExamples, type ExampleSource } from "../src/lib/sft/examples";
 
 const args = process.argv.slice(2);
@@ -26,11 +27,12 @@ const value = (name: string) => (args.includes(name) ? args[args.indexOf(name) +
 const trainOnly = args.includes("--train-only");
 const split = value("--split") as Split | undefined;
 const pattern = value("--pattern");
+const kind = value("--kind");
 const version = value("--version") as Version | undefined;
-const valued = ["--source", "--split", "--pattern", "--version"];
+const valued = ["--source", "--split", "--pattern", "--kind", "--version"];
 const batchPath = args.find((arg, index) => !arg.startsWith("--") && !valued.includes(args[index - 1] ?? ""));
-if (!batchPath || (source !== "sample" && source !== "synthetic") || (split && !["train", "val", "test"].includes(split)) || (version && !["v1", "v2", "v3", "v4", "v5"].includes(version))) {
-  console.error("Usage: npm run sft:add -- path/to/batch.txt [--source sample|synthetic] [--split train|val|test] [--pattern name] [--version v1|v2|v3|v4|v5] [--train-only]");
+if (!batchPath || (source !== "sample" && source !== "synthetic") || (split && !["train", "val", "test"].includes(split)) || (kind && !isKind(kind)) || (version && !["v1", "v2", "v3", "v4", "v5"].includes(version))) {
+  console.error("Usage: npm run sft:add -- path/to/batch.txt [--source sample|synthetic] [--split train|val|test] [--pattern name] [--kind name] [--version v1|v2|v3|v4|v5] [--train-only]");
   process.exit(1);
 }
 const FILE = "data/sft/examples.jsonl";
@@ -43,7 +45,7 @@ if (problems.length > 0) {
 }
 
 const existing = parseExamples(await readFile(FILE, "utf8").catch(() => ""));
-const { records, skipped } = addExamples(existing, batch, source, { trainOnly, split, pattern, version });
+const { records, skipped } = addExamples(existing, batch, source, { trainOnly, split, pattern, kind: kind as Kind | undefined, version });
 await writeFile(FILE, serializeExamples(records));
 
 console.log(`Added ${records.length - existing.length} pending ${source} row(s); skipped ${skipped.length}.`);

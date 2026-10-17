@@ -2,7 +2,7 @@
 
 import { annotationsLabel, readAnnotationsFile, writeAnnotationChanges } from "@/lib/annotate/store";
 import { isActionName, type Annotation, type Annotations, type Dataset } from "@/lib/annotate/dataset";
-import { readReviewDataset, sftLabel, writeReviewChanges } from "@/lib/annotate/sft-store";
+import { addApprovedExample as appendApprovedExample, readReviewDataset, splitsOfMessages, sftLabel, writeReviewChanges } from "@/lib/annotate/sft-store";
 import { extractFields } from "@/lib/extract/ollama";
 import { MAX_MESSAGE_LENGTH } from "@/lib/jev/catalog";
 
@@ -83,5 +83,37 @@ export async function saveSftReviews(changes: Record<string, Annotation | null>)
   } catch (error) {
     console.error("saveSftReviews failed:", error);
     return { ok: false, error: error instanceof Error ? error.message : "Couldn't write the file." };
+  }
+}
+
+export type TrainingResult = { ok: true; message: string } | { ok: false; error: string };
+
+/**
+ * An answer approved or corrected on the real predictions page becomes an approved, train-only row in
+ * the fine-tuning file. Same rule as the other actions: public endpoint, so the store checks the input.
+ */
+export async function addApprovedExample(row: { action: string; message: string; params: Record<string, string>; kind: string; note: string; jevAction?: string }): Promise<TrainingResult> {
+  try {
+    const result = await appendApprovedExample(row);
+    if ("id" in result && result.updated) {
+      const where = result.split === "val" || result.split === "test" ? `${result.split}, held out, never trained on` : result.split;
+      return { ok: true, message: `Saved onto the row already in the fine-tuning data (${result.id}, ${where})` };
+    }
+    if ("id" in result) return { ok: true, message: `Added to the fine-tuning data (${result.id}, ${sftLabel()})` };
+    if (result.skipped === "no-fields") return { ok: true, message: "Not added: this action has no typed-in fields for the extractor to read" };
+    return { ok: true, message: "Already in the fine-tuning data" };
+  } catch (error) {
+    console.error("addApprovedExample failed:", error);
+    return { ok: false, error: error instanceof Error ? error.message : "Couldn't write the file." };
+  }
+}
+
+/** Where the fine-tuning file already holds each message (train, val, test or pending), so held-out ones can be flagged. */
+export async function messageSplits(messages: string[]): Promise<Record<string, string>> {
+  try {
+    return await splitsOfMessages(messages);
+  } catch (error) {
+    console.error("messageSplits failed:", error);
+    return {};
   }
 }

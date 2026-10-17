@@ -20,6 +20,7 @@ import {
   type Prediction,
 } from "@/lib/annotate/dataset";
 import { verdict } from "@/lib/annotate/summary";
+import { guessKind, isKind, KINDS, type Kind } from "@/lib/sft/kinds";
 import { cn } from "@/lib/utils";
 import { CATALOG, LOW_CONFIDENCE, type ParamSpec } from "@/lib/jev/catalog";
 import type { ActionCall, ActionName, ParamValue } from "@/lib/jev/types";
@@ -61,6 +62,7 @@ function toActionCall(action: ActionName, prediction: Prediction, fields: Combin
 const SOURCE_STYLE: Record<FieldSource, { badge: string; row: string; text: string }> = {
   jev: { badge: "border-sky-500/40 bg-sky-500/15", row: "bg-sky-500/10", text: "Jev" },
   liquid: { badge: "border-violet-500/40 bg-violet-500/15", row: "bg-violet-500/10", text: "LiquidFM" },
+  file: { badge: "border-border bg-muted", row: "", text: "From file" },
   blank: { badge: "border-warning/40 bg-warning/15", row: "bg-warning/10", text: "Blank" },
 };
 
@@ -70,6 +72,8 @@ export type ReviewMode = "full" | "fields";
 type Props = {
   mode: ReviewMode;
   prediction: Prediction;
+  /** The file this message is in, when the fine-tuning data holds it: train, val, test, or pending. */
+  split?: string;
   /** What the LiquidFM extractor read from this message (see lib/annotate/combine.ts). */
   extraction: Extraction;
   annotation: Annotation | undefined;
@@ -79,7 +83,7 @@ type Props = {
 };
 
 /** One message: what Jev predicted, one-click "correct", and a form to write the right answer. */
-export function ReviewCard({ mode, prediction, extraction, annotation, position, total, onSave }: Props) {
+export function ReviewCard({ mode, prediction, split, extraction, annotation, position, total, onSave }: Props) {
   const predictedAction = prediction.predictedAction;
   const fieldsOnly = mode === "fields";
   // Jev's answer and LiquidFM's, merged field by field. Empty when Jev picked no action. The
@@ -91,6 +95,8 @@ export function ReviewCard({ mode, prediction, extraction, annotation, position,
   const waiting = extraction.status === "loading";
   const start = annotation ?? accepted;
   const [expectedAction, setExpectedAction] = useState<ExpectedAction>(start?.expectedAction ?? "none");
+  // What kind of example this is (typo, accented name...): the saved choice, the file's, else a guess.
+  const [kind, setKind] = useState<Kind>(annotation?.kind ?? prediction.kind ?? guessKind(prediction.message, start?.expectedParams ?? {}));
   const lowConfidence = prediction.actionConfidence !== null && prediction.actionConfidence < LOW_CONFIDENCE;
   const result = annotation ? verdict(prediction, annotation) : null;
   // Fields view: one row per field the extractor model fills in, blanks included, so a missing value is visible.
@@ -112,7 +118,7 @@ export function ReviewCard({ mode, prediction, extraction, annotation, position,
         if (value) expectedParams[name] = value;
       }
     }
-    onSave({ expectedAction, expectedParams, note: String(data.get("annotator_note") ?? "").trim() });
+    onSave({ expectedAction, expectedParams, note: String(data.get("annotator_note") ?? "").trim(), kind });
   }
 
   return (
@@ -123,6 +129,16 @@ export function ReviewCard({ mode, prediction, extraction, annotation, position,
             Message {position} of {total}
           </h2>
           {prediction.group && <Badge variant="outline">{prediction.group}</Badge>}
+          {split && (
+            <Badge data-testid="split-badge" variant={split === "val" || split === "test" ? "warning" : "secondary"}>
+              {split === "val" || split === "test" ? `${split}: held out, never trained on` : split === "pending" ? "in fine-tuning data (not approved yet)" : split}
+            </Badge>
+          )}
+          {prediction.reviewedBy && (
+            <Badge data-testid="reviewer-badge" variant="outline">
+              {prediction.reviewedBy === "human" ? "reviewed by you" : "approved by Claude"}
+            </Badge>
+          )}
           {result && <Badge variant={VERDICT_BADGE[result].variant}>{VERDICT_BADGE[result].text}</Badge>}
         </div>
         <blockquote className="rounded-2xl rounded-bl-sm bg-primary px-4 py-3 text-base break-words text-primary-foreground">
@@ -138,6 +154,11 @@ export function ReviewCard({ mode, prediction, extraction, annotation, position,
           <span data-testid="predicted-action" className="font-mono text-sm font-semibold">
             {predictedAction}
           </span>
+          {!fieldsOnly && extraction.status !== "imported" && (
+            <Badge data-testid="action-source" className={cn("text-foreground", SOURCE_STYLE.jev.badge)}>
+              {SOURCE_STYLE.jev.text}
+            </Badge>
+          )}
           {!fieldsOnly && prediction.actionConfidence !== null && (
             <Badge variant={lowConfidence ? "warning" : "secondary"} className="tabular-nums">
               {Math.round(prediction.actionConfidence * 100)}% sure
@@ -172,6 +193,7 @@ export function ReviewCard({ mode, prediction, extraction, annotation, position,
           <>
             <p className="text-xs text-muted-foreground" data-testid="extractor-status">
               {extraction.status === "off" && "Values are Jev's."}
+              {extraction.status === "imported" && "These are the imported file's own answers; no model was run on them."}
               {extraction.status === "loading" && "LiquidFM is reading the message…"}
               {extraction.status === "ready" && fields.every((f) => f.spec.type === "choice") && "Every field of this action is a choice, so all of it is Jev's."}
               {extraction.status === "ready" && fields.some((f) => f.spec.type !== "choice") && "Jev picked the action and the choices; LiquidFM read the typed-in values."}
@@ -202,10 +224,7 @@ export function ReviewCard({ mode, prediction, extraction, annotation, position,
                         {field.source === "jev" && field.jevConfidence !== null && (
                           <span className="mr-2 text-xs text-muted-foreground tabular-nums">{Math.round(field.jevConfidence * 100)}%</span>
                         )}
-                        {/* Only say "Jev" or "LiquidFM" when the extractor is part of the picture. */}
-                        {(extraction.status !== "off" || field.source === "blank") && (
-                          <Badge className={cn("text-foreground", style.badge)}>{style.text}</Badge>
-                        )}
+                        <Badge className={cn("text-foreground", style.badge)}>{style.text}</Badge>
                       </td>
                     </tr>
                   );
@@ -221,8 +240,25 @@ export function ReviewCard({ mode, prediction, extraction, annotation, position,
             Would ask the customer for: {prediction.missing.map(label).join(", ")}
           </p>
         )}
+        <div className="flex flex-wrap items-center gap-2">
+          <Label htmlFor="example-kind" className="text-muted-foreground">
+            Kind of example
+          </Label>
+          <select
+            id="example-kind"
+            value={kind}
+            onChange={(event) => isKind(event.target.value) && setKind(event.target.value)}
+            className="h-8 rounded-md border bg-background px-2 text-sm"
+          >
+            {KINDS.map((k) => (
+              <option key={k.id} value={k.id}>
+                {k.label}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="flex flex-wrap gap-2 pt-1">
-          <Button data-accept onClick={() => accepted && onSave(accepted)} disabled={!accepted || waiting}>
+          <Button data-accept onClick={() => accepted && onSave({ ...accepted, kind })} disabled={!accepted || waiting}>
             <Check aria-hidden="true" />
             Correct
             <kbd className="ml-1 rounded border border-primary-foreground/30 px-1 font-mono text-xs">Y</kbd>

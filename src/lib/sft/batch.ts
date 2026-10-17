@@ -7,6 +7,7 @@
  * Only the fields the message states are listed. Everything else is blank in the training target.
  */
 import { CATALOG, type ParamSpec } from "@/lib/jev/catalog";
+import { isKind, type Kind } from "./kinds";
 import type { Split } from "./split";
 import { freeTextParams } from "@/lib/extract/prompt";
 
@@ -23,6 +24,8 @@ export type LabeledExample = {
   vague: boolean;
   /** From a `# pattern: name` line above it; see ExampleRecord in examples.ts. */
   pattern?: string;
+  /** From a `# kind: x` line above it (see kinds.ts); a guess is made when absent. */
+  kind?: Kind;
   /** From a `# split: train|val|test` line above it. */
   split?: Split;
 };
@@ -35,16 +38,21 @@ export function parseBatch(text: string): LabeledExample[] {
   let vague = false;
   let pattern: string | undefined;
   let split: Split | undefined;
+  let kind: Kind | undefined;
   for (const raw of text.split("\n")) {
     const line = raw.trim();
     if (!line) continue;
     if (line.startsWith("#")) {
       // `# pattern: x` and `# split: x` tag the rows below them until changed (empty clears); a header
       // names an action; any other `#` line is a comment.
-      const tag = /^#\s*(pattern|split):\s*(.*)$/.exec(line);
+      const tag = /^#\s*(pattern|split|kind):\s*(.*)$/.exec(line);
       if (tag) {
         const value = (tag[2] ?? "").trim();
         if (tag[1] === "pattern") pattern = value || undefined;
+        else if (tag[1] === "kind") {
+          if (value && !isKind(value)) throw new Error(`Bad kind "${value}": ${line}`);
+          kind = (value || undefined) as Kind | undefined;
+        }
         else if (!value) split = undefined;
         else if (value === "train" || value === "val" || value === "test") split = value;
         else throw new Error(`Bad split "${value}" (train, val or test): ${line}`);
@@ -69,7 +77,7 @@ export function parseBatch(text: string): LabeledExample[] {
       const spec = (CATALOG[action].params as Record<string, ParamSpec>)[name];
       fields[name] = spec?.type === "amount" ? Number(value) : value;
     }
-    examples.push({ id: `batch-${String(examples.length + 1).padStart(3, "0")}`, action, message, fields, vague, ...(pattern ? { pattern } : {}), ...(split ? { split } : {}) });
+    examples.push({ id: `batch-${String(examples.length + 1).padStart(3, "0")}`, action, message, fields, vague, ...(pattern ? { pattern } : {}), ...(kind ? { kind } : {}), ...(split ? { split } : {}) });
   }
   return examples;
 }
