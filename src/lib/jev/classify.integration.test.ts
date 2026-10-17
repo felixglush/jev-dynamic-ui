@@ -1,13 +1,16 @@
 /**
  * Integration tests: the real classifier and the real TypeSafe SDK, talking over real HTTP to the
- * local fake Jev server in e2e/fake-jev.mts. They cover question building, candidate finding, answer
- * handling and normalizing together, by checking what a customer message turns into.
+ * local fake Jev server in e2e/fake-jev.mts. They check that Jev is asked only for the action and the
+ * choice fields, and what a customer message turns into. Free-text values are the extractor's job
+ * (see src/lib/extract) and are covered by the browser tests.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { TypeSafeClient, TypeSafeError } from "@typesafe-ai/sdk";
 
 import { startFakeJev } from "../../../e2e/fake-jev.mts";
+import { CATALOG } from "./catalog";
 import { classify } from "./classify";
+import { normalize } from "./normalize";
 
 let fake: Awaited<ReturnType<typeof startFakeJev>>;
 let client: TypeSafeClient;
@@ -20,33 +23,24 @@ beforeAll(async () => {
 afterAll(() => fake.close());
 
 describe("classify", () => {
-  it("turns a plain send request into a filled e-Transfer, in one round trip", async () => {
+  it("asks Jev for the action and the choice fields only, in one round trip", async () => {
     const before = fake.requests.length;
     const result = await classify("Send $50 to Sam for dinner last night", client);
 
     expect(result).toMatchObject({
       action: "send_etransfer",
-      missing: [],
-      params: { recipient: { value: "Sam" }, amount: { value: "50.00", confidence: 0.55 }, from_account: { value: null } },
+      // Free-text fields are left for the extractor; required ones are listed as missing until it runs.
+      missing: ["recipient", "amount"],
+      params: { recipient: { value: null }, amount: { value: null }, from_account: { value: null } },
     });
     expect(fake.requests.length - before).toBe(1);
-  });
 
-  it("understands casual amounts and lowercase names", async () => {
-    const result = await classify("etransfer jordan 120 bucks for the concert tickets", client);
-    expect(result).toMatchObject({
-      action: "send_etransfer",
-      params: { recipient: { value: "jordan" }, amount: { value: "120.00" } },
-    });
-  });
-
-  it("picks the email out of a message when adding a contact", async () => {
-    const result = await classify("add my sister Priya, Priya.K@example.com, so I can e-transfer her", client);
-    expect(result).toMatchObject({
-      action: "add_etransfer_contact",
-      missing: [],
-      params: { name: { value: "Priya" }, email: { value: "priya.k@example.com" }, phone: { value: null } },
-    });
+    const asked = Object.keys(fake.requests[fake.requests.length - 1]!.questions);
+    const expected = ["__action__"];
+    for (const [action, spec] of Object.entries(CATALOG)) {
+      for (const [param, p] of Object.entries(spec.params)) if (p.type === "choice") expected.push(`${action}.${param}`);
+    }
+    expect(asked.sort()).toEqual(expected.sort());
   });
 
   it("fills choice parameters from the catalog options", async () => {
@@ -55,28 +49,6 @@ describe("classify", () => {
       action: "pay_credit_card",
       params: { payment_option: { value: "minimum" }, from_account: { value: "savings" }, amount: { value: null } },
     });
-  });
-
-  it("reads shorthand amounts like 2k", async () => {
-    const result = await classify("I want to open a TFSA and put 2k in it", client);
-    expect(result).toMatchObject({
-      action: "open_account",
-      params: { account_type: { value: "tfsa" }, initial_deposit: { value: "2000.00" } },
-    });
-  });
-
-  it("keeps accented and hyphenated names whole so they can be picked", async () => {
-    const result = await classify("send $5,000.50 to María-José", client);
-    expect(result).toMatchObject({
-      action: "send_etransfer",
-      missing: [],
-      params: { recipient: { value: "María-José" }, amount: { value: "5000.50" } },
-    });
-  });
-
-  it("lists required parameters the message did not give", async () => {
-    const result = await classify("send $20 to somebody", client);
-    expect(result).toMatchObject({ action: "send_etransfer", missing: ["recipient"] });
   });
 
   it("returns no action when the message is not a banking action", async () => {
@@ -88,140 +60,83 @@ describe("classify", () => {
   });
 });
 
-describe("classify: banking actions beyond e-Transfers", () => {
-  // A fixed "today" (Friday, 2026-10-16) so relative dates like "tomorrow" have one right answer.
-  const now = new Date(2026, 9, 16);
-  const ask = (query: string) => classify(query, client, now);
-
-  it("moves money between own accounts, with a repeat and a start date", async () => {
-    expect(await ask("move $300 from chequing to savings every month starting tomorrow")).toMatchObject({
+describe("classify: choices for the other banking actions", () => {
+  it("moves money between own accounts on a schedule", async () => {
+    expect(await classify("move $300 from chequing to savings every month starting tomorrow", client)).toMatchObject({
       action: "transfer_between_accounts",
-      missing: [],
-      params: {
-        from_account: { value: "chequing" },
-        to_account: { value: "savings" },
-        amount: { value: "300.00" },
-        frequency: { value: "monthly" },
-        date: { value: "2026-10-17" },
-      },
+      params: { from_account: { value: "chequing" }, to_account: { value: "savings" }, frequency: { value: "monthly" } },
     });
   });
 
   it("lists the account the customer didn't say as missing", async () => {
-    expect(await ask("move 500 to my tfsa")).toMatchObject({
+    expect(await classify("move 500 to my tfsa", client)).toMatchObject({
       action: "transfer_between_accounts",
-      missing: ["from_account"],
-      params: { to_account: { value: "tfsa" }, amount: { value: "500.00" } },
+      missing: expect.arrayContaining(["from_account"]),
+      params: { to_account: { value: "tfsa" } },
     });
-  });
-
-  it("pays a bill on a day of the month, picking the next one", async () => {
-    expect(await ask("pay my Hydro One bill $112.30 on the 1st")).toMatchObject({
-      action: "pay_bill",
-      params: { payee: { value: "Hydro One" }, amount: { value: "112.30" }, date: { value: "2026-11-01" } },
-    });
-    // Today is the 16th, and a day that hasn't passed yet still counts.
-    expect(await ask("pay Rogers $85 on the 16th")).toMatchObject({ params: { date: { value: "2026-10-16" } } });
-  });
-
-  it("reads weekday names as the next one coming, never today", async () => {
-    expect(await ask("pay Rogers $85 on friday")).toMatchObject({ params: { date: { value: "2026-10-23" } } });
-    expect(await ask("pay Rogers $85 on monday")).toMatchObject({ params: { date: { value: "2026-10-19" } } });
-  });
-
-  it("reads written-out dates, with or without a year", async () => {
-    expect(await ask("pay Rogers $85 on March 3, 2027")).toMatchObject({ params: { date: { value: "2027-03-03" } } });
-    expect(await ask("pay Rogers $85 on 3 March")).toMatchObject({ params: { date: { value: "2027-03-03" } } });
-    expect(await ask("pay Rogers $85 on 2026-12-24")).toMatchObject({ params: { date: { value: "2026-12-24" } } });
-  });
-
-  it("offers no date when the text only looks like one", async () => {
-    expect(await ask("pay Rogers $85 on February 30")).toMatchObject({ action: "pay_bill", params: { date: { value: null } } });
   });
 
   it("schedules a recurring e-Transfer", async () => {
-    expect(await ask("send $50 to Sam every week")).toMatchObject({
+    expect(await classify("send $50 to Sam every week", client)).toMatchObject({
       action: "send_etransfer",
-      params: { recipient: { value: "Sam" }, frequency: { value: "weekly" }, date: { value: null } },
-    });
-  });
-
-  it("adds a payee and keeps only the digits of the account number", async () => {
-    expect(await ask("add Rogers as a payee, my account number is 4471-2290-88")).toMatchObject({
-      action: "add_payee",
-      missing: [],
-      params: { biller: { value: "Rogers" }, account_number: { value: "4471229088" } },
+      params: { frequency: { value: "weekly" } },
     });
   });
 
   it("replaces a stolen card", async () => {
-    expect(await ask("my debit card was stolen, please replace it")).toMatchObject({
+    expect(await classify("my debit card was stolen, please replace it", client)).toMatchObject({
       action: "manage_card",
       params: { card_action: { value: "replace" }, card: { value: "debit" }, reason: { value: "stolen" } },
     });
   });
 
   it("shows transactions for an account", async () => {
-    expect(await ask("show my last 5 transactions in savings")).toMatchObject({
+    expect(await classify("show my last 5 transactions in savings", client)).toMatchObject({
       action: "view_account",
       params: { account: { value: "savings" }, view: { value: "transactions" } },
     });
   });
 
-  it("requests money from a person", async () => {
-    expect(await ask("request $75 from Sam")).toMatchObject({
-      action: "request_etransfer",
-      missing: [],
-      params: { from_person: { value: "Sam" }, amount: { value: "75.00" } },
-    });
-  });
-
-  it("cancels an e-Transfer to a person", async () => {
-    expect(await ask("cancel the e-transfer I sent to Priya")).toMatchObject({
-      action: "cancel_etransfer",
-      params: { recipient: { value: "Priya" } },
-    });
-  });
-
-  it("turns on autodeposit into an account for an email address", async () => {
-    expect(await ask("turn on autodeposit for me.work@example.com into savings")).toMatchObject({
-      action: "setup_autodeposit",
-      missing: [],
-      params: { deposit_account: { value: "savings" }, email: { value: "me.work@example.com" } },
-    });
-  });
-
-  it("disputes a charge with its merchant, amount, date and reason", async () => {
-    expect(await ask("I don't recognize a $45.20 charge from Amazon on 2026-10-02")).toMatchObject({
+  it("disputes a charge as unrecognized", async () => {
+    expect(await classify("I don't recognize a $45.20 charge from Amazon on 2026-10-02", client)).toMatchObject({
       action: "dispute_transaction",
-      missing: [],
-      params: {
-        merchant: { value: "Amazon" },
-        amount: { value: "45.20" },
-        date: { value: "2026-10-02" },
-        reason: { value: "unrecognized" },
-      },
-    });
-  });
-
-  it("finds Feb 29 even when the next one is years away", async () => {
-    // From March 2028 the next Feb 29 is in 2032.
-    const result = await classify("pay Rogers $85 on February 29", client, new Date(2028, 2, 1));
-    expect(result).toMatchObject({ params: { date: { value: "2032-02-29" } } });
-  });
-
-  it("requests money by email alone, without a name", async () => {
-    expect(await ask("request $75 from jordan.k@example.com")).toMatchObject({
-      action: "request_etransfer",
-      missing: [],
-      params: { from_email: { value: "jordan.k@example.com" }, from_person: { value: null } },
+      params: { reason: { value: "unrecognized" } },
     });
   });
 
   it("updates the customer's own email", async () => {
-    expect(await ask("change my email to new.me@example.com")).toMatchObject({
+    expect(await classify("change my email to new.me@example.com", client)).toMatchObject({
       action: "update_contact_info",
-      params: { contact_type: { value: "email" }, new_email: { value: "new.me@example.com" } },
+      params: { contact_type: { value: "email" } },
     });
+  });
+});
+
+describe("normalize: cleaning the extractor's values for the forms", () => {
+  // A fixed "today" (Friday, 2026-10-16) so relative dates have one right answer.
+  const now = new Date(2026, 9, 16);
+
+  it("turns amounts, phones, emails and account numbers into form values", () => {
+    expect(normalize("amount", "$5,000.50")).toBe("5000.50");
+    expect(normalize("amount", "2k")).toBe("2000.00");
+    expect(normalize("phone", "(416) 555-0199")).toBe("4165550199");
+    expect(normalize("email", "Priya.K@Example.com")).toBe("priya.k@example.com");
+    expect(normalize("account_number", "4471-2290-88")).toBe("4471229088");
+  });
+
+  it("turns dates into the next matching day, never today for a weekday", () => {
+    expect(normalize("date", "tomorrow", now)).toBe("2026-10-17");
+    expect(normalize("date", "friday", now)).toBe("2026-10-23");
+    expect(normalize("date", "the 1st", now)).toBe("2026-11-01");
+    expect(normalize("date", "March 3, 2027", now)).toBe("2027-03-03");
+    expect(normalize("date", "3 March", now)).toBe("2027-03-03");
+  });
+
+  it("keeps text that is not a real date as it was written", () => {
+    expect(normalize("date", "February 30", now)).toBe("February 30");
+  });
+
+  it("finds Feb 29 even when the next one is years away", () => {
+    expect(normalize("date", "February 29", new Date(2028, 2, 1))).toBe("2032-02-29");
   });
 });

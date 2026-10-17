@@ -9,7 +9,7 @@
  * `satisfies` checks the shape without widening those literals back to plain strings.
  */
 
-/** How a parameter's value is found. See candidates.ts for the non-choice types. */
+/** How a parameter's value is found. Non-choice values are read by the extractor (src/lib/extract/); normalize.ts cleans them. */
 export type ParamSpec =
   | { type: "name" | "email" | "phone" | "amount" | "date" | "account_number"; question: string; required?: boolean }
   | { type: "choice"; question: string; required?: boolean; options: Record<string, string> };
