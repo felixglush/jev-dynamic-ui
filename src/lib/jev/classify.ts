@@ -4,7 +4,8 @@
  * Follows TypeSafe's function-calling pattern. Each message is ONE request to Jev that asks, in
  * parallel:
  *   - "__action__": which action should handle the message (or "none"), and
- *   - "<action>.<param>": every parameter of EVERY action, speculatively.
+ *   - "<action>.<param>": every CHOICE parameter of EVERY action, speculatively. Jev reads the whole
+ *     message; it never writes text, so free-text parameters are left to the extractor.
  * Code then keeps only the answers belonging to the chosen action, so there is a single round trip.
  *
  * `server-only` makes the build fail if a client component ever imports this file, which keeps the
@@ -22,7 +23,6 @@ import {
 } from "@typesafe-ai/sdk";
 
 import { CATALOG, type ParamSpec } from "./catalog";
-import { FINDERS, normalize } from "./candidates";
 import type { ActionCall, ActionName, ClassifyResult, ParamValue } from "./types";
 
 const ACTION_QUESTION = "__action__";
@@ -39,21 +39,15 @@ function getClient(): TypeSafeClient {
 const ACTION_NAMES = Object.keys(CATALOG) as ActionName[];
 const specsOf = (action: ActionName): Record<string, ParamSpec> => CATALOG[action].params;
 
-function paramQuestion(spec: ParamSpec, query: string, now: Date): Question | null {
-  let options: Record<string, string | null>;
-  if (spec.type === "choice") {
-    options = { ...spec.options };
-  } else {
-    const found = FINDERS[spec.type](query, now);
-    // Nothing to pick from, so the value is simply absent. No question needed.
-    if (found.length === 0) return null;
-    options = Object.fromEntries(found.map((span) => [span, null]));
-  }
+/** Only choice parameters are asked of Jev. Free-text values (names, amounts...) come from the extractor. */
+function paramQuestion(spec: ParamSpec): Question | null {
+  if (spec.type !== "choice") return null;
+  const options: Record<string, string | null> = { ...spec.options };
   options[NONE] = "The query does not give this; none of these is the requested value.";
   return choice(spec.question, options);
 }
 
-export function buildQuestions(query: string, now: Date = new Date()): Questions {
+export function buildQuestions(): Questions {
   const actionOptions: Record<string, string | null> = {};
   for (const name of ACTION_NAMES) actionOptions[name] = CATALOG[name].description;
   actionOptions[NONE] =
@@ -64,7 +58,7 @@ export function buildQuestions(query: string, now: Date = new Date()): Questions
   };
   for (const name of ACTION_NAMES) {
     for (const [paramName, spec] of Object.entries(specsOf(name))) {
-      const question = paramQuestion(spec, query, now);
+      const question = paramQuestion(spec);
       if (question) questions[`${name}.${paramName}`] = question;
     }
   }
@@ -82,7 +76,6 @@ function choiceAnswer(answers: Answers, key: string): ChoiceResponse | undefined
 export async function classify(
   query: string,
   client: TypeSafeClient = getClient(),
-  now: Date = new Date(),
 ): Promise<ClassifyResult> {
   const { answers } = await client.systemOne({
     // State is what Jev reads; the questions refer to it by field name (`query`).
@@ -90,7 +83,7 @@ export async function classify(
       context: "A customer typed this into the chat box of their bank's mobile app.",
       query,
     },
-    questions: buildQuestions(query, now),
+    questions: buildQuestions(),
   });
 
   const picked = choiceAnswer(answers, ACTION_QUESTION);
@@ -102,12 +95,13 @@ export async function classify(
   const missing: string[] = [];
 
   for (const [paramName, spec] of Object.entries(specsOf(action))) {
-    const answer = choiceAnswer(answers, `${action}.${paramName}`);
+    // Free-text parameters were not asked; the extractor fills them in (extract/apply.ts).
+    const answer = spec.type === "choice" ? choiceAnswer(answers, `${action}.${paramName}`) : undefined;
     if (!answer || answer.choice === NONE) {
       params[paramName] = { value: null, confidence: answer?.confidence ?? null };
       if ("required" in spec && spec.required) missing.push(paramName);
     } else {
-      params[paramName] = { value: normalize(spec.type, answer.choice, now), confidence: answer.confidence };
+      params[paramName] = { value: answer.choice, confidence: answer.confidence };
     }
   }
 

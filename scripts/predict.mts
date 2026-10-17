@@ -3,12 +3,13 @@
  *
  *   npm run predict -- [messages-file] [output-csv]
  *
- * Needs TYPESAFE_API_KEY in the environment. The `expected_action` column is left empty for you
+ * Needs TYPESAFE_API_KEY in the environment and Ollama running (the extractor fills the free-text fields, as in the app). The `expected_action` column is left empty for you
  * to fill in, then compare it with `predicted_action` in a spreadsheet.
  */
 import { readFile, writeFile } from "node:fs/promises";
 
 import { classify } from "../src/lib/jev/classify";
+import { withExtractedFields } from "../src/lib/extract/apply";
 import type { ClassifyResult } from "../src/lib/jev/types";
 import { csvCell, describe, HEADER } from "../src/lib/annotate/predictions-csv";
 
@@ -45,7 +46,7 @@ await Promise.all(
       const item = items[index];
       if (!item) break;
       try {
-        results[index] = await classify(item.message);
+        results[index] = (await withExtractedFields(await classify(item.message), item.message)).result;
       } catch (error) {
         results[index] = error instanceof Error ? error : new Error(String(error));
       }
