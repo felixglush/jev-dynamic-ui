@@ -242,6 +242,7 @@ I was charged twice by Netflix on October 3rd
 there's a $89.99 charge from Uber I didn't make
 dispute the $230 Best Buy charge from 2026-10-02, I never got my order
 Spotify charged me $11.99 but my plan is $9.99
+Acme Corp charged me $11.99 but my plan is $9.99
 report a fraudulent charge from Walmart for $150
 # ambiguous: dispute_transaction
 what is this $12.50 charge from Apple on Oct 9

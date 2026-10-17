@@ -1,4 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
+import { readFile } from "node:fs/promises";
+import { CATALOG } from "../src/lib/jev/catalog";
 
 async function say(page: Page, message: string) {
   await composer(page).fill(message);
@@ -75,6 +77,19 @@ test("a message that is not a banking action gets a helpful reply, not a form", 
 test("an example chip sends its message", async ({ page }) => {
   await page.getByRole("button", { name: "I want to open a TFSA and put 2k in it" }).click();
   await expect(page.getByLabel("Account type")).toHaveValue("tfsa");
+});
+
+test("the example chips are one real message from each of the 14 action groups", async ({ page }) => {
+  const groups = new Map<string, string[]>();
+  let group = "";
+  for (const line of (await readFile("data/sample-messages.txt", "utf8")).split("\n")) {
+    if (line.startsWith("#")) group = line.slice(1).trim();
+    else if (line.trim()) groups.set(group, [...(groups.get(group) ?? []), line.trim()]);
+  }
+  const actions = Object.keys(CATALOG);
+  const chips = (await page.locator("button.rounded-full.border").allInnerTexts()).map((t) => t.trim());
+  expect(chips).toHaveLength(actions.length);
+  expect(actions.map((a) => chips.filter((c) => groups.get(a)?.includes(c)).length)).toEqual(actions.map(() => 1));
 });
 
 test("the form opens in a floating card right away, before Jev answers", async ({ page }) => {
