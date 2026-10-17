@@ -2,7 +2,14 @@ import { expect, test, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { CATALOG } from "../src/lib/jev/catalog";
 
+/** Types a message and lets the live prediction open the form. Sending (Return) would confirm it. */
 async function say(page: Page, message: string) {
+  await composer(page).fill(message);
+  await expect(card(page)).toBeVisible();
+}
+
+/** Presses Send, like Return: the shown action is confirmed, or explained when there is none. */
+async function send(page: Page, message: string) {
   await composer(page).fill(message);
   await page.getByRole("button", { name: "Send", exact: true }).click();
 }
@@ -19,13 +26,13 @@ test("renders the chat shell from the server, before any message", async ({ requ
   // Plain HTTP fetch, no JavaScript: this is the server-rendered HTML.
   const html = await (await request.get("/")).text();
   expect(html).toContain("Banking assistant");
-  expect(html).toContain("Try one of these");
+  expect(html).toContain("Try an example");
 });
 
 test("send_etransfer: opens the e-Transfer form pre-filled from the message", async ({ page }) => {
   await say(page, "Send $50 to Sam for dinner last night");
 
-  await expect(page.getByText("Send an e-Transfer")).toBeVisible();
+  await expect(card(page).getByText("Send an e-Transfer")).toBeVisible();
   await expect(page.getByLabel("To")).toHaveValue("Sam");
   await expect(page.getByLabel("Amount (CAD)")).toHaveValue("50.00");
   // Typed-in values come from the extractor, which gives no confidence, so nothing is flagged for a second look.
@@ -37,7 +44,7 @@ test("send_etransfer: opens the e-Transfer form pre-filled from the message", as
 test("flags a required field the customer did not give", async ({ page }) => {
   await say(page, "send $20 to somebody");
 
-  await expect(page.getByText("Send an e-Transfer")).toBeVisible();
+  await expect(card(page).getByText("Send an e-Transfer")).toBeVisible();
   await expect(page.getByLabel("To")).toHaveValue("");
   await expect(page.getByLabel("To")).toHaveAttribute("aria-invalid", "true");
   await expect(page.getByText("Needed")).toBeVisible();
@@ -62,24 +69,24 @@ test("open_account: understands a TFSA with a shorthand deposit", async ({ page 
 test("add_etransfer_contact: fills name and email", async ({ page }) => {
   await say(page, "add my sister Priya, priya.k@example.com, so I can e-transfer her");
 
-  await expect(page.getByText("Add an e-Transfer Contact")).toBeVisible();
+  await expect(card(page).getByText("Add an e-Transfer Contact")).toBeVisible();
   await expect(page.getByLabel("Name")).toHaveValue("Priya");
   await expect(page.getByLabel("Email")).toHaveValue("priya.k@example.com");
 });
 
 test("a message that is not a banking action gets a helpful reply, not a form", async ({ page }) => {
-  await say(page, "what time does the branch close");
+  await send(page, "what time does the branch close");
 
   await expect(page.getByText("I can help with e-Transfers")).toBeVisible();
   await expect(card(page).getByRole("heading", { level: 2 })).toHaveCount(0);
 });
 
-test("an example chip sends its message", async ({ page }) => {
-  await page.getByRole("button", { name: "I want to open a TFSA and put 2k in it" }).click();
+test("an example opens its message", async ({ page }) => {
+  await page.getByRole("button", { name: /I want to open a TFSA and put 2k in it/ }).click();
   await expect(page.getByLabel("Account type")).toHaveValue("tfsa");
 });
 
-test("the example chips are one real message from each of the 14 action groups", async ({ page }) => {
+test("the examples are one real message from each of the 14 action groups", async ({ page }) => {
   const groups = new Map<string, string[]>();
   let group = "";
   for (const line of (await readFile("data/sample-messages.txt", "utf8")).split("\n")) {
@@ -87,7 +94,7 @@ test("the example chips are one real message from each of the 14 action groups",
     else if (line.trim()) groups.set(group, [...(groups.get(group) ?? []), line.trim()]);
   }
   const actions = Object.keys(CATALOG);
-  const chips = (await page.locator("button.rounded-full.border").allInnerTexts()).map((t) => t.trim());
+  const chips = (await page.locator("button[data-example] span:last-child").allInnerTexts()).map((t) => t.trim());
   expect(chips).toHaveLength(actions.length);
   expect(actions.map((a) => chips.filter((c) => groups.get(a)?.includes(c)).length)).toEqual(actions.map(() => 1));
 });
@@ -100,14 +107,15 @@ test("the form opens in a floating card right away, before Jev answers", async (
     if (route.request().method() === "POST") await held;
     await route.continue();
   });
-  await say(page, "Send $50 to Sam");
+  await send(page, "Send $50 to Sam");
   await expect(card(page)).toBeVisible();
   await expect(composer(page)).toHaveValue("Send $50 to Sam");
   await expect(card(page).getByText("Thinking…")).toBeVisible();
 
+  // Return was pressed, so the answer is confirmed as soon as it arrives.
   release();
-  await expect(card(page).getByText("Send an e-Transfer")).toBeVisible();
-  await expect(card(page).getByText("Thinking…")).toHaveCount(0);
+  await expect(page.getByRole("status")).toContainText("Send an e-Transfer: $50.00 to Sam");
+  await expect(card(page)).toBeHidden();
 });
 
 test("confirming closes the card and sums up what was confirmed", async ({ page }) => {
@@ -120,21 +128,30 @@ test("confirming closes the card and sums up what was confirmed", async ({ page 
   await expect(composer(page)).toHaveValue("");
 });
 
-test("Return confirms on the spot: focus lands on the confirm button when nothing is missing", async ({ page }) => {
+test("Return in the message bar confirms the action and closes the card", async ({ page }) => {
   await composer(page).fill("pay the minimum on my credit card from savings");
   await composer(page).press("Enter");
 
-  await expect(card(page).getByRole("button", { name: "Make Payment" })).toBeFocused();
-  await page.keyboard.press("Enter");
   await expect(card(page)).toBeHidden();
   await expect(page.getByRole("status")).toContainText("minimum payment from savings");
+  await expect(composer(page)).toHaveValue("");
 });
 
-test("focus lands on the missing field, so typing it and pressing Return confirms", async ({ page }) => {
+test("Return on a form that was already open from live typing confirms it too", async ({ page }) => {
+  await say(page, "Send $50 to Sam");
+  await expect(page.getByLabel("To")).toHaveValue("Sam");
+  await composer(page).press("Enter");
+
+  await expect(card(page)).toBeHidden();
+  await expect(page.getByRole("status")).toContainText("Send an e-Transfer: $50.00 to Sam");
+});
+
+test("Return with a required field blank keeps the card open and focuses that field", async ({ page }) => {
   await composer(page).fill("send $20 to somebody");
   await composer(page).press("Enter");
 
-  await expect(page.getByLabel("To")).toBeFocused();
+  await expect(card(page)).toBeVisible();
+  await expect(page.getByRole("status")).toHaveText("");
   await page.keyboard.type("Sam");
   await page.keyboard.press("Enter");
   await expect(page.getByRole("status")).toContainText("$20.00 to Sam");
@@ -154,7 +171,7 @@ test("Esc dismisses the card, empties the message box and keeps focus there", as
 });
 
 test("an API failure shows a friendly error and keeps the chat usable", async ({ page }) => {
-  await say(page, "simulate-server-error");
+  await send(page, "simulate-server-error");
   await expect(page.getByText("Something went wrong classifying that message")).toBeVisible();
   await page.keyboard.press("Escape");
 
@@ -162,18 +179,18 @@ test("an API failure shows a friendly error and keeps the chat usable", async ({
   await expect(page.getByLabel("To")).toHaveValue("Sam");
 });
 
-test("sends on Enter, like a normal chat box", async ({ page }) => {
+test("live typing opens the form without confirming it", async ({ page }) => {
   await composer(page).fill("I want to open a TFSA");
-  await composer(page).press("Enter");
   await expect(page.getByLabel("Account type")).toHaveValue("tfsa");
   // The message stays in the bar so it can be refined while the card is open.
   await expect(composer(page)).toHaveValue("I want to open a TFSA");
+  await expect(page.getByRole("status")).toHaveText("");
 });
 
 test("a request that fails to reach the server shows an error instead of hanging on Thinking", async ({ page }) => {
   // Server Actions are POSTs to the page URL, so block every POST to simulate being offline.
   await page.route("**/*", (route) => (route.request().method() === "POST" ? route.abort() : route.continue()));
-  await say(page, "Send $50 to Sam");
+  await send(page, "Send $50 to Sam");
   await expect(page.getByText("Couldn’t reach the server")).toBeVisible();
   await expect(page.getByText("Thinking…")).toHaveCount(0);
   await page.keyboard.press("Escape");
@@ -205,7 +222,7 @@ test("a choice Jev is unsure about is flagged for a second look, and a screen re
 test("when the extractor is down the assistant says so instead of guessing", async ({ page, request }) => {
   await request.post("http://127.0.0.1:8788/__mode", { data: { fail: true } });
   try {
-    await say(page, "Send $50 to Sam");
+    await send(page, "Send $50 to Sam");
     await expect(page.getByText("The extractor (Ollama) isn't reachable")).toBeVisible();
   } finally {
     await request.post("http://127.0.0.1:8788/__mode", { data: { fail: false } });
@@ -314,7 +331,7 @@ test("date fields open a calendar, and picking a day fills the field", async ({ 
 test("pay_bill: a scheduled bill keeps its date", async ({ page }) => {
   await say(page, "pay my Hydro One bill $112.30 on 2030-02-01");
 
-  await expect(page.getByText("Pay a Bill")).toBeVisible();
+  await expect(card(page).getByText("Pay a Bill")).toBeVisible();
   await expect(page.getByLabel("Pay to")).toHaveValue("Hydro One");
   await expect(page.getByLabel("Date (optional)")).toHaveValue("2030-02-01");
 });
@@ -593,17 +610,18 @@ test("pressing Return before the newest answer arrives does not focus the older 
   await composer(page).fill("I want to open a TFSA");
   await asked;
   await composer(page).press("Enter");
-  await expect(card(page).getByRole("button", { name: "Send Money" })).not.toBeFocused();
+  await expect(page.getByRole("status")).toHaveText("");
 
   release();
-  await expect(card(page).getByRole("button", { name: "Open Account" })).toBeFocused();
+  // Return confirms the newest answer, not the older form that was on screen.
+  await expect(page.getByRole("status")).toContainText("Open");
+  await expect(page.getByRole("status")).not.toContainText("Send an e-Transfer");
 });
 
 test("every message sent (not typed) is logged for review on the annotate page", async ({ page }) => {
   const { readFile } = await import("node:fs/promises");
   const { PREDICTIONS_LOG } = await import("./paths");
-  await say(page, "Send $77 to Logan for the logging test");
-  await expect(page.getByText("Send an e-Transfer")).toBeVisible();
+  await send(page, "Send $77 to Logan for the logging test");
   await expect
     .poll(async () => (await readFile(PREDICTIONS_LOG, "utf8").catch(() => "")))
     .toMatch(/^live-[^\n]*Send \$77 to Logan for the logging test,send_etransfer,/m);
@@ -622,4 +640,34 @@ test("what is typed while the card updates is not logged until Return sends it",
 
   await composer(page).press("Enter");
   await expect.poll(async () => (await logged()).length).toBe(1);
+});
+
+test("editing the message after Return cancels the pending confirmation", async ({ page }) => {
+  await composer(page).fill("Send $50 to Sam");
+  await expect(card(page).getByLabel("To")).toHaveValue("Sam");
+
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route("**/*", async (route) => {
+    if (route.request().method() === "POST") await held;
+    await route.continue();
+  });
+  await composer(page).fill("I want to open a TFSA");
+  await composer(page).press("Enter");
+  // Changed their mind before the answer arrived: the Return was for the old text.
+  await composer(page).fill("pay the minimum on my credit card from savings");
+  release();
+
+  await expect(card(page).getByLabel("How much")).toBeVisible();
+  await expect(card(page)).toBeVisible();
+  await expect(page.getByRole("status")).toHaveText("");
+});
+
+test("clicking an example right after typing shows the example's form, not the typed text's", async ({ page }) => {
+  await composer(page).pressSequentially("I want to open a TFSA");
+  await page.getByRole("button", { name: /pay the minimum on my credit card from savings/ }).click();
+
+  await expect(card(page).getByText("Make Payment")).toBeVisible();
+  await expect(page.getByLabel("Account type")).toHaveCount(0);
+  await expect(composer(page)).toHaveValue("pay the minimum on my credit card from savings");
 });

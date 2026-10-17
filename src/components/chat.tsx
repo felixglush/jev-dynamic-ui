@@ -15,20 +15,20 @@ import type { ClassifyOutcome } from "@/lib/jev/types";
 // One message from each action group in data/sample-messages.txt, picked to show something
 // a form fills in on its own (a worded amount, a schedule, a biller account number...).
 const EXAMPLES = [
-  "Send $50 to Sam for dinner last night",
-  "add my sister Priya, priya.k@example.com, so I can e-transfer her",
-  "pay the minimum on my credit card from savings",
-  "I want to open a TFSA and put 2k in it",
-  "set up a weekly $50 transfer from chequing to savings",
-  "pay my water bill $48 from savings next friday",
-  "add Rogers as a payee, my account number is 4471 2290 88",
-  "my credit card was stolen, I need a new one",
-  "show my last 5 transactions",
-  "ask my brother Kevin for $60 for the gas",
-  "cancel my $200 e-transfer to Sam",
-  "set up autodeposit for me.work@example.com into my chequing account",
-  "Acme Corp charged me $11.99 but my plan is $9.99",
-  "my new mobile number is (905) 555-0123",
+  { title: "Send an e-Transfer", text: "Send $50 to Sam for dinner last night" },
+  { title: "Add an e-Transfer contact", text: "add my sister Priya, priya.k@example.com, so I can e-transfer her" },
+  { title: "Pay a credit card", text: "pay the minimum on my credit card from savings" },
+  { title: "Open an account", text: "I want to open a TFSA and put 2k in it" },
+  { title: "Transfer between accounts", text: "set up a weekly $50 transfer from chequing to savings" },
+  { title: "Pay a bill", text: "pay my water bill $48 from savings next friday" },
+  { title: "Add a payee", text: "add Rogers as a payee, my account number is 4471 2290 88" },
+  { title: "Manage a card", text: "my credit card was stolen, I need a new one" },
+  { title: "View an account", text: "show my last 5 transactions" },
+  { title: "Request an e-Transfer", text: "ask my brother Kevin for $60 for the gas" },
+  { title: "Cancel an e-Transfer", text: "cancel my $200 e-transfer to Sam" },
+  { title: "Set up autodeposit", text: "set up autodeposit for me.work@example.com into my chequing account" },
+  { title: "Dispute a transaction", text: "Acme Corp charged me $11.99 but my plan is $9.99" },
+  { title: "Update contact info", text: "my new mobile number is (905) 555-0123" },
 ];
 
 /** How long typing must pause before Jev is asked, and the shortest text worth asking about. */
@@ -59,7 +59,7 @@ export function Chat() {
   const lastText = useRef("");
   // The text the card's current form was made from, so a form for older text is never taken for this text's.
   const shownText = useRef("");
-  // Set when the customer pressed Return: once the answer is in, focus moves into the card.
+  // Set when the customer pressed Return: once the answer is in, the card's form is confirmed.
   const wantFocus = useRef(false);
 
   function ask(text: string, explicit: boolean) {
@@ -72,7 +72,7 @@ export function Chat() {
       if (unchanged) {
         // Only a sent message is logged, and the answer for this text was asked for while typing: ask once more, just to log it.
         void classifyMessage(text, true).catch(() => {});
-        if (outcome && shownText.current === text) focusForm();
+        if (outcome && shownText.current === text) confirmCard();
         return; // otherwise that answer is still on its way, and focus will follow it
       }
     }
@@ -120,6 +120,8 @@ export function Chat() {
     // Whatever is still in flight was asked about older text, so its answer must not be shown.
     latestId.current++;
     lastText.current = "";
+    // A Return pressed for the older text no longer applies to this text.
+    wantFocus.current = false;
     const text = value.trim();
     if (!text) {
       if (open) dismiss();
@@ -129,6 +131,17 @@ export function Chat() {
     // A space just typed ends a word, so ask right away (editing earlier text or deleting back to a space does not count); otherwise wait for a short pause in typing.
     if (typedSpace) ask(text, false);
     else timer.current = setTimeout(() => ask(text, false), DEBOUNCE_MS);
+  }
+
+  // Return in the message bar confirms the shown action. If a required field is still blank the form
+  // is left open and the cursor goes to the first blank one (checkValidity is the browser's own
+  // `required` check, the same one the Send Money button runs).
+  function confirmCard() {
+    wantFocus.current = false;
+    const form = cardRef.current?.querySelector("form");
+    if (!form) return;
+    if (form.checkValidity()) form.requestSubmit();
+    else focusForm();
   }
 
   function focusForm() {
@@ -153,12 +166,13 @@ export function Chat() {
   // Stop a pending debounce if the page goes away.
   useEffect(() => () => clearTimeout(timer.current), []);
 
-  // After Return, once the answer has rendered, put the cursor where Return does the right thing:
-  // the first field still needed, or else the confirm button.
+  // After Return, once the answer has rendered, confirm it (or focus the first field still needed).
   useEffect(() => {
     if (!wantFocus.current || !outcome) return;
     wantFocus.current = false;
-    focusForm();
+    confirmCard();
+    // Only a new answer should trigger this, not a re-created confirmCard.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [outcome]);
 
   const host: ActionHost = {
@@ -250,21 +264,27 @@ export function Chat() {
       </p>
 
       <div className="flex flex-col items-center gap-3">
-        <p className="text-sm text-muted-foreground">Try one of these, or type your own:</p>
-        <div className="flex flex-wrap justify-center gap-2">
-          {EXAMPLES.map((example) => (
-            <Button
-              key={example}
-              variant="outline"
-              size="sm"
-              className="rounded-full"
+        <p className="text-sm text-muted-foreground">Try an example, or type your own:</p>
+        <div className="grid w-full gap-x-6 gap-y-3 sm:grid-cols-2">
+          {EXAMPLES.map(({ title, text }) => (
+            <button
+              key={text}
+              type="button"
+              data-example
+              className="flex flex-col gap-0.5 rounded-lg px-3 py-2 text-left transition-colors outline-none hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50"
               onClick={() => {
-                if (composerRef.current) composerRef.current.value = example;
-                submit(example);
+                // An example shows its form for review; it doesn't confirm it the way Return does.
+                if (composerRef.current) composerRef.current.value = text;
+                setDone("");
+                // Drop a pending live question about what was typed before the click, and any pending Return.
+                clearTimeout(timer.current);
+                wantFocus.current = false;
+                ask(text, false);
               }}
             >
-              {example}
-            </Button>
+              <span className="text-xs font-medium text-muted-foreground">{title}</span>
+              <span className="text-sm text-pretty">{text}</span>
+            </button>
           ))}
         </div>
       </div>
