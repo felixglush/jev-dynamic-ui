@@ -12,6 +12,8 @@ export default defineConfig({
   testMatch: "*.spec.ts",
   // The SDK retries a failing API call a couple of times before giving up, so the error test is slow.
   timeout: 60_000,
+  // The specs that review the fine-tuning file all write the same temp copy, so they must not overlap.
+  workers: 1,
   use: {
     baseURL: `http://localhost:${APP_PORT}`,
     trace: "retain-on-failure",
