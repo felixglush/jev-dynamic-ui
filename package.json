@@ -13,6 +13,7 @@
     "predict": "tsx --conditions=react-server scripts/predict.mts",
     "annotate:preview": "tsx scripts/build-annotate-preview.mts",
     "extract:stress": "tsx --conditions=react-server scripts/extract-stress.mts",
+    "latency": "tsx --conditions=react-server scripts/latency.mts",
     "extract:eval": "tsx --conditions=react-server scripts/extract-eval.mts",
     "sft:build": "tsx --conditions=react-server scripts/sft-build.mts",
     "sft:add": "tsx --conditions=react-server scripts/sft-add.mts",

@@ -52,6 +52,18 @@ Caveats:
 
 There is a small set of harder examples: 129 in data/extract-stress.txt. Contents: 24 groups, written by Claude. They cover typos (“sned 50 to sam”), accented names, odd amounts (“two grand”, “$1,234,567.89”), several numbers in one message, negation (“don’t send $50”), prompt injection, long polite messages, and other non-banking text.
 
+## Latency
+
+Time per message, from `npm run latency` (60 messages spread over `data/sample-messages.txt`, one at a time, after 2 warm-up messages). "Overall" is what the chat does: Jev first, then the extractor on the action Jev picked.
+
+| Step | Messages | Median | 95th percentile | Mean |
+| --- | --- | --- | --- | --- |
+| Jev (TypeSafe API) | 60 | 0.10 s | 0.15 s | 0.11 s |
+| Fine-tuned extractor (Ollama) | 55 | 0.64 s | 0.97 s | 0.56 s |
+| Overall (Jev, then extractor) | 60 | 0.71 s | 1.09 s | 0.62 s |
+
+Measured on 2026-10-17 in a 4-core cloud container with no GPU, so the extractor runs on CPU and will differ on your machine. Jev is a network call, so it depends on your connection. The 5 messages Jev maps to no action skip the extractor. The very first extraction after Ollama starts is slower (about 4 s) while the model loads.
+
 ## Run it
 
 ```bash

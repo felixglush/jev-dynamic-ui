@@ -1,5 +1,5 @@
 """
-LoRA fine-tune LiquidAI/LFM2.5-230M on the field-extraction data, on Modal, and score it.
+LoRA fine-tune LiquidAI/LFM2.5-350M on the field-extraction data, on Modal, and score it.
 
     pip install modal && modal setup           # once, on the machine you run this from
     npm run sft:build                          # approved rows -> data/sft/{train,val,test}.jsonl
@@ -23,7 +23,7 @@ from pathlib import Path
 
 import modal
 
-BASE_MODEL = "LiquidAI/LFM2.5-230M"
+BASE_MODEL = "LiquidAI/LFM2.5-350M"
 VOLUME_NAME = "jev-sft"
 LORA_TARGETS = ["q_proj", "k_proj", "v_proj", "out_proj", "in_proj", "w1", "w2", "w3"]
 
@@ -507,8 +507,8 @@ def main(
         return
     if stage == "upload":
         # --label is the path of the model card (Markdown); --base names the base model whose LICENSE is copied.
-        repo = "felixglush156/LFM2.5-350M-banking-extractor-GGUF"
-        print(upload_hf.remote(run, repo, Path(label).read_text(), "LFM2.5-350M-SFT-Q8_0.gguf", base))
+        repo = f"felixglush156/{base.split('/')[-1]}-banking-extractor-GGUF"
+        print(upload_hf.remote(run, repo, Path(label).read_text(), f"{base.split('/')[-1]}-SFT-Q8_0.gguf", base))
         return
     if stage == "snapshot":
         print("\n".join(snapshot.remote("latest", run)))
