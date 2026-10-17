@@ -8,7 +8,7 @@ export { freeTextParams, systemPromptFor };
 /**
  * Pull the free-text values for one action out of a message with a small local model (Ollama).
  *
- * This only proposes values. Jev still picks the action and chooses among candidates; choice
+ * This only proposes values. Jev still picks the action; choice
  * parameters (which account, which card) are Jev's job and are not asked here. Anything the
  * model returns is passed on as is; teaching it to leave absent fields empty is the fine-tuning's job (src/lib/sft).
  */

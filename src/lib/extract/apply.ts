@@ -1,7 +1,7 @@
 import "server-only";
 
 import { CATALOG } from "@/lib/jev/catalog";
-import { normalize } from "@/lib/jev/candidates";
+import { normalize } from "@/lib/jev/normalize";
 import type { ClassifyResult } from "@/lib/jev/types";
 import { extractFields } from "./ollama";
 
