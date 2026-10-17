@@ -137,9 +137,9 @@ export function Chat() {
   // is left open and the cursor goes to the first blank one (checkValidity is the browser's own
   // `required` check, the same one the Send Money button runs).
   function confirmCard() {
+    wantFocus.current = false;
     const form = cardRef.current?.querySelector("form");
     if (!form) return;
-    wantFocus.current = false;
     if (form.checkValidity()) form.requestSubmit();
     else focusForm();
   }
