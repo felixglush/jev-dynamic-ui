@@ -62,6 +62,7 @@ function toActionCall(action: ActionName, prediction: Prediction, fields: Combin
 const SOURCE_STYLE: Record<FieldSource, { badge: string; row: string; text: string }> = {
   jev: { badge: "border-sky-500/40 bg-sky-500/15", row: "bg-sky-500/10", text: "Jev" },
   liquid: { badge: "border-violet-500/40 bg-violet-500/15", row: "bg-violet-500/10", text: "LiquidFM" },
+  file: { badge: "border-border bg-muted", row: "", text: "From file" },
   blank: { badge: "border-warning/40 bg-warning/15", row: "bg-warning/10", text: "Blank" },
 };
 
@@ -141,7 +142,7 @@ export function ReviewCard({ mode, prediction, extraction, annotation, position,
           <span data-testid="predicted-action" className="font-mono text-sm font-semibold">
             {predictedAction}
           </span>
-          {!fieldsOnly && (
+          {!fieldsOnly && extraction.status !== "imported" && (
             <Badge data-testid="action-source" className={cn("text-foreground", SOURCE_STYLE.jev.badge)}>
               {SOURCE_STYLE.jev.text}
             </Badge>
@@ -180,6 +181,7 @@ export function ReviewCard({ mode, prediction, extraction, annotation, position,
           <>
             <p className="text-xs text-muted-foreground" data-testid="extractor-status">
               {extraction.status === "off" && "Values are Jev's."}
+              {extraction.status === "imported" && "These are the imported file's own answers; no model was run on them."}
               {extraction.status === "loading" && "LiquidFM is reading the message…"}
               {extraction.status === "ready" && fields.every((f) => f.spec.type === "choice") && "Every field of this action is a choice, so all of it is Jev's."}
               {extraction.status === "ready" && fields.some((f) => f.spec.type !== "choice") && "Jev picked the action and the choices; LiquidFM read the typed-in values."}
