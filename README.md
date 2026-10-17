@@ -43,6 +43,7 @@ The extractor model is LFM2.5-350M fine-tuned with LoRA on 1,120 examples. Every
 | Stress set through the real extractor in Ollama (129 messages, Q8_0, schema on) | **125 / 129** |
 | Held-out validation, exact match, any key order (catalog / sorted / reversed) | 98.9 / 98.9 / 99.6 % |
 | Held-out test, same three orders | 96.9 / 96.7 / 97.4 % |
+| Baseline: base LFM2.5-350M (not fine-tuned), exact match, validation / test | 20.8 % / 24.2 % |
 
 Caveats: 
 - about 62 training rows were reviewed by me and the rest were approved/edited by Claude given my annotations.
