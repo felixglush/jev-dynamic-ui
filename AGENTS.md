@@ -52,10 +52,11 @@ The fake Jev (`e2e/fake-jev.mts`) is a crude rule-based stand-in. These tests ch
 
 ## Extracting values with a local model (experimental)
 
-`src/lib/extract/` asks a small local model, [LiquidAI's LFM2.5-230M](https://huggingface.co/LiquidAI/LFM2.5-230M-GGUF) running in [Ollama](https://ollama.com), for the free-text values of one action (names, emails, phones, amounts, dates, account numbers; choices stay with Jev). The extractor is required (the default model is `lfm25-350m-sft`, the fine-tuned LFM2.5-350M, registered by `scripts/ollama/use-tuned.sh`; set `OLLAMA_MODEL` to use another) and fills the free-text fields of the form the chat opens; Jev still picks the action and the choices. If Ollama isn't running the chat says the assistant is down; there is no fallback to Jev's own values.
+`src/lib/extract/` asks a small local model, the fine-tuned [LFM2.5-350M](https://huggingface.co/felixglush156/LFM2.5-350M-banking-extractor-GGUF) (a LiquidAI base model) running in [Ollama](https://ollama.com), for the free-text values of one action (names, emails, phones, amounts, dates, account numbers; choices stay with Jev). The extractor is required (the default model is `lfm25-350m-sft`, the fine-tuned LFM2.5-350M, downloaded and registered by `scripts/ollama/use-tuned.sh`; set `OLLAMA_MODEL` to use another) and fills the free-text fields of the form the chat opens; Jev still picks the action and the choices. If Ollama isn't running the chat says the assistant is down; there is no fallback to Jev's own values.
 
 ```bash
-scripts/ollama/setup.sh                     # downloads the Q8_0 GGUF (~235 MB) and runs `ollama create lfm25-230m`
+scripts/ollama/use-tuned.sh                 # downloads the fine-tuned Q8_0 GGUF (~380 MB) and runs `ollama create lfm25-350m-sft`
+scripts/ollama/setup.sh                     # alternative: the untuned base LFM2.5-230M as `lfm25-230m` (much less accurate)
 npm run extract:eval                        # data/sample-messages.txt -> extractions.csv, one row per field
 ```
 
