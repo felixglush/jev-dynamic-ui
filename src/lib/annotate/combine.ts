@@ -13,12 +13,13 @@ import type { Annotation, Prediction } from "./dataset";
 /** What the extractor returned for one message. */
 export type Extraction =
   | { status: "off" } // no extractor wired up (the static preview): Jev's values are shown as they are
+  | { status: "imported" } // an imported JSONL file: its own answers are reviewed, no model ran on them
   | { status: "loading" }
   | { status: "ready"; fields: Record<string, string | number | null> }
   | { status: "error"; message: string };
 
 /** Who filled a field: Jev, LiquidFM, or nobody (the customer will have to type it). */
-export type FieldSource = "jev" | "liquid" | "blank";
+export type FieldSource = "jev" | "liquid" | "blank" | "file";
 
 export type CombinedField = {
   name: string;
@@ -53,7 +54,7 @@ export function combineFields(action: ActionName, prediction: Prediction, extrac
     const jev = jevParam?.value ?? "";
     const liquid = spec.type === "choice" || extraction.status !== "ready" ? "" : formatLiquid(spec, extraction.fields[name]);
     const value = liquid || jev;
-    const source: FieldSource = liquid ? "liquid" : jev ? "jev" : "blank";
+    const source: FieldSource = liquid ? "liquid" : jev ? (extraction.status === "imported" ? "file" : "jev") : "blank";
     return { name, spec, value, source, jev, jevConfidence: jevParam?.confidence ?? null, liquid };
   });
 }
