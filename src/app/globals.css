@@ -124,7 +124,6 @@ body {
 /* Motion. Everything below is switched off for people who ask their system for reduced motion. */
 @theme {
   --animate-rise: rise 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
-  --animate-slide-in: slide-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
 @keyframes rise {
@@ -134,87 +133,52 @@ body {
   }
 }
 
-@keyframes slide-in {
-  from {
-    opacity: 0;
-    transform: translateX(-12px);
-  }
-}
-
-/* The floating card and the phone drawer are native <dialog>s. They animate both ways with CSS
-   alone: @starting-style gives the "just opened" state to transition from, and allow-discrete lets
-   display and overlay wait for the closing fade to finish before the dialog disappears. */
+/* The floating card and the blurred layer behind it stay in the page and switch between two
+   states with a data attribute, so they can animate out as well as in. `visibility` is delayed on
+   the way out so the card isn't clickable or focusable while it fades. */
 .floating-card,
-.drawer {
+.floating-scrim {
+  opacity: 0;
+  visibility: hidden;
   transition:
     opacity 200ms ease-out,
     transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    display 260ms allow-discrete,
-    overlay 260ms allow-discrete;
-  opacity: 0;
+    backdrop-filter 260ms ease-out,
+    visibility 0s linear 260ms;
 }
 
 .floating-card {
-  transform: translateY(16px) scale(0.97);
+  transform: translateY(-8px) scale(0.98);
+  transform-origin: top center;
 }
 
-.drawer {
-  transform: translateX(-100%);
+.floating-scrim {
+  backdrop-filter: blur(0);
+  background-color: color-mix(in oklab, var(--background) 45%, transparent);
 }
 
-.floating-card[open],
-.drawer[open] {
+.floating-card[data-open="true"],
+.floating-scrim[data-open="true"] {
   opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+.floating-card[data-open="true"] {
   transform: none;
 }
 
-@starting-style {
-  .floating-card[open] {
-    opacity: 0;
-    transform: translateY(16px) scale(0.97);
-  }
-
-  .drawer[open] {
-    opacity: 0;
-    transform: translateX(-100%);
-  }
-}
-
-.floating-card::backdrop,
-.drawer::backdrop {
-  transition:
-    background-color 260ms ease-out,
-    backdrop-filter 260ms ease-out,
-    display 260ms allow-discrete,
-    overlay 260ms allow-discrete;
-  background-color: transparent;
-  backdrop-filter: blur(0);
-}
-
-.floating-card[open]::backdrop,
-.drawer[open]::backdrop {
-  background-color: color-mix(in oklab, var(--background) 45%, transparent);
+.floating-scrim[data-open="true"] {
   backdrop-filter: blur(8px);
-}
-
-@starting-style {
-  .floating-card[open]::backdrop,
-  .drawer[open]::backdrop {
-    background-color: transparent;
-    backdrop-filter: blur(0);
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .floating-card,
-  .drawer,
-  .floating-card::backdrop,
-  .drawer::backdrop {
+  .floating-scrim {
     transition: none;
   }
 
-  .animate-rise,
-  .animate-slide-in {
+  .animate-rise {
     animation: none;
   }
 }
