@@ -2,7 +2,7 @@
  * Stress-test the local extractor on data/extract-stress.txt (lines of `message => field=value; ...`, `#` headers name
  * `category | action`). Prints exact-record pass rate per category and writes every result to the JSON path.
  *
- *   OLLAMA_MODEL=lfm25-230m-sft npx tsx --conditions=react-server scripts/extract-stress.mts data/extract-stress.txt out.json
+ *   OLLAMA_MODEL=lfm25-350m-sft npx tsx --conditions=react-server scripts/extract-stress.mts data/extract-stress.txt out.json
  */
 import { readFile, writeFile } from "node:fs/promises";
 import { CATALOG } from "../src/lib/jev/catalog";

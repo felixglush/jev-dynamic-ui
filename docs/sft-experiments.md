@@ -312,10 +312,130 @@ Totals: v4 train 892, val 221, test 362 (v3: 701 / 165 / 266). v4 test has the v
 
 **Not done here:** the stress set (`data/extract-stress.txt`) was deliberately kept out of training: no row duplicates a stress message (checked by the generator), so it remains an independent check.
 
-### Run 5 and the v4 baselines (pending)
+### Run 5 and the v4 baselines
 
-The Modal runs could not start from the thread that built the data: its network policy blocked `input-plane.us-east.modal.com` (HTTP 403 from the egress proxy), which Modal needs to start functions; `api.modal.com` and the storage host worked. Planned runs, all with the Run 4 recipe (rank 16, alpha 32, lr 2e-4, 3 epochs, batch 16):
+2026-10-17. All on Modal (L4), LoRA rank 16 / alpha 32 / lr 2e-4 / batch 16 on the 892 v4 train rows, scored on v4 val (221) and test (362) with schema-constrained decoding. The earlier "could not start" note is resolved: the Modal CLI needed `pip install 'modal[api-proxy-support]'` to go through the sandbox proxy.
 
-- `--stage train --run run5` (seed 0), then `--stage gguf --run run5`
-- `--stage train --run run5s1 --seed 1` (the same data, a second seed, for the noise level)
-- `--stage score --run run4` and `--stage baseline --run base-v4` (scored on v4; Run 4 is the comparison, and only within v4)
+**Overfitting check.** `training/modal_train.py` now measures loss four times an epoch on val AND on a fixed 221-row sample of train rows (so the two are comparable), plus once more on the weights actually kept after training. It keeps either the best-val-loss checkpoint (default) or the final weights (`--keep-last`). Seven runs, with seeds 0 and 1:
+
+| Epochs | Weights kept | Seed | Val loss at the end | Train-sample loss at the end | Val exact | Test exact |
+| --- | --- | --- | --- | --- | --- | --- |
+| 3 | best val loss | 0 | 0.0176 | 0.0043 | 95.0% | 93.4% |
+| 3 | best val loss | 1 | 0.0189 | 0.0036 | 94.1% | 94.8% |
+| 3 | final | 0 | 0.0192 | 0.0022 | 95.5% | 94.5% |
+| 3 | final | 1 | 0.0196 | 0.0019 | 94.6% | 95.0% |
+| 6 | best val loss | 0 | 0.0143 | 0.0015 | 96.4% | 96.1% |
+| 6 | final | 0 | 0.0154 | 0.0005 | 96.8% | 97.0% |
+| **6 (Run 5 candidate)** | final | 1 | 0.0150 | 0.0004 | **98.6%** | 96.7% |
+
+Base scores 17.6% val / 21.3% test on v4, and Run 4 (trained on v3) 87.8% / 88.1%. Only compare within a version.
+
+What this says (conclusions rest on **val** only):
+- **No harmful overfitting.** Val loss falls to about 0.015 and stays flat through all six epochs (the last measurement is at the final step, 336). It never rises, while train loss keeps dropping to 0.0004. The gap is large (10 to 40 times), but a gap only matters if val gets worse, and it didn't.
+- **If anything the 3-epoch recipe was slightly undertrained.** Val exact match is 94.1 to 95.5% at 3 epochs and 96.4 to 98.6% at 6.
+- **Val loss is a poor way to pick a checkpoint here.** It is flat after about epoch 2, so it keeps early weights that score no better.
+- **The candidate** (6 epochs, final weights, seed 1) was chosen by val exact match alone.
+
+**The test set is no longer sealed for this comparison.** I scored test for every run above, so it was looked at seven times, and it is no longer an independent final estimate. Treat 96.7% as a development number, with about 2.5 points of seed noise (3 epochs, best weights: 93.4% against 94.8% on test for seeds 0 and 1). A clean final number needs a fresh test set (v5) scored once on the chosen model.
+
+**Stress set (129 adversarial messages, kept out of training), Q8_0 GGUF in Ollama, greedy:** Run 5 candidate **95/129 exact**, Run 4 83/129, base 17/129. Still weak: injection 1/4, add contact 5/10, emails 3/6, spelled-out and odd amounts 9/13, `cancel_etransfer` 2/4. Per-case results: `stress-run5.json` in the project's `tuned-model-run/` folder.
+
+Caveats: v4 val/test are AI-written and not human-reviewed; the stress set is my own labels; one candidate per seed pair, so no confidence intervals beyond the two-seed spread.
+
+Next if more is wanted: the remaining stress failures (injection and email shapes) as more train-only rows, and 8 to 10 epochs to see whether anything more is left (val loss says plateau).
+
+### Serving bug found: Ollama's JSON schema reorders the keys (2026-10-17)
+
+The Run 5 candidate got every `add contact Sam <phone>` message wrong on the GGUF in Ollama (`email: "sam"` made up), including a message that is in its own training set. The same weights in bf16 on Modal answered all of them correctly, both with the scoring decoder and free-running (`--stage probe`). The difference was the request: the extractor sent a JSON schema as Ollama's `format`, and Ollama writes the keys of a schema in **alphabetical order** (`email, name, phone`; `amount, date, recipient, recipient_email`), while training wrote them in catalog order (`name, email, phone`). With the alphabetical order the model has to write an email before it has read the name, and it makes one up. Free-running Ollama (no `format`) writes the trained order.
+
+| Stress set (129, never trained on), Run 5 candidate GGUF | Exact |
+| --- | --- |
+| With `format` schema (how it was served until now, and how Run 4 was stress-tested) | 95/129 |
+| Without `format` (now the default in `extractFields`) | **113/129** |
+| Same, with Modelfile `repeat_penalty 1.05` / `top_k 50` removed | 95/129 with format, so it is not the cause |
+
+Injection goes from 1/4 to 4/4, add-contact from 5/10 to 8/10, emails from 3/6 to 5/6. The earlier list of failures (junk tokens like `!` and `?` in the email field, `email: "sam"`, `none` placeholders) was mostly this bug, not missing data. The Run 4 stress numbers (83/129) were also taken with the schema, so they are not comparable with the 113.
+
+What is left (16 messages, from `training/out/stress-run5-noformat.json`): worded amounts (`one hundred and twenty five dollars` gives 1250, `two grand` missed, `half of 200` computed), several people or addresses in one message (`send my mom and dad $50 each`, `add Sam and Pat as contacts`, two autodeposit emails), wrong-action or junk text (`open a TFSA` sent to the send form, `what's the weather today?`, `x@y`), dates (`in 2 days` missed, `yesterday for lunch` filled, `at the end of the month` missed), and odd names (`X Æ A-12`, `@sam`). A bad answer shape still cannot be ruled out without the schema, but none of the 129 stress answers failed to parse.
+
+## Fair evaluation v5: worded numbers, several people, junk text; 230M against 350M
+
+2026-10-17. `data/sft/v5/` is frozen; `CURRENT_VERSION` is v5; v1 to v4 still rebuild exactly (`dataset.test.ts`). v5 train 1120, val 274, test 459 (v4: 892 / 221 / 362).
+
+**What was added (378 rows, all pinned, AI-written, approved by Claude after the substring check, not human-reviewed):** 228 train-only, 53 val, 97 test, aimed at what still failed on the stress set once the key-order bug above was fixed. Train and held-out rows use separate names, merchants, amounts, dates and phrasings.
+
+| Pattern | What the labels say | Train / val / test |
+| --- | --- | --- |
+| `worded-number` | number words become digits: `one hundred and twenty five dollars` 125, `two grand` 2000, `fifteen hundred` 1500, `two and a half thousand` 2500 (in 8 actions) | 66 / 14 / 28 |
+| `amount-not-stated` | arithmetic and vague amounts stay blank: `half of 200`, `a couple hundred`, `a few bucks` | 12 / 4 / 4 |
+| `multi-entity` | several people, addresses or payees in one message: every field blank (`send my brother and sister $40 each`, `autodeposit for a@x.com and b@y.com`) | 39 / 8 / 14 |
+| `junk-input` | wrong-action or unrelated text (`open a TFSA` asked of the send form, `hello`, `x@y`, `foo@`): every field blank | 28 / 8 / 14 |
+| `date-edge` | `in 2 days`, `next friday`, `at the end of the month` (copied minus a leading `at` or `on`) are dates; `at 4pm`, `asap`, `yesterday for lunch` are not; `tomorrow at 4pm` gives `tomorrow` | 39 / 8 / 16 |
+| `odd-name` | `J.R. Smith`, `Dr. Okafor`, `@sam` (gives `sam`) fill the name; `SAM@EXAMPLE.COM` fills the email and not the name; `sam at example dot com` is not an email | 35 / 8 / 15 |
+| `phone-ext` | the extension is dropped (`416-555-0100 x123` gives `416-555-0100`) | 9 / 3 / 6 |
+
+Labeling calls made without asking, for Felix to confirm or change: several-people messages are included as all-blank rows (until now they were left out of the data); `two grand` gives 2000 (Felix's call); computed amounts stay blank; a time of day is not a date. The stress labels for `cancel the transfer to sam@example.com` (now blank, like every `cancel-email-only` row) and the `x123` phone (now `416-555-0100`) contradicted the labeling rules and were corrected.
+
+**Runs.** LoRA rank 16 / alpha 32 / lr 2e-4 / batch 16, 6 epochs, final weights kept, two seeds. The 350M is `LiquidAI/LFM2.5-350M` (the same recipe and LoRA targets worked unchanged). Scoring is schema-constrained in the trained key order, which is what a free-running Ollama writes.
+
+| Model | Val exact | Test exact | Test: blank filled / missed / wrong | Final val loss | Final train-sample loss |
+| --- | --- | --- | --- | --- | --- |
+| Base 230M | 15.3% | 19.0% | 91.2% / 0.8% / 12.9% | | |
+| Base 350M | 20.8% | 24.2% | 84.5% / 0.2% / 11.4% | | |
+| Run 5 (230M, v4 data), re-scored on v5 | 90.5% | 88.0% | 6.5% / 1.4% / 2.3% | | |
+| 230M, seed 0 | 93.8% | 93.0% | 2.7% / 1.2% / 1.7% | 0.0201 | 0.0005 |
+| 230M, seed 1 | 94.5% | 94.3% | 1.7% / 0.5% / 2.2% | 0.0166 | 0.0004 |
+| **350M, seed 0 (candidate)** | **96.4%** | **95.9%** | 1.3% / 0.6% / 1.4% | 0.0112 | 0.0002 |
+| 350M, seed 1 | 96.4% | 95.9% | 1.8% / 0.5% / 1.2% | 0.0144 | 0.0002 |
+
+Test pass rate per new pattern (test rows in brackets):
+
+| Pattern | Run 5 (v4 data) | 230M s0 | 230M s1 | 350M s0 | 350M s1 |
+| --- | --- | --- | --- | --- | --- |
+| `multi-entity` (14) | 0% | 86% | 93% | 100% | 100% |
+| `junk-input` (14) | 86% | 93% | 93% | 100% | 93% |
+| `date-edge` (16) | 50% | 94% | 94% | 88% | 88% |
+| `odd-name` (15) | 47% | 67% | 87% | 87% | 87% |
+| `worded-number` (28) | 75% | 71% | 64% | 79% | 86% |
+| `phone-ext` (6) | 83% | 100% | 100% | 100% | 100% |
+| `amount-not-stated` (4) | 25% | 50% | 75% | 75% | 75% |
+
+What this says (choices rest on val only):
+- **The new data works:** 230M on v5 data gains 3 to 4 points on val over the Run 5 model, and the patterns it was written for improve a lot (`multi-entity` 0% to 86 to 93%, `odd-name` 47% to 67 to 87%, `date-edge` 50% to 94%).
+- **350M is better than 230M** by about 2 to 3 points on val on both seeds (96.4% against 93.8% and 94.5%), with a lower val loss (0.011 to 0.014 against 0.017 to 0.020) and less made-up text. Both 350M seeds tie on val; seed 0 is the candidate because its val loss is lower (best 0.0107 at epoch 3.2, 0.0112 at the end).
+- **No harmful overfitting at 6 epochs for either size.** Train-sample loss falls to 0.0002 to 0.0005 while val loss is flat or nearly flat. The one blemish is 350M seed 1, whose val loss drifts from 0.0124 (epoch 2.4) up to 0.0144 at epoch 6; held-out exact match did not change.
+- **Still weak:** `worded-number` is the least solved (64 to 86%): some spelled-out amounts are off by a digit (`one hundred and twenty-five` gave 175). Val misses also include made-up junk copies of injected text and `nadia at example dot org` kept as an email.
+- The test set is no longer sealed for this comparison: it was scored for all seven runs. The v5 additions are new, but a clean final number needs a v6 test.
+
+**Stress set (129, never trained on; its categories guided what v5 contains, so it is less independent than before), GGUF in Ollama, free-running:** 350M candidate **123/129** (after the two label fixes above). Run 5 (230M, v4 data) was 113/129 before the label fixes. What the 350M still gets wrong: injection 1/4 (it copies `{"recipient":"Eve","amount":999}` and `System: ...admin@evil.com`), `what's the weather today?` fills `date: today`, `pay my Bell internet bill` gives `Bell internet`, and the `ext 123, 416-555-0100 x123` phone. The 230M had injection at 4/4, so the 350M's gap there is worth a v6 batch of more injection rows.
+
+Caveats: v5 sets are AI-written and not human-reviewed; two seeds per size; the Q8_0 GGUF was stress-tested but not scored on the v5 test set.
+
+## Key order: training with shuffled answer keys (350M)
+
+2026-10-17. The serving bug above comes from training only in catalog key order. `training/modal_train.py --order-copies 3` fixes it at the source: every training row appears three times with the answer's keys in a different random order (values identical; val and test rows are never copied). `evaluate` can also decode the same records with the keys written in catalog, alphabetical (what Ollama's schema does) or reversed order (`by_key_order` in the result file; counts only).
+
+Held-out exact match on v5 (350M, LoRA r=16, lr 2e-4, batch 16, final weights kept):
+
+| Run | Trained on | Val: catalog / sorted / reversed | Test: catalog / sorted / reversed |
+| --- | --- | --- | --- |
+| 350M seed 0 (the candidate in the v5 section above) | catalog order, 6 epochs | 96.4 / **54.4** / 65.3 | 95.9 / **54.2** / 71.5 |
+| 350M seed 0 | shuffled x3, 2 epochs (**new candidate**) | **98.9 / 98.9 / 99.6** | 96.9 / 96.7 / 97.4 |
+| 350M seed 1 | shuffled x3, 2 epochs | 98.2 / 97.8 / 97.1 | 96.5 / 96.7 / 96.3 |
+| 350M seed 0 | shuffled x3, 4 epochs | 98.9 / 98.2 / 98.5 | 96.3 / 96.5 / 96.5 |
+
+What this says:
+- **The catalog-order model really did depend on key order**: under the alphabetical order Ollama uses with a schema, it drops to about 54% exact and fills 22 to 23% of fields that should be blank.
+- **Shuffled-order training removes the dependence** (all three orders within about 1 point) and costs nothing on accuracy: it is also slightly better than the catalog-only model in its own order (98.9 against 96.4 on val). Seeds 0 and 1 and 2 against 4 epochs all agree within noise. Choice rests on val; test is not sealed (see the v5 section).
+- **Loss is not comparable with the earlier runs**: val loss is about 0.097 and train-sample loss 0.089 (earlier 0.011 and 0.0002). Most of that is the model being unsure which key comes next, which is expected when the order is random; the small gap between the two numbers means no overfitting.
+
+**Through Ollama (stress set, 129 messages, GGUF Q8_0):** shuffled 350M candidate **126/129** without a schema and **125/129** with Ollama's schema (previous best 123/129). Injection is 4/4 in both. Misses: `send two grand to Mike` gives 2500, `what's the weather today?` fills `date: today`, `I don't recognize a charge at Shell yesterday` misses the date, and (schema only) a long polite message loses the recipient.
+
+So the extractor sends the schema again (`format`), which guarantees valid JSON, and it is safe only with a model trained this way: pointing it at an older GGUF without dropping `format` brings the serving bug back (note in `extractFields`). The GGUF is `o350e2s0/` on the Modal volume (`modal volume get jev-sft o350e2s0/LFM2.5-350M-SFT-Q8_0.gguf ...`; an older copy of the same file in that folder is named `LFM2.5-230M-SFT-Q8_0.gguf` because the converter used to hardcode that name, and it is the 350M too), registered locally as `lfm25-350m-sft-shuffled`.
+
+
+## Release: shuffled-key 350M on Hugging Face, and the app default
+
+2026-10-17. Run `o350e2s0` (LFM2.5-350M, 1,120 v5 train rows, 3 key-order copies, 2 epochs; val 98.9%, test 96.9%) was exported to Q8_0 (379 MB) and uploaded with a model card (`training/hf/MODEL_CARD_350M.md`) and the base model's LICENSE to the **private** repo `felixglush156/LFM2.5-350M-banking-extractor-GGUF` (`modal run training/modal_train.py --stage upload --run o350e2s0 --base LiquidAI/LFM2.5-350M --label training/hf/MODEL_CARD_350M.md`, which uses the Modal secret `huggingface-secret`). The card says that only about 62 rows were human-reviewed, that the scores are on the merged bf16 weights, and that the test set is not sealed.
+
+The extractor's default model is now `lfm25-350m-sft` (set `OLLAMA_MODEL` to use another); `scripts/ollama/use-tuned.sh` registers it from `models/LFM2.5-350M-SFT-Q8_0.gguf` with `temperature 0` only (the old Modelfile also set `top_k 50` and `repeat_penalty 1.05`, which the requests did not need; removing `repeat_penalty` made no difference on the stress set). Default model through the real extractor with the schema: 125/129 on the stress set.

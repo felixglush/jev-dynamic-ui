@@ -14,7 +14,7 @@ export { freeTextParams, systemPromptFor };
  */
 
 const OLLAMA_URL = process.env.OLLAMA_URL ?? "http://127.0.0.1:11434";
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "lfm25-230m";
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "lfm25-350m-sft";
 const TIMEOUT_MS = 60_000;
 
 export type ExtractStatus =
@@ -54,6 +54,12 @@ export async function extractFields(
   const params = freeTextParams(action);
   if (params.length === 0) return {};
 
+  // `format` makes Ollama enforce the JSON schema, so the answer is always valid JSON. Ollama writes a schema's
+  // keys in alphabetical order, not the catalog order. A model trained in catalog order only (Runs 1 to 5, the
+  // first 350M) falls apart under that: 95/129 on the stress set with the schema against 113/129 without, and
+  // 54% against 96% exact on val. The model in use is trained on answers with the keys in random order
+  // (training/modal_train.py --order-copies 3), so the order does not matter to it. Do not point this at an
+  // older GGUF without dropping `format` (docs/sft-experiments.md, "Key order").
   const response = await fetch(`${OLLAMA_URL}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

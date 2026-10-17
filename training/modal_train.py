@@ -8,8 +8,8 @@ LoRA fine-tune LiquidAI/LFM2.5-230M on the field-extraction data, on Modal, and 
 Stages (--stage): baseline | train | score | gguf | snapshot | all (default); see main() for the options. The training data is read from the local
 data/sft/ folder and sent to Modal; results land in the Modal Volume "jev-sft" under latest/. Then:
 
-    modal volume get jev-sft latest/LFM2.5-230M-SFT-Q8_0.gguf scripts/ollama/models/
-    scripts/ollama/use-tuned.sh                # registers it with Ollama as lfm25-230m-sft
+    modal volume get jev-sft latest/LFM2.5-350M-SFT-Q8_0.gguf scripts/ollama/models/   # named after the base model
+    scripts/ollama/use-tuned.sh                # registers it with Ollama as lfm25-350m-sft
 
 Not run in CI: it needs a Modal account and a GPU. The LoRA settings follow the model's own layer
 names, read from its safetensors header: attention q/k/v/out_proj, the short-convolution blocks'
@@ -175,13 +175,19 @@ def load_records(text: str) -> list[dict]:
     return [json.loads(line) for line in text.splitlines() if line.strip()]
 
 
-def answer_schema(label: dict) -> dict:
-    """The JSON schema the extractor hands Ollama (schemaFor in ollama.ts): every field, in order, amounts as numbers."""
-    properties = {name: {"type": "number" if name in AMOUNT_FIELDS else "string"} for name in label}
+def ordered(names, key_order: str = "catalog") -> list[str]:
+    """Field names in the order the decoder writes them: as trained (catalog), alphabetical (what Ollama's schema does), or reversed."""
+    names = list(names)
+    return sorted(names) if key_order == "sorted" else names[::-1] if key_order == "reversed" else names
+
+
+def answer_schema(label: dict, key_order: str = "catalog") -> dict:
+    """The JSON schema the extractor hands Ollama (schemaFor in ollama.ts): every field, amounts as numbers, keys in `key_order`."""
+    properties = {name: {"type": "number" if name in AMOUNT_FIELDS else "string"} for name in ordered(label, key_order)}
     return {"type": "object", "properties": properties, "required": list(properties), "additionalProperties": False}
 
 
-def generate_replies(model, tokenizer, records: list[dict]) -> list[dict]:
+def generate_replies(model, tokenizer, records: list[dict], key_order: str = "catalog") -> list[dict]:
     """
     Greedy answers for each record's system + user messages, paired with the label. Decoding is
     constrained to the action's JSON schema, as Ollama does at run time, so the model can only
@@ -200,7 +206,7 @@ def generate_replies(model, tokenizer, records: list[dict]) -> list[dict]:
         ).to(model.device)
         label = json.loads(record["messages"][2]["content"])
         # A logits processor holds the parse state, so each answer gets its own.
-        constrain = xgr.contrib.hf.LogitsProcessor(compiler.compile_json_schema(json.dumps(answer_schema(label))))
+        constrain = xgr.contrib.hf.LogitsProcessor(compiler.compile_json_schema(json.dumps(answer_schema(label, key_order))))
         with torch.no_grad():
             out = model.generate(**prompt, max_new_tokens=160, do_sample=False, logits_processor=[constrain])
         reply = tokenizer.decode(out[0][prompt["input_ids"].shape[1]:], skip_special_tokens=True)
@@ -218,7 +224,7 @@ def generate_replies(model, tokenizer, records: list[dict]) -> list[dict]:
     return rows
 
 
-def evaluate(model, tokenizer, files: dict[str, str]) -> dict:
+def evaluate(model, tokenizer, files: dict[str, str], other_orders: bool = False) -> dict:
     result = {}
     for split in ("val", "test"):
         rows = generate_replies(model, tokenizer, load_records(files[split]))
@@ -228,6 +234,12 @@ def evaluate(model, tokenizer, files: dict[str, str]) -> dict:
         # "Fair evaluation v2"): only counts leave this function, never the messages or which rows failed.
         if split == "val":
             result[split]["examples"] = [r for r in rows if not record_passes(r)][:40]
+        if other_orders:
+            # The same records decoded with the keys written in another order (counts only).
+            result[split]["by_key_order"] = {
+                order: {k: v for k, v in score(generate_replies(model, tokenizer, load_records(files[split]), order)).items() if k in ("exact_record_match", "fabrication_rate", "miss_rate", "wrong_rate", "invalid_json")}
+                for order in ("sorted", "reversed")
+            }
     return result
 
 
@@ -252,23 +264,43 @@ def baseline(files: dict[str, str], base: str = BASE_MODEL, run: str = "latest")
 
 
 @app.function(image=train_image, gpu="L4", timeout=7200, volumes={"/out": volume})
-def train(files: dict[str, str], base: str = BASE_MODEL, epochs: int = 3, lr: float = 2e-4, rank: int = 16, run: str = "latest", seed: int = 0) -> dict:
-    """LoRA fine-tune on train.jsonl, keep the best epoch by validation loss, score it, save adapter and merged model."""
+def train(files: dict[str, str], base: str = BASE_MODEL, epochs: int = 3, lr: float = 2e-4, rank: int = 16, run: str = "latest", seed: int = 0, patience: int = 100, keep_last: bool = False, order_copies: int = 1) -> dict:
+    """LoRA fine-tune on train.jsonl, keep the best checkpoint by validation loss (stop early after `patience` evals without improvement), score it, save adapter and merged model."""
     import torch
     from datasets import Dataset
     from peft import LoraConfig
-    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from transformers import AutoModelForCausalLM, AutoTokenizer, EarlyStoppingCallback
     from trl import SFTConfig, SFTTrainer
 
-    def to_dataset(text: str) -> Dataset:
-        # Prompt/completion form: the loss is counted on the assistant's answer only.
+    import random
+
+    def to_dataset(text: str, copies: int = 1) -> Dataset:
+        # Prompt/completion form: the loss is counted on the assistant's answer only. With copies > 1 every
+        # record appears that many times, each with its answer keys in a different random order, so the model
+        # does not depend on the order the fields are written in (the values are identical).
         records = load_records(text)
-        return Dataset.from_list(
-            [{"prompt": r["messages"][:2], "completion": [r["messages"][2]]} for r in records]
-        )
+        rng = random.Random(seed)
+        rows = []
+        for r in records:
+            answer = json.loads(r["messages"][2]["content"])
+            for _ in range(copies):
+                keys = list(answer)
+                if copies > 1:
+                    rng.shuffle(keys)
+                completion = {"role": "assistant", "content": json.dumps({k: answer[k] for k in keys}, ensure_ascii=False, separators=(",", ":"))}
+                rows.append({"prompt": r["messages"][:2], "completion": [completion]})
+        return Dataset.from_list(rows)
 
     tokenizer = AutoTokenizer.from_pretrained(base)
     model = AutoModelForCausalLM.from_pretrained(base, dtype=torch.bfloat16).to("cuda")
+    # Overfitting watch: loss is measured four times an epoch on the held-out val rows AND on a fixed
+    # sample of train rows (same size as val, so the two numbers are comparable; the running train loss
+    # in the log is noisy and includes dropout). Val loss rising while train loss keeps falling = overfitting.
+    train_dataset = to_dataset(files["train"], order_copies)
+    steps_per_epoch = max(1, -(-len(train_dataset) // 16))  # ceil: the last partial batch is a step too
+    eval_every = max(1, steps_per_epoch // 4)
+    val_dataset = to_dataset(files["val"])
+    train_sample = to_dataset(files["train"]).shuffle(seed=0).select(range(min(len(val_dataset), len(train_dataset))))  # catalog order, like val
     trainer = SFTTrainer(
         model=model,
         args=SFTConfig(
@@ -281,22 +313,28 @@ def train(files: dict[str, str], base: str = BASE_MODEL, epochs: int = 3, lr: fl
             bf16=True,
             max_length=512,
             logging_steps=10,
-            eval_strategy="epoch",
-            save_strategy="epoch",
+            eval_strategy="steps",
+            eval_steps=eval_every,
+            save_strategy="steps",
+            save_steps=eval_every,
             save_total_limit=2,
-            load_best_model_at_end=True,
-            metric_for_best_model="eval_loss",
+            load_best_model_at_end=not keep_last,
+            metric_for_best_model="eval_val_loss",
+            greater_is_better=False,
             report_to="none",
             seed=seed,
         ),
-        train_dataset=to_dataset(files["train"]),
-        eval_dataset=to_dataset(files["val"]),
+        train_dataset=train_dataset,
+        eval_dataset={"val": val_dataset, "train": train_sample},
+        callbacks=[EarlyStoppingCallback(early_stopping_patience=patience)],
         processing_class=tokenizer,
         peft_config=LoraConfig(
             r=rank, lora_alpha=2 * rank, lora_dropout=0.05, target_modules=LORA_TARGETS, task_type="CAUSAL_LM"
         ),
     )
     trainer.train()
+    # One more measurement on the weights actually kept (the last step is not always an eval step).
+    final = trainer.evaluate()
 
     out = Path(f"/out/{run}")
     out.mkdir(parents=True, exist_ok=True)
@@ -305,10 +343,16 @@ def train(files: dict[str, str], base: str = BASE_MODEL, epochs: int = 3, lr: fl
     merged.save_pretrained(out / "merged")
     tokenizer.save_pretrained(out / "merged")
 
-    result = evaluate(merged, tokenizer, files)
+    result = evaluate(merged, tokenizer, files, other_orders=True)
     result["settings"] = {"base": base, "epochs": epochs, "lr": lr, "rank": rank, "targets": LORA_TARGETS}
     result["train_records"] = len(load_records(files["train"]))
     result["log"] = trainer.state.log_history
+    result["final_eval"] = {k: v for k, v in final.items() if k.endswith("_loss")}
+    result["best_checkpoint_step"] = int(trainer.state.best_global_step)
+    result["settings"]["seed"] = seed
+    result["settings"]["patience"] = patience
+    result["settings"]["keep_last"] = keep_last
+    result["settings"]["order_copies"] = order_copies
     (out / "tuned.json").write_text(json.dumps(result, indent=2, ensure_ascii=False))
     volume.commit()
     return result
@@ -324,7 +368,27 @@ def score_saved(files: dict[str, str], run: str) -> dict:
     path = f"/out/{run}/merged"
     tokenizer = AutoTokenizer.from_pretrained(path)
     model = AutoModelForCausalLM.from_pretrained(path, dtype=torch.bfloat16).to("cuda")
-    return evaluate(model, tokenizer, files)
+    return evaluate(model, tokenizer, files, other_orders=True)
+
+
+@app.function(image=train_image, gpu="L4", timeout=1800, volumes={"/out": volume})
+def probe(run: str, records: list[dict]) -> list[dict]:
+    """Answers for a few records from a saved merged model, both schema-constrained (as scored) and free-running."""
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    volume.reload()
+    path = f"/out/{run}/merged"
+    tokenizer = AutoTokenizer.from_pretrained(path)
+    model = AutoModelForCausalLM.from_pretrained(path, dtype=torch.bfloat16).to("cuda")
+    constrained = generate_replies(model, tokenizer, records)
+    free = []
+    for record in records:
+        prompt = tokenizer.apply_chat_template(record["messages"][:2], add_generation_prompt=True, return_tensors="pt", return_dict=True).to(model.device)
+        with torch.no_grad():
+            out = model.generate(**prompt, max_new_tokens=160, do_sample=False)
+        free.append(tokenizer.decode(out[0][prompt["input_ids"].shape[1]:], skip_special_tokens=True))
+    return [{"message": c["message"], "constrained": c["reply"], "free": f, "label": c["label"]} for c, f in zip(constrained, free)]
 
 
 @app.function(image=gguf_image, timeout=1800, volumes={"/out": volume})
@@ -333,13 +397,36 @@ def to_gguf(run: str = "latest") -> str:
     import subprocess
 
     volume.reload()
-    target = f"/out/{run}/LFM2.5-230M-SFT-Q8_0.gguf"
+    # Named after the base model that was trained (tuned.json), e.g. LFM2.5-350M-SFT-Q8_0.gguf.
+    settings = json.loads(Path(f"/out/{run}/tuned.json").read_text()).get("settings", {}) if Path(f"/out/{run}/tuned.json").exists() else {}
+    target = f"/out/{run}/{settings.get('base', BASE_MODEL).split('/')[-1]}-SFT-Q8_0.gguf"
     subprocess.run(
         ["python", "/opt/llama.cpp/convert_hf_to_gguf.py", f"/out/{run}/merged", "--outfile", target, "--outtype", "q8_0"],
         check=True,
     )
     volume.commit()
     return target
+
+
+@app.function(
+    image=modal.Image.debian_slim(python_version="3.12").pip_install("huggingface_hub"),
+    timeout=1800,
+    volumes={"/out": volume},
+    secrets=[modal.Secret.from_name("huggingface-secret")],
+)
+def upload_hf(run: str, repo: str, card: str, gguf_name: str, base: str) -> str:
+    """Upload <run>'s GGUF, a model card and the base model's license to a PRIVATE Hugging Face repo (created if missing)."""
+    import os
+    from huggingface_hub import HfApi, hf_hub_download
+
+    token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN") or os.environ.get("HUGGINGFACE_TOKEN")
+    api = HfApi(token=token)
+    volume.reload()
+    api.create_repo(repo, private=True, exist_ok=True)
+    api.upload_file(path_or_fileobj=str(next(Path(f"/out/{run}").glob("*-SFT-Q8_0.gguf"))), path_in_repo=gguf_name, repo_id=repo)
+    api.upload_file(path_or_fileobj=card.encode(), path_in_repo="README.md", repo_id=repo)
+    api.upload_file(path_or_fileobj=hf_hub_download(base, "LICENSE", token=token), path_in_repo="LICENSE", repo_id=repo)
+    return f"https://huggingface.co/{repo}"
 
 
 @app.function(image=modal.Image.debian_slim(python_version="3.12"), timeout=1800, volumes={"/out": volume})
@@ -397,15 +484,32 @@ def main(
     train_subset: str = "all",
     label: str = "",
     seed: int = 0,
+    patience: int = 100,
+    keep_last: bool = False,
+    order_copies: int = 1,
 ):
     """
     --run     folder in the Modal volume that the stage reads or writes (default latest, which every training
               run overwrites: give each run its own name)
-    --stage   baseline | train | score (a saved <run>/merged model, no training) | gguf | snapshot (copy latest to <run>) | all
+    --stage   baseline | train | score (a saved <run>/merged model, no training) | gguf | snapshot (copy latest to <run>) | probe (answer the records in the JSONL file named by --label) | upload (private Hugging Face repo, --label = model card) | all
     --train-subset  all | run1 (the rows Run 1 trained on: no trainOnly / split / v2 rows)
     --seed    training seed (default 0, the seed of Runs 1 to 4)
-    --label   names the local result file training/out/v4-<label>.json (default: the run name)
+    --patience  stop early after this many evals (four per epoch) without a better val loss (default 100: effectively never for runs this short, but 100 non-improving evals do stop a long one)
+    --keep-last  keep the final-epoch weights instead of the best-val-loss checkpoint (to test whether more training hurts)
+    --order-copies  train on this many copies of every row, each with the answer keys in a different random order (default 1: catalog order)
+    --label   names the local result file training/out/v5-<label>.json (default: the run name)
     """
+    if stage == "probe":
+        # --label is a path to a JSONL file of records (the data/sft format) to answer from <run>.
+        records = [json.loads(line) for line in Path(label).read_text().splitlines() if line.strip()]
+        for row in probe.remote(run, records):
+            print(json.dumps(row, ensure_ascii=False))
+        return
+    if stage == "upload":
+        # --label is the path of the model card (Markdown); --base names the base model whose LICENSE is copied.
+        repo = "felixglush156/LFM2.5-350M-banking-extractor-GGUF"
+        print(upload_hf.remote(run, repo, Path(label).read_text(), "LFM2.5-350M-SFT-Q8_0.gguf", base))
+        return
     if stage == "snapshot":
         print("\n".join(snapshot.remote("latest", run)))
         return
@@ -423,7 +527,7 @@ def main(
     def save(result: dict, kind: str) -> None:
         # One file per stage; "all" runs two scorings, so they get a suffix.
         suffix = f"-{kind}" if stage == "all" else ""
-        (out_dir / f"v4-{label or run}{suffix}.json").write_text(json.dumps(result, indent=2, ensure_ascii=False))
+        (out_dir / f"v5-{label or run}{suffix}.json").write_text(json.dumps(result, indent=2, ensure_ascii=False))
 
     if stage in ("baseline", "all"):
         result = baseline.remote(files, base, run)
@@ -434,9 +538,9 @@ def main(
         save(result, "score")
         report(f"saved model {run}", result)
     if stage in ("train", "all"):
-        result = train.remote(files, base, epochs, lr, rank, run, seed)
+        result = train.remote(files, base, epochs, lr, rank, run, seed, patience, keep_last, order_copies)
         save(result, "tuned")
         report(f"LoRA (r={rank}, lr={lr}, {epochs} epochs, {result['train_records']} train rows)", result)
     if stage in ("gguf", "all"):
         print("\nGGUF:", to_gguf.remote(run))
-        print(f"Fetch it: modal volume get jev-sft {run}/LFM2.5-230M-SFT-Q8_0.gguf scripts/ollama/models/")
+        print(f"Fetch it: modal volume get jev-sft {run}/<base model name>-SFT-Q8_0.gguf scripts/ollama/models/")
