@@ -175,13 +175,19 @@ def load_records(text: str) -> list[dict]:
     return [json.loads(line) for line in text.splitlines() if line.strip()]
 
 
-def answer_schema(label: dict) -> dict:
-    """The JSON schema the extractor hands Ollama (schemaFor in ollama.ts): every field, in order, amounts as numbers."""
-    properties = {name: {"type": "number" if name in AMOUNT_FIELDS else "string"} for name in label}
+def ordered(names, key_order: str = "catalog") -> list[str]:
+    """Field names in the order the decoder writes them: as trained (catalog), alphabetical (what Ollama's schema does), or reversed."""
+    names = list(names)
+    return sorted(names) if key_order == "sorted" else names[::-1] if key_order == "reversed" else names
+
+
+def answer_schema(label: dict, key_order: str = "catalog") -> dict:
+    """The JSON schema the extractor hands Ollama (schemaFor in ollama.ts): every field, amounts as numbers, keys in `key_order`."""
+    properties = {name: {"type": "number" if name in AMOUNT_FIELDS else "string"} for name in ordered(label, key_order)}
     return {"type": "object", "properties": properties, "required": list(properties), "additionalProperties": False}
 
 
-def generate_replies(model, tokenizer, records: list[dict]) -> list[dict]:
+def generate_replies(model, tokenizer, records: list[dict], key_order: str = "catalog") -> list[dict]:
     """
     Greedy answers for each record's system + user messages, paired with the label. Decoding is
     constrained to the action's JSON schema, as Ollama does at run time, so the model can only
@@ -200,7 +206,7 @@ def generate_replies(model, tokenizer, records: list[dict]) -> list[dict]:
         ).to(model.device)
         label = json.loads(record["messages"][2]["content"])
         # A logits processor holds the parse state, so each answer gets its own.
-        constrain = xgr.contrib.hf.LogitsProcessor(compiler.compile_json_schema(json.dumps(answer_schema(label))))
+        constrain = xgr.contrib.hf.LogitsProcessor(compiler.compile_json_schema(json.dumps(answer_schema(label, key_order))))
         with torch.no_grad():
             out = model.generate(**prompt, max_new_tokens=160, do_sample=False, logits_processor=[constrain])
         reply = tokenizer.decode(out[0][prompt["input_ids"].shape[1]:], skip_special_tokens=True)
@@ -218,7 +224,7 @@ def generate_replies(model, tokenizer, records: list[dict]) -> list[dict]:
     return rows
 
 
-def evaluate(model, tokenizer, files: dict[str, str]) -> dict:
+def evaluate(model, tokenizer, files: dict[str, str], other_orders: bool = False) -> dict:
     result = {}
     for split in ("val", "test"):
         rows = generate_replies(model, tokenizer, load_records(files[split]))
@@ -228,6 +234,12 @@ def evaluate(model, tokenizer, files: dict[str, str]) -> dict:
         # "Fair evaluation v2"): only counts leave this function, never the messages or which rows failed.
         if split == "val":
             result[split]["examples"] = [r for r in rows if not record_passes(r)][:40]
+        if other_orders:
+            # The same records decoded with the keys written in another order (counts only).
+            result[split]["by_key_order"] = {
+                order: {k: v for k, v in score(generate_replies(model, tokenizer, load_records(files[split]), order)).items() if k in ("exact_record_match", "fabrication_rate", "miss_rate", "wrong_rate", "invalid_json")}
+                for order in ("sorted", "reversed")
+            }
     return result
 
 
@@ -252,7 +264,7 @@ def baseline(files: dict[str, str], base: str = BASE_MODEL, run: str = "latest")
 
 
 @app.function(image=train_image, gpu="L4", timeout=7200, volumes={"/out": volume})
-def train(files: dict[str, str], base: str = BASE_MODEL, epochs: int = 3, lr: float = 2e-4, rank: int = 16, run: str = "latest", seed: int = 0, patience: int = 100, keep_last: bool = False) -> dict:
+def train(files: dict[str, str], base: str = BASE_MODEL, epochs: int = 3, lr: float = 2e-4, rank: int = 16, run: str = "latest", seed: int = 0, patience: int = 100, keep_last: bool = False, order_copies: int = 1) -> dict:
     """LoRA fine-tune on train.jsonl, keep the best checkpoint by validation loss (stop early after `patience` evals without improvement), score it, save adapter and merged model."""
     import torch
     from datasets import Dataset
@@ -260,23 +272,35 @@ def train(files: dict[str, str], base: str = BASE_MODEL, epochs: int = 3, lr: fl
     from transformers import AutoModelForCausalLM, AutoTokenizer, EarlyStoppingCallback
     from trl import SFTConfig, SFTTrainer
 
-    def to_dataset(text: str) -> Dataset:
-        # Prompt/completion form: the loss is counted on the assistant's answer only.
+    import random
+
+    def to_dataset(text: str, copies: int = 1) -> Dataset:
+        # Prompt/completion form: the loss is counted on the assistant's answer only. With copies > 1 every
+        # record appears that many times, each with its answer keys in a different random order, so the model
+        # does not depend on the order the fields are written in (the values are identical).
         records = load_records(text)
-        return Dataset.from_list(
-            [{"prompt": r["messages"][:2], "completion": [r["messages"][2]]} for r in records]
-        )
+        rng = random.Random(seed)
+        rows = []
+        for r in records:
+            answer = json.loads(r["messages"][2]["content"])
+            for _ in range(copies):
+                keys = list(answer)
+                if copies > 1:
+                    rng.shuffle(keys)
+                completion = {"role": "assistant", "content": json.dumps({k: answer[k] for k in keys}, ensure_ascii=False, separators=(",", ":"))}
+                rows.append({"prompt": r["messages"][:2], "completion": [completion]})
+        return Dataset.from_list(rows)
 
     tokenizer = AutoTokenizer.from_pretrained(base)
     model = AutoModelForCausalLM.from_pretrained(base, dtype=torch.bfloat16).to("cuda")
     # Overfitting watch: loss is measured four times an epoch on the held-out val rows AND on a fixed
     # sample of train rows (same size as val, so the two numbers are comparable; the running train loss
     # in the log is noisy and includes dropout). Val loss rising while train loss keeps falling = overfitting.
-    train_dataset = to_dataset(files["train"])
+    train_dataset = to_dataset(files["train"], order_copies)
     steps_per_epoch = max(1, -(-len(train_dataset) // 16))  # ceil: the last partial batch is a step too
     eval_every = max(1, steps_per_epoch // 4)
     val_dataset = to_dataset(files["val"])
-    train_sample = train_dataset.shuffle(seed=0).select(range(min(len(val_dataset), len(train_dataset))))
+    train_sample = to_dataset(files["train"]).shuffle(seed=0).select(range(min(len(val_dataset), len(train_dataset))))  # catalog order, like val
     trainer = SFTTrainer(
         model=model,
         args=SFTConfig(
@@ -319,7 +343,7 @@ def train(files: dict[str, str], base: str = BASE_MODEL, epochs: int = 3, lr: fl
     merged.save_pretrained(out / "merged")
     tokenizer.save_pretrained(out / "merged")
 
-    result = evaluate(merged, tokenizer, files)
+    result = evaluate(merged, tokenizer, files, other_orders=True)
     result["settings"] = {"base": base, "epochs": epochs, "lr": lr, "rank": rank, "targets": LORA_TARGETS}
     result["train_records"] = len(load_records(files["train"]))
     result["log"] = trainer.state.log_history
@@ -328,6 +352,7 @@ def train(files: dict[str, str], base: str = BASE_MODEL, epochs: int = 3, lr: fl
     result["settings"]["seed"] = seed
     result["settings"]["patience"] = patience
     result["settings"]["keep_last"] = keep_last
+    result["settings"]["order_copies"] = order_copies
     (out / "tuned.json").write_text(json.dumps(result, indent=2, ensure_ascii=False))
     volume.commit()
     return result
@@ -343,7 +368,7 @@ def score_saved(files: dict[str, str], run: str) -> dict:
     path = f"/out/{run}/merged"
     tokenizer = AutoTokenizer.from_pretrained(path)
     model = AutoModelForCausalLM.from_pretrained(path, dtype=torch.bfloat16).to("cuda")
-    return evaluate(model, tokenizer, files)
+    return evaluate(model, tokenizer, files, other_orders=True)
 
 
 @app.function(image=train_image, gpu="L4", timeout=1800, volumes={"/out": volume})
@@ -438,6 +463,7 @@ def main(
     seed: int = 0,
     patience: int = 100,
     keep_last: bool = False,
+    order_copies: int = 1,
 ):
     """
     --run     folder in the Modal volume that the stage reads or writes (default latest, which every training
@@ -447,6 +473,7 @@ def main(
     --seed    training seed (default 0, the seed of Runs 1 to 4)
     --patience  stop early after this many evals (four per epoch) without a better val loss (default 100: effectively never for runs this short, but 100 non-improving evals do stop a long one)
     --keep-last  keep the final-epoch weights instead of the best-val-loss checkpoint (to test whether more training hurts)
+    --order-copies  train on this many copies of every row, each with the answer keys in a different random order (default 1: catalog order)
     --label   names the local result file training/out/v5-<label>.json (default: the run name)
     """
     if stage == "probe":
@@ -483,7 +510,7 @@ def main(
         save(result, "score")
         report(f"saved model {run}", result)
     if stage in ("train", "all"):
-        result = train.remote(files, base, epochs, lr, rank, run, seed, patience, keep_last)
+        result = train.remote(files, base, epochs, lr, rank, run, seed, patience, keep_last, order_copies)
         save(result, "tuned")
         report(f"LoRA (r={rank}, lr={lr}, {epochs} epochs, {result['train_records']} train rows)", result)
     if stage in ("gguf", "all"):

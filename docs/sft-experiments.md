@@ -411,3 +411,25 @@ What this says (choices rest on val only):
 
 Caveats: v5 sets are AI-written and not human-reviewed; two seeds per size; the Q8_0 GGUF was stress-tested but not scored on the v5 test set.
 
+## Key order: training with shuffled answer keys (350M)
+
+2026-10-17. The serving bug above comes from training only in catalog key order. `training/modal_train.py --order-copies 3` fixes it at the source: every training row appears three times with the answer's keys in a different random order (values identical; val and test rows are never copied). `evaluate` can also decode the same records with the keys written in catalog, alphabetical (what Ollama's schema does) or reversed order (`by_key_order` in the result file; counts only).
+
+Held-out exact match on v5 (350M, LoRA r=16, lr 2e-4, batch 16, final weights kept):
+
+| Run | Trained on | Val: catalog / sorted / reversed | Test: catalog / sorted / reversed |
+| --- | --- | --- | --- |
+| 350M seed 0 (the candidate in the v5 section above) | catalog order, 6 epochs | 96.4 / **54.4** / 65.3 | 95.9 / **54.2** / 71.5 |
+| 350M seed 0 | shuffled x3, 2 epochs (**new candidate**) | **98.9 / 98.9 / 99.6** | 96.9 / 96.7 / 97.4 |
+| 350M seed 1 | shuffled x3, 2 epochs | 98.2 / 97.8 / 97.1 | 96.5 / 96.7 / 96.3 |
+| 350M seed 0 | shuffled x3, 4 epochs | 98.9 / 98.2 / 98.5 | 96.3 / 96.5 / 96.5 |
+
+What this says:
+- **The catalog-order model really did depend on key order**: under the alphabetical order Ollama uses with a schema, it drops to about 54% exact and fills 22 to 23% of fields that should be blank.
+- **Shuffled-order training removes the dependence** (all three orders within about 1 point) and costs nothing on accuracy: it is also slightly better than the catalog-only model in its own order (98.9 against 96.4 on val). Seeds 0 and 1 and 2 against 4 epochs all agree within noise. Choice rests on val; test is not sealed (see the v5 section).
+- **Loss is not comparable with the earlier runs**: val loss is about 0.097 and train-sample loss 0.089 (earlier 0.011 and 0.0002). Most of that is the model being unsure which key comes next, which is expected when the order is random; the small gap between the two numbers means no overfitting.
+
+**Through Ollama (stress set, 129 messages, GGUF Q8_0):** shuffled 350M candidate **126/129** without a schema and **125/129** with Ollama's schema (previous best 123/129). Injection is 4/4 in both. Misses: `send two grand to Mike` gives 2500, `what's the weather today?` fills `date: today`, `I don't recognize a charge at Shell yesterday` misses the date, and (schema only) a long polite message loses the recipient.
+
+So the extractor sends the schema again (`format`), which guarantees valid JSON, and it is safe only with a model trained this way: pointing it at an older GGUF without dropping `format` brings the serving bug back (note in `extractFields`). The GGUF is `o350e2s0/` on the Modal volume (`modal volume get jev-sft o350e2s0/LFM2.5-230M-SFT-Q8_0.gguf ...`; the file name still says 230M, it is the 350M), registered locally as `lfm25-350m-sft-shuffled`.
+

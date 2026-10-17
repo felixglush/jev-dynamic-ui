@@ -35,10 +35,7 @@ const HINTS: Record<FreeTextSpec["type"], string> = {
   amount: "a money amount as a plain number: 200 for 'two hundred dollars', 1500 for '$1.5k'",
 };
 
-/**
- * The shape of an answer: every field required, in the order the model was trained to write them. This is
- * NOT sent to Ollama as `format` (see extractFields); the training data tests and docs use it as the contract.
- */
+/** JSON Schema for Ollama's `format` field. Every field is required: the model can't skip one, only leave it empty. */
 export function schemaFor(action: keyof typeof CATALOG) {
   const properties: Record<string, object> = {};
   for (const [name, spec] of freeTextParams(action)) {
@@ -57,12 +54,12 @@ export async function extractFields(
   const params = freeTextParams(action);
   if (params.length === 0) return {};
 
-  // No `format` (JSON schema) here, on purpose. Ollama turns a schema into a grammar that writes the keys in
-  // alphabetical order, but the model was trained to write them in catalog order (name before email, recipient
-  // before recipient_email). With the schema it had to write an email before it had read the name, and it
-  // made values up: 95/129 on the stress set, against 113/129 without (docs/sft-experiments.md). Without the
-  // schema the answer is still JSON because that is what it was trained on; a malformed answer throws and
-  // apply.ts keeps Jev's values.
+  // `format` makes Ollama enforce the JSON schema, so the answer is always valid JSON. Ollama writes a schema's
+  // keys in alphabetical order, not the catalog order. A model trained in catalog order only (Runs 1 to 5, the
+  // first 350M) falls apart under that: 95/129 on the stress set with the schema against 113/129 without, and
+  // 54% against 96% exact on val. The model in use is trained on answers with the keys in random order
+  // (training/modal_train.py --order-copies 3), so the order does not matter to it. Do not point this at an
+  // older GGUF without dropping `format` (docs/sft-experiments.md, "Key order").
   const response = await fetch(`${OLLAMA_URL}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -70,6 +67,7 @@ export async function extractFields(
     body: JSON.stringify({
       model: OLLAMA_MODEL,
       stream: false,
+      format: schemaFor(action),
       options: { temperature: 0 },
       messages: [
         { role: "system", content: systemPromptFor(action) },
