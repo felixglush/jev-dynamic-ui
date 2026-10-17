@@ -8,7 +8,7 @@ import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 let server: Server;
-let requests: { format: { properties: Record<string, unknown>; required: string[] }; messages: { content: string }[] }[];
+let requests: { format?: unknown; messages: { content: string }[] }[];
 let answer: unknown;
 let extractFields: typeof import("./ollama").extractFields;
 
@@ -32,13 +32,13 @@ beforeEach(() => {
 });
 
 describe("extractFields", () => {
-  it("asks only for the action's free-text fields, with a schema Ollama can enforce", async () => {
+  it("sends the training prompt and no JSON schema (Ollama would reorder the keys)", async () => {
     answer = { recipient: "Sam", recipient_email: "", amount: 50, date: "" };
     await extractFields("send_etransfer", "Send $50 to Sam for dinner");
     const [request] = requests;
     // from_account and frequency are choices, which Jev answers, so they aren't asked here.
-    expect(Object.keys(request!.format.properties)).toEqual(["recipient", "recipient_email", "amount", "date"]);
-    expect(request!.format.required).toEqual(["recipient", "recipient_email", "amount", "date"]);
+    expect(request!.messages[0]!.content).toContain("recipient, recipient_email, amount, date");
+    expect(request!.format).toBeUndefined();
     expect(request!.messages.at(-1)!.content).toBe("Send $50 to Sam for dinner");
   });
 

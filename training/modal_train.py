@@ -346,6 +346,26 @@ def score_saved(files: dict[str, str], run: str) -> dict:
     return evaluate(model, tokenizer, files)
 
 
+@app.function(image=train_image, gpu="L4", timeout=1800, volumes={"/out": volume})
+def probe(run: str, records: list[dict]) -> list[dict]:
+    """Answers for a few records from a saved merged model, both schema-constrained (as scored) and free-running."""
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    volume.reload()
+    path = f"/out/{run}/merged"
+    tokenizer = AutoTokenizer.from_pretrained(path)
+    model = AutoModelForCausalLM.from_pretrained(path, dtype=torch.bfloat16).to("cuda")
+    constrained = generate_replies(model, tokenizer, records)
+    free = []
+    for record in records:
+        prompt = tokenizer.apply_chat_template(record["messages"][:2], add_generation_prompt=True, return_tensors="pt", return_dict=True).to(model.device)
+        with torch.no_grad():
+            out = model.generate(**prompt, max_new_tokens=160, do_sample=False)
+        free.append(tokenizer.decode(out[0][prompt["input_ids"].shape[1]:], skip_special_tokens=True))
+    return [{"message": c["message"], "constrained": c["reply"], "free": f, "label": c["label"]} for c, f in zip(constrained, free)]
+
+
 @app.function(image=gguf_image, timeout=1800, volumes={"/out": volume})
 def to_gguf(run: str = "latest") -> str:
     """Convert the merged model to a Q8_0 GGUF, the format Ollama loads."""
@@ -422,13 +442,19 @@ def main(
     """
     --run     folder in the Modal volume that the stage reads or writes (default latest, which every training
               run overwrites: give each run its own name)
-    --stage   baseline | train | score (a saved <run>/merged model, no training) | gguf | snapshot (copy latest to <run>) | all
+    --stage   baseline | train | score (a saved <run>/merged model, no training) | gguf | snapshot (copy latest to <run>) | probe (answer the records in the JSONL file named by --label) | all
     --train-subset  all | run1 (the rows Run 1 trained on: no trainOnly / split / v2 rows)
     --seed    training seed (default 0, the seed of Runs 1 to 4)
     --patience  stop early after this many evals (four per epoch) without a better val loss (default 100: effectively never for runs this short, but 100 non-improving evals do stop a long one)
     --keep-last  keep the final-epoch weights instead of the best-val-loss checkpoint (to test whether more training hurts)
     --label   names the local result file training/out/v4-<label>.json (default: the run name)
     """
+    if stage == "probe":
+        # --label is a path to a JSONL file of records (the data/sft format) to answer from <run>.
+        records = [json.loads(line) for line in Path(label).read_text().splitlines() if line.strip()]
+        for row in probe.remote(run, records):
+            print(json.dumps(row, ensure_ascii=False))
+        return
     if stage == "snapshot":
         print("\n".join(snapshot.remote("latest", run)))
         return

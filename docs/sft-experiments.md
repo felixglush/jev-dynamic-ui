@@ -343,3 +343,17 @@ What this says (conclusions rest on **val** only):
 Caveats: v4 val/test are AI-written and not human-reviewed; the stress set is my own labels; one candidate per seed pair, so no confidence intervals beyond the two-seed spread.
 
 Next if more is wanted: the remaining stress failures (injection and email shapes) as more train-only rows, and 8 to 10 epochs to see whether anything more is left (val loss says plateau).
+
+### Serving bug found: Ollama's JSON schema reorders the keys (2026-10-17)
+
+The Run 5 candidate got every `add contact Sam <phone>` message wrong on the GGUF in Ollama (`email: "sam"` made up), including a message that is in its own training set. The same weights in bf16 on Modal answered all of them correctly, both with the scoring decoder and free-running (`--stage probe`). The difference was the request: the extractor sent a JSON schema as Ollama's `format`, and Ollama writes the keys of a schema in **alphabetical order** (`email, name, phone`; `amount, date, recipient, recipient_email`), while training wrote them in catalog order (`name, email, phone`). With the alphabetical order the model has to write an email before it has read the name, and it makes one up. Free-running Ollama (no `format`) writes the trained order.
+
+| Stress set (129, never trained on), Run 5 candidate GGUF | Exact |
+| --- | --- |
+| With `format` schema (how it was served until now, and how Run 4 was stress-tested) | 95/129 |
+| Without `format` (now the default in `extractFields`) | **113/129** |
+| Same, with Modelfile `repeat_penalty 1.05` / `top_k 50` removed | 95/129 with format, so it is not the cause |
+
+Injection goes from 1/4 to 4/4, add-contact from 5/10 to 8/10, emails from 3/6 to 5/6. The earlier list of failures (junk tokens like `!` and `?` in the email field, `email: "sam"`, `none` placeholders) was mostly this bug, not missing data. The Run 4 stress numbers (83/129) were also taken with the schema, so they are not comparable with the 113.
+
+What is left (16 messages, from `training/out/stress-run5-noformat.json`): worded amounts (`one hundred and twenty five dollars` gives 1250, `two grand` missed, `half of 200` computed), several people or addresses in one message (`send my mom and dad $50 each`, `add Sam and Pat as contacts`, two autodeposit emails), wrong-action or junk text (`open a TFSA` sent to the send form, `what's the weather today?`, `x@y`), dates (`in 2 days` missed, `yesterday for lunch` filled, `at the end of the month` missed), and odd names (`X Æ A-12`, `@sam`). A bad answer shape still cannot be ruled out without the schema, but none of the 129 stress answers failed to parse.
