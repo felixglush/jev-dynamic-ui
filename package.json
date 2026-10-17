@@ -15,7 +15,8 @@
     "extract:stress": "tsx --conditions=react-server scripts/extract-stress.mts",
     "extract:eval": "tsx --conditions=react-server scripts/extract-eval.mts",
     "sft:build": "tsx --conditions=react-server scripts/sft-build.mts",
-    "sft:add": "tsx --conditions=react-server scripts/sft-add.mts"
+    "sft:add": "tsx --conditions=react-server scripts/sft-add.mts",
+    "sft:kind": "tsx --conditions=react-server scripts/sft-kind.mts"
   },
   "dependencies": {
     "@radix-ui/react-label": "^2.1.17",

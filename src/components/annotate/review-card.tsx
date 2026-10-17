@@ -20,6 +20,7 @@ import {
   type Prediction,
 } from "@/lib/annotate/dataset";
 import { verdict } from "@/lib/annotate/summary";
+import { guessKind, isKind, KINDS, type Kind } from "@/lib/sft/kinds";
 import { cn } from "@/lib/utils";
 import { CATALOG, LOW_CONFIDENCE, type ParamSpec } from "@/lib/jev/catalog";
 import type { ActionCall, ActionName, ParamValue } from "@/lib/jev/types";
@@ -91,6 +92,8 @@ export function ReviewCard({ mode, prediction, extraction, annotation, position,
   const waiting = extraction.status === "loading";
   const start = annotation ?? accepted;
   const [expectedAction, setExpectedAction] = useState<ExpectedAction>(start?.expectedAction ?? "none");
+  // What kind of example this is (typo, accented name...): the saved choice, the file's, else a guess.
+  const [kind, setKind] = useState<Kind>(annotation?.kind ?? prediction.kind ?? guessKind(prediction.message, start?.expectedParams ?? {}));
   const lowConfidence = prediction.actionConfidence !== null && prediction.actionConfidence < LOW_CONFIDENCE;
   const result = annotation ? verdict(prediction, annotation) : null;
   // Fields view: one row per field the extractor model fills in, blanks included, so a missing value is visible.
@@ -112,7 +115,7 @@ export function ReviewCard({ mode, prediction, extraction, annotation, position,
         if (value) expectedParams[name] = value;
       }
     }
-    onSave({ expectedAction, expectedParams, note: String(data.get("annotator_note") ?? "").trim() });
+    onSave({ expectedAction, expectedParams, note: String(data.get("annotator_note") ?? "").trim(), kind });
   }
 
   return (
@@ -223,8 +226,25 @@ export function ReviewCard({ mode, prediction, extraction, annotation, position,
             Would ask the customer for: {prediction.missing.map(label).join(", ")}
           </p>
         )}
+        <div className="flex flex-wrap items-center gap-2">
+          <Label htmlFor="example-kind" className="text-muted-foreground">
+            Kind of example
+          </Label>
+          <select
+            id="example-kind"
+            value={kind}
+            onChange={(event) => isKind(event.target.value) && setKind(event.target.value)}
+            className="h-8 rounded-md border bg-background px-2 text-sm"
+          >
+            {KINDS.map((k) => (
+              <option key={k.id} value={k.id}>
+                {k.label}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="flex flex-wrap gap-2 pt-1">
-          <Button data-accept onClick={() => accepted && onSave(accepted)} disabled={!accepted || waiting}>
+          <Button data-accept onClick={() => accepted && onSave({ ...accepted, kind })} disabled={!accepted || waiting}>
             <Check aria-hidden="true" />
             Correct
             <kbd className="ml-1 rounded border border-primary-foreground/30 px-1 font-mono text-xs">Y</kbd>

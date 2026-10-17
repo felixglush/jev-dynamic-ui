@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import type { ExtractResult, LoadResult, SaveResult, SftLoadResult } from "@/app/annotate/actions";
+import type { ExtractResult, LoadResult, TrainingResult, SaveResult, SftLoadResult } from "@/app/annotate/actions";
 import { Button } from "@/components/ui/button";
 import type { Annotation, Dataset } from "@/lib/annotate/dataset";
 import { Annotator } from "./annotator";
@@ -17,6 +17,7 @@ type Props = {
     saveToFile: (changes: Changes) => Promise<SaveResult>;
     /** Left out in the static preview. */
     extract?: (action: string, message: string) => Promise<ExtractResult>;
+    addToTraining?: (row: { action: string; message: string; params: Record<string, string>; kind: string; note: string }) => Promise<TrainingResult>;
   };
   sft: {
     load: () => Promise<SftLoadResult>;
@@ -64,6 +65,7 @@ export function Workspace({ jev, sft }: Props) {
           loadFromFile={jev.loadFromFile}
           saveToFile={jev.saveToFile}
           extract={jev.extract}
+          addToTraining={jev.addToTraining}
         />
       ) : loaded.state === "ready" ? (
         <Annotator

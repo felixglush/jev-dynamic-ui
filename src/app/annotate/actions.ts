@@ -2,7 +2,7 @@
 
 import { annotationsLabel, readAnnotationsFile, writeAnnotationChanges } from "@/lib/annotate/store";
 import { isActionName, type Annotation, type Annotations, type Dataset } from "@/lib/annotate/dataset";
-import { readReviewDataset, sftLabel, writeReviewChanges } from "@/lib/annotate/sft-store";
+import { addApprovedExample as appendApprovedExample, readReviewDataset, sftLabel, writeReviewChanges } from "@/lib/annotate/sft-store";
 import { extractFields } from "@/lib/extract/ollama";
 import { MAX_MESSAGE_LENGTH } from "@/lib/jev/catalog";
 
@@ -82,6 +82,22 @@ export async function saveSftReviews(changes: Record<string, Annotation | null>)
     return { ok: true, path: sftLabel() };
   } catch (error) {
     console.error("saveSftReviews failed:", error);
+    return { ok: false, error: error instanceof Error ? error.message : "Couldn't write the file." };
+  }
+}
+
+export type TrainingResult = { ok: true; message: string } | { ok: false; error: string };
+
+/**
+ * An answer approved or corrected on the real predictions page becomes an approved, train-only row in
+ * the fine-tuning file. Same rule as the other actions: public endpoint, so the store checks the input.
+ */
+export async function addApprovedExample(row: { action: string; message: string; params: Record<string, string>; kind: string; note: string }): Promise<TrainingResult> {
+  try {
+    const id = await appendApprovedExample(row);
+    return id ? { ok: true, message: `Added to the fine-tuning data (${id}, ${sftLabel()})` } : { ok: true, message: "Already in the fine-tuning data" };
+  } catch (error) {
+    console.error("addApprovedExample failed:", error);
     return { ok: false, error: error instanceof Error ? error.message : "Couldn't write the file." };
   }
 }

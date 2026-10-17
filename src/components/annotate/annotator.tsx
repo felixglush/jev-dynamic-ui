@@ -4,11 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import type { ExtractResult, LoadResult, SaveResult } from "@/app/annotate/actions";
+import type { ExtractResult, LoadResult, SaveResult, TrainingResult } from "@/app/annotate/actions";
 import type { Extraction } from "@/lib/annotate/combine";
 import { isActionName, isJsonl, label, parseAnyDataset, serializeDataset, serializeLabels, type Annotation, type Annotations, type Dataset } from "@/lib/annotate/dataset";
 import { saveFile } from "@/lib/annotate/save-file";
 import { summarize, verdict } from "@/lib/annotate/summary";
+import { KINDS } from "@/lib/sft/kinds";
 import { cn } from "@/lib/utils";
 import { ReviewCard, type ReviewMode } from "./review-card";
 import { SummaryView } from "./summary-view";
@@ -22,6 +23,8 @@ type Props = {
   saveToFile?: (changes: Changes) => Promise<SaveResult>;
   /** Ask the LiquidFM extractor for an action's typed-in values. Left out in the static preview and for the fine-tuning rows. */
   extract?: (action: string, message: string) => Promise<ExtractResult>;
+  /** Add an approved or corrected answer to the fine-tuning data. Only the real predictions page passes this. */
+  addToTraining?: (row: { action: string; message: string; params: Record<string, string>; kind: string; note: string }) => Promise<TrainingResult>;
   /** Heading above the progress. */
   title?: string;
   /** Which view opens first. */
@@ -109,7 +112,7 @@ function isTyping(target: EventTarget | null) {
  * The annotation screen: one message at a time, a progress strip to jump around, and a summary.
  * Annotations autosave in this browser and can be downloaded as CSV (and imported again).
  */
-export function Annotator({ initial, initialSource, loadFromFile, saveToFile, extract, title = "Annotate Jev's predictions", defaultMode = "full", persistLocal = true }: Props) {
+export function Annotator({ initial, initialSource, loadFromFile, saveToFile, extract, addToTraining, title = "Annotate Jev's predictions", defaultMode = "full", persistLocal = true }: Props) {
   const [dataset, setDataset] = useState(initial);
   const [source, setSource] = useState(initialSource);
   const [index, setIndex] = useState(0);
@@ -118,6 +121,9 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
   const [mode, setMode] = useState<ReviewMode>(defaultMode);
   // Which group of messages to walk through ("" = all of them).
   const [group, setGroup] = useState("");
+  // Fine-tuning rows can also be walked through one kind at a time ("" = all kinds).
+  const [kindFilter, setKindFilter] = useState("");
+  const [trainingStatus, setTrainingStatus] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
   const [restored, setRestored] = useState(false);
   // False in the server's HTML; true once the browser has taken over and shortcuts work.
@@ -151,7 +157,21 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
     return [...tally].sort(([a], [b]) => a.localeCompare(b));
   }, [allPredictions, annotations]);
   // The messages being walked through: one group, or everything. Progress and the summary stay global.
-  const predictions = useMemo(() => (group ? allPredictions.filter((p) => p.group === group) : allPredictions), [allPredictions, group]);
+  const predictions = useMemo(
+    () => allPredictions.filter((p) => (!group || p.group === group) && (!kindFilter || p.kind === kindFilter)),
+    [allPredictions, group, kindFilter],
+  );
+  const kindCounts = useMemo(() => {
+    const tally = new Map<string, { total: number; reviewed: number }>();
+    for (const p of allPredictions) {
+      if (!p.kind) continue;
+      const t = tally.get(p.kind) ?? { total: 0, reviewed: 0 };
+      t.total += 1;
+      if (annotations[p.id]) t.reviewed += 1;
+      tally.set(p.kind, t);
+    }
+    return tally;
+  }, [allPredictions, annotations]);
   const key = useMemo(() => storageKey(dataset), [dataset]);
   const summary = useMemo(() => summarize(dataset), [dataset]);
   const current = predictions[index];
@@ -275,6 +295,13 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
     if (!current) return;
     const next = { ...annotations, [current.id]: annotation };
     setAnnotations(next);
+    // An approved or corrected answer on the real predictions page also goes into the fine-tuning data.
+    if (addToTraining && annotation.expectedAction !== "none") {
+      setTrainingStatus("Adding to the fine-tuning data…");
+      void addToTraining({ action: annotation.expectedAction, message: current.message, params: annotation.expectedParams, kind: annotation.kind ?? "plain", note: annotation.note })
+        .catch((): TrainingResult => ({ ok: false, error: "Couldn't reach the server." }))
+        .then((result) => setTrainingStatus(result.ok ? result.message : `Not added to the fine-tuning data: ${result.error}`));
+    }
     // Move on to the next message without an answer; when there is none, show the results.
     const order = [...predictions.slice(index + 1), ...predictions.slice(0, index)];
     const nextOpen = order.find((p) => !next[p.id]);
@@ -412,6 +439,11 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
               {done} of {allPredictions.length} reviewed
             </span>
             <FileStatusText status={fileStatus} enabled={Boolean(saveToFile)} usingDefault={usingDefault} />
+            {trainingStatus && (
+              <span role="status" data-testid="training-status" className="min-w-0 truncate text-xs text-muted-foreground">
+                {trainingStatus}
+              </span>
+            )}
             <span className="text-muted-foreground tabular-nums">{percent}%</span>
           </div>
           <div
@@ -516,6 +548,25 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
               {groups.map(([name, t]) => (
                 <option key={name} value={name}>
                   {label(name)} ({t.reviewed}/{t.total})
+                </option>
+              ))}
+            </select>
+          )}
+          {kindCounts.size > 0 && (
+            <select
+              aria-label="Kind"
+              value={kindFilter}
+              onChange={(event) => {
+                setKindFilter(event.target.value);
+                setIndex(0);
+                setView("review");
+              }}
+              className="h-8 rounded-md border bg-background px-2 text-sm"
+            >
+              <option value="">All kinds ({allPredictions.length})</option>
+              {KINDS.filter((k) => kindCounts.has(k.id)).map((k) => (
+                <option key={k.id} value={k.id}>
+                  {k.label} ({kindCounts.get(k.id)!.reviewed}/{kindCounts.get(k.id)!.total})
                 </option>
               ))}
             </select>

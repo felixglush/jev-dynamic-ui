@@ -7,6 +7,7 @@ import { freeTextParams } from "@/lib/extract/prompt";
 import { CATALOG } from "@/lib/jev/catalog";
 import type { ActionName, ParamValue } from "@/lib/jev/types";
 import { reviewOf, type Review, type ExampleRecord } from "@/lib/sft/examples";
+import { isKind, type Kind } from "@/lib/sft/kinds";
 import { parseCsv, toCsv } from "./csv";
 
 export type Prediction = {
@@ -20,6 +21,8 @@ export type Prediction = {
   missing: string[];
   /** The predict script's note, e.g. an error message. */
   note: string;
+  /** For fine-tuning rows: the kind of example it is (typo, accented-name...). */
+  kind?: Kind;
 };
 
 /** "none" means the message should not open any form. */
@@ -30,6 +33,8 @@ export type Annotation = {
   /** Only the parameters that have a value. */
   expectedParams: Record<string, string>;
   note: string;
+  /** The kind of example, set when the answer goes into the fine-tuning data. Not part of the CSV. */
+  kind?: Kind;
 };
 
 /** Annotations are keyed by prediction id. */
@@ -94,7 +99,7 @@ export function parseSftJsonl(text: string): Dataset {
     const line = raw.trim();
     if (!line) continue;
     const where = `Line ${index + 1}`;
-    let record: { messages?: { role?: string; content?: string }[]; meta?: { id?: string; action?: string; vague?: boolean } };
+    let record: { messages?: { role?: string; content?: string }[]; meta?: { id?: string; action?: string; vague?: boolean; kind?: string } };
     try {
       record = JSON.parse(line);
     } catch {
@@ -123,7 +128,7 @@ export function parseSftJsonl(text: string): Dataset {
       if (stated) params[name] = { value: stated, confidence: null };
       else if (spec.required) missing.push(name);
     }
-    predictions.push({ id, group: action + (record.meta?.vague ? " (vague)" : ""), message, predictedAction: action, actionConfidence: null, params, missing, note: "" });
+    predictions.push({ id, group: action + (record.meta?.vague ? " (vague)" : ""), message, predictedAction: action, actionConfidence: null, params, missing, note: "", ...(isKind(record.meta?.kind) ? { kind: record.meta.kind } : {}) });
   }
   if (predictions.length === 0) throw new Error("The file has no records.");
   return { predictions, annotations: {} };
@@ -145,7 +150,7 @@ export function datasetFromReviews(records: ExampleRecord[]): Dataset {
   const annotations: Annotations = {};
   for (const record of records) {
     const review: Review | null = reviewOf(record);
-    if (review) annotations[record.meta.id] = { expectedAction: review.expectedAction as ExpectedAction, expectedParams: review.expectedParams, note: review.note ?? "" };
+    if (review) annotations[record.meta.id] = { expectedAction: review.expectedAction as ExpectedAction, expectedParams: review.expectedParams, note: review.note ?? "", ...(isKind(review.kind) ? { kind: review.kind } : {}) };
   }
   return { predictions, annotations };
 }
@@ -309,7 +314,7 @@ export function sanitizeAnnotations(predictions: Prediction[], raw: unknown): An
       }
     }
     const note = typeof a?.note === "string" ? a.note.trim().slice(0, MAX_NOTE_LENGTH) : "";
-    clean[id] = { expectedAction: action, expectedParams, note };
+    clean[id] = { expectedAction: action, expectedParams, note, ...(isKind(a?.kind) ? { kind: a.kind } : {}) };
   }
   return clean;
 }

@@ -13,6 +13,8 @@
  *   trainOnly older spelling of `split: "train"`; still honoured
  *   pattern   the failure pattern the row probes (e.g. "spelled-amount"); training/modal_train.py reports
  *             pass rate per pattern on val and test
+ *   kind      what kind of example it is (typo, accented-name, worded-number...; see kinds.ts). Editable in
+ *             review and independent of `pattern`, which stays frozen for evaluation
  *   version   which evaluation set the row was added for: "v1" (the default when absent), "v2", "v3", "v4" or "v5".
  *             Scores are only compared within one version (docs/sft-experiments.md, "Fair evaluation v2")
  *   retired   the first version that no longer contains the row (a bad example); older versions keep it
@@ -26,16 +28,17 @@ import { toRecord, type SftRecord } from "./record";
 import type { Action, LabeledExample } from "./batch";
 import type { Split } from "./split";
 import type { Version } from "./build";
+import { guessKind, isKind, type Kind } from "./kinds";
 
 export type ExampleSource = "sample" | "synthetic";
 export type ReviewStatus = "pending" | "approved" | "rejected";
 
 export type ExampleRecord = SftRecord & {
-  meta: SftRecord["meta"] & { source: ExampleSource; status: ReviewStatus; original?: { action: string; answer: string }; note?: string; trainOnly?: boolean; split?: Split; pattern?: string; version?: Version; retired?: Version };
+  meta: SftRecord["meta"] & { source: ExampleSource; status: ReviewStatus; original?: { action: string; answer: string }; note?: string; trainOnly?: boolean; split?: Split; pattern?: string; kind?: Kind; version?: Version; retired?: Version };
 };
 
 /** What a reviewer decided: an action ("none" rejects the row) and the values, as the annotate form gives them. */
-export type Review = { expectedAction: string; expectedParams: Record<string, string>; note?: string };
+export type Review = { expectedAction: string; expectedParams: Record<string, string>; note?: string; kind?: string };
 
 export const normalizeMessage = (text: string) => text.normalize("NFC").toLowerCase().replace(/\s+/g, " ").trim();
 export const messageKey = (action: string, message: string) => `${action}|${normalizeMessage(message)}`;
@@ -64,7 +67,7 @@ export function addExamples(
   records: ExampleRecord[],
   examples: LabeledExample[],
   source: ExampleSource,
-  options: { trainOnly?: boolean; split?: Split; pattern?: string; version?: Version } = {},
+  options: { trainOnly?: boolean; split?: Split; pattern?: string; kind?: Kind; version?: Version } = {},
 ): { records: ExampleRecord[]; skipped: { message: string; reason: string }[] } {
   const keys = new Set(records.map((r) => messageKey(r.meta.action, r.messages[1].content)));
   let next = records.filter((r) => r.meta.source === source).reduce((max, r) => Math.max(max, Number(r.meta.id.replace(/\D/g, "")) || 0), 0) + 1;
@@ -82,6 +85,7 @@ export function addExamples(
     const tags = {
       ...((example.split ?? options.split) ? { split: (example.split ?? options.split)! } : {}),
       ...((example.pattern ?? options.pattern) ? { pattern: (example.pattern ?? options.pattern)! } : {}),
+      kind: example.kind ?? options.kind ?? guessKind(example.message, targetStated(example), example.pattern ?? options.pattern),
       ...(options.version ? { version: options.version } : {}),
     };
     added.push({
@@ -98,6 +102,9 @@ export function addExamples(
   const all = [...records, ...added];
   return { records: [...all.filter((r) => r.meta.source === "sample"), ...all.filter((r) => r.meta.source === "synthetic")], skipped };
 }
+
+/** The fields an example states, as the strings the kind guesser reads. */
+const targetStated = (example: LabeledExample) => Object.fromEntries(Object.entries(example.fields).map(([name, value]) => [name, String(value)]));
 
 /** The review form's values for the action's free-text fields, as a labeled example. Throws on a bad amount. */
 function exampleFrom(record: ExampleRecord, action: Action, params: Record<string, string>): LabeledExample {
@@ -132,7 +139,8 @@ export function applyReview(record: ExampleRecord, review: Review | null): Examp
     };
   }
   const note = review.note?.trim() || undefined;
-  if (review.expectedAction === "none") return { ...record, meta: { ...record.meta, status: "rejected", note } };
+  const kind = isKind(review.kind) ? review.kind : record.meta.kind;
+  if (review.expectedAction === "none") return { ...record, meta: { ...record.meta, status: "rejected", note, ...(kind ? { kind } : {}) } };
   if (!(review.expectedAction in CATALOG)) throw new Error(`${record.meta.id}: "${review.expectedAction}" isn't an action.`);
 
   const action = review.expectedAction as Action;
@@ -148,6 +156,7 @@ export function applyReview(record: ExampleRecord, review: Review | null): Examp
       ...(record.meta.trainOnly ? { trainOnly: true } : {}),
       ...(record.meta.split ? { split: record.meta.split } : {}),
       ...(record.meta.pattern ? { pattern: record.meta.pattern } : {}),
+      ...(kind ? { kind } : {}),
       ...(record.meta.version ? { version: record.meta.version } : {}),
       ...(record.meta.retired ? { retired: record.meta.retired } : {}),
       // Keep the generator's first answer, not an earlier correction.
@@ -165,5 +174,5 @@ export function reviewOf(record: ExampleRecord): Review | null {
   const expectedParams = Object.fromEntries(
     Object.entries(answer).flatMap(([name, value]) => (value === "" || value === 0 ? [] : [[name, String(value)]])),
   );
-  return { expectedAction: record.meta.action, expectedParams, note };
+  return { expectedAction: record.meta.action, expectedParams, note, ...(record.meta.kind ? { kind: record.meta.kind } : {}) };
 }
