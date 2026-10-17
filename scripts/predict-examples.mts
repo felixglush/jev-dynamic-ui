@@ -12,6 +12,7 @@ import { existsSync } from "node:fs";
 import { readFile, rename, writeFile } from "node:fs/promises";
 
 import { classify } from "../src/lib/jev/classify";
+import { withExtractedFields } from "../src/lib/extract/apply";
 import { normalizeMessage, parseExamples } from "../src/lib/sft/examples";
 import { csvCell, describe, HEADER, parseCsv } from "../src/lib/annotate/predictions-csv";
 
@@ -53,7 +54,7 @@ await Promise.all(
       const item = batch[next++]!;
       let result;
       try {
-        result = await classify(item.message);
+        result = (await withExtractedFields(await classify(item.message), item.message)).result;
       } catch (error) {
         result = error instanceof Error ? error : new Error(String(error));
         errors++;

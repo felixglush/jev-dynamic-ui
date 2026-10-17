@@ -72,7 +72,7 @@ npm run sft:check                                # fails if a message is in trai
 npm run predict -- my-messages.txt out.csv       # your own messages: one per line, `# group` lines label sections
 ```
 
-Runs every message through the real classifier (needs `TYPESAFE_API_KEY` in the environment) and writes a CSV with the predicted action, its confidence, the extracted parameters (each with its confidence), and which required parameters are missing. The empty `expected_action` column is for you to fill in, by hand in a spreadsheet or with the annotation page below. `data/sample-messages.txt` has about 240 messages: clear requests for each of the 14 actions, vaguer "ambiguous" ones for each action (the group name says which action was meant), scheduled payments, messages that mix actions, requests the app has no form for, and tricky values.
+Runs every message through the real classifier and the extractor (needs `TYPESAFE_API_KEY` in the environment and Ollama running) and writes a CSV with the predicted action, its confidence, the extracted parameters (each with its confidence), and which required parameters are missing. The empty `expected_action` column is for you to fill in, by hand in a spreadsheet or with the annotation page below. `data/sample-messages.txt` has about 240 messages: clear requests for each of the 14 actions, vaguer "ambiguous" ones for each action (the group name says which action was meant), scheduled payments, messages that mix actions, requests the app has no form for, and tricky values.
 
 ### Annotating them
 
