@@ -641,3 +641,33 @@ test("what is typed while the card updates is not logged until Return sends it",
   await composer(page).press("Enter");
   await expect.poll(async () => (await logged()).length).toBe(1);
 });
+
+test("editing the message after Return cancels the pending confirmation", async ({ page }) => {
+  await composer(page).fill("Send $50 to Sam");
+  await expect(card(page).getByLabel("To")).toHaveValue("Sam");
+
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route("**/*", async (route) => {
+    if (route.request().method() === "POST") await held;
+    await route.continue();
+  });
+  await composer(page).fill("I want to open a TFSA");
+  await composer(page).press("Enter");
+  // Changed their mind before the answer arrived: the Return was for the old text.
+  await composer(page).fill("pay the minimum on my credit card from savings");
+  release();
+
+  await expect(card(page).getByLabel("How much")).toBeVisible();
+  await expect(card(page)).toBeVisible();
+  await expect(page.getByRole("status")).toHaveText("");
+});
+
+test("clicking an example right after typing shows the example's form, not the typed text's", async ({ page }) => {
+  await composer(page).pressSequentially("I want to open a TFSA");
+  await page.getByRole("button", { name: /pay the minimum on my credit card from savings/ }).click();
+
+  await expect(card(page).getByText("Make Payment")).toBeVisible();
+  await expect(page.getByLabel("Account type")).toHaveCount(0);
+  await expect(composer(page)).toHaveValue("pay the minimum on my credit card from savings");
+});

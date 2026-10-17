@@ -120,6 +120,8 @@ export function Chat() {
     // Whatever is still in flight was asked about older text, so its answer must not be shown.
     latestId.current++;
     lastText.current = "";
+    // A Return pressed for the older text no longer applies to this text.
+    wantFocus.current = false;
     const text = value.trim();
     if (!text) {
       if (open) dismiss();
@@ -274,6 +276,9 @@ export function Chat() {
                 // An example shows its form for review; it doesn't confirm it the way Return does.
                 if (composerRef.current) composerRef.current.value = text;
                 setDone("");
+                // Drop a pending live question about what was typed before the click, and any pending Return.
+                clearTimeout(timer.current);
+                wantFocus.current = false;
                 ask(text, false);
               }}
             >
