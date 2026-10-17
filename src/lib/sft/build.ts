@@ -27,17 +27,27 @@ const rank = (v: Version) => VERSIONS.indexOf(v);
 export const addedBy = (r: ExampleRecord, version: Version) => rank(rowVersion(r)) <= rank(version);
 export const inVersion = (r: ExampleRecord, version: Version) => addedBy(r, version) && !(r.meta.retired && rank(r.meta.retired) <= rank(version));
 
+/**
+ * Which split each approved row is in for a version: pinned rows go where they are pinned, the rest
+ * take the stratified hash split. Rows that are not approved (or not yet added) have no split.
+ */
+export function assignSplits(rows: ExampleRecord[], version: Version = CURRENT_VERSION): Map<string, Split> {
+  const added = rows.filter((r) => r.meta.status === "approved" && addedBy(r, version));
+  // Retired rows still take part in the hash split so retiring one never moves another row; they are dropped after.
+  const splits = stratifiedSplit(added.filter((r) => !pinnedSplit(r.meta)).map((r) => ({ id: r.meta.id, group: groupOf(r.meta) })));
+  for (const r of rows) {
+    const pinned = pinnedSplit(r.meta);
+    if (pinned && (r.meta.status === "approved" ? addedBy(r, version) : true)) splits.set(r.meta.id, pinned);
+  }
+  return splits;
+}
+
 export function buildSplits(rows: ExampleRecord[], options: { version?: Version } = {}) {
   const files: Record<Split, SftRecord[]> = { train: [], val: [], test: [] };
   const version = options.version ?? CURRENT_VERSION;
   const added = rows.filter((r) => r.meta.status === "approved" && addedBy(r, version));
-  // Retired rows still take part in the hash split so retiring one never moves another row; they are dropped after.
-  const splits = stratifiedSplit(added.filter((r) => !pinnedSplit(r.meta)).map((r) => ({ id: r.meta.id, group: groupOf(r.meta) })));
+  const splits = assignSplits(rows, version);
   const approved = added.filter((r) => inVersion(r, version));
-  for (const r of added) {
-    const pinned = pinnedSplit(r.meta);
-    if (pinned) splits.set(r.meta.id, pinned);
-  }
   const key = (r: ExampleRecord) => messageKey(r.meta.action, r.messages[1].content);
 
   // Held-out rows first. If two held-out rows share a message, the first one stays and the rest are dropped.

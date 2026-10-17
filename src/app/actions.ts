@@ -4,6 +4,7 @@ import { TypeSafeError } from "@typesafe-ai/sdk";
 
 import { MAX_MESSAGE_LENGTH } from "@/lib/jev/catalog";
 import { withExtractedFields } from "@/lib/extract/apply";
+import { logPrediction } from "@/lib/annotate/log";
 import { classify } from "@/lib/jev/classify";
 import type { ClassifyOutcome } from "@/lib/jev/types";
 
@@ -24,7 +25,10 @@ export async function classifyMessage(message: string): Promise<ClassifyOutcome>
   try {
     const result = await classify(trimmed);
     // EXTRACTOR=ollama: let the local fine-tuned model fill the free-text fields (see README).
-    return { ok: true, result: process.env.EXTRACTOR === "ollama" ? await withExtractedFields(result, trimmed) : result };
+    const extraction = process.env.EXTRACTOR === "ollama" ? await withExtractedFields(result, trimmed) : { result, extracted: null };
+    // Log Jev's own answer and the extractor's, side by side, so each field's source is on record.
+    await logPrediction(trimmed, result, extraction.extracted);
+    return { ok: true, result: extraction.result };
   } catch (error) {
     // Log the detail on the server; send the browser only a generic message.
     console.error("classifyMessage failed:", error);

@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
-import type { ExtractResult, LoadResult, SaveResult, SftLoadResult } from "@/app/annotate/actions";
+import type { ExtractResult, LoadResult, TrainingResult, SaveResult, SftLoadResult } from "@/app/annotate/actions";
 import { Button } from "@/components/ui/button";
 import type { Annotation, Dataset } from "@/lib/annotate/dataset";
 import { Annotator } from "./annotator";
@@ -17,6 +18,8 @@ type Props = {
     saveToFile: (changes: Changes) => Promise<SaveResult>;
     /** Left out in the static preview. */
     extract?: (action: string, message: string) => Promise<ExtractResult>;
+    lookupSplits?: (messages: string[]) => Promise<Record<string, string>>;
+    addToTraining?: (row: { action: string; message: string; params: Record<string, string>; kind: string; note: string }) => Promise<TrainingResult>;
   };
   sft: {
     load: () => Promise<SftLoadResult>;
@@ -56,7 +59,11 @@ export function Workspace({ jev, sft }: Props) {
         </Button>
       </div>
 
-      {source === "jev" ? (
+      {source === "jev" && jev.initial.predictions.length === 0 ? (
+        <p data-testid="no-live-predictions" className="rounded-xl border bg-card p-5 text-sm text-muted-foreground">
+          No live predictions yet. Every message you send in the <Link className="underline" href="/">chat</Link> is logged here with what Jev said, so you can approve or correct it. Approved ones become training rows.
+        </p>
+      ) : source === "jev" ? (
         <Annotator
           key="jev"
           initial={jev.initial}
@@ -64,6 +71,8 @@ export function Workspace({ jev, sft }: Props) {
           loadFromFile={jev.loadFromFile}
           saveToFile={jev.saveToFile}
           extract={jev.extract}
+          addToTraining={jev.addToTraining}
+          lookupSplits={jev.lookupSplits}
         />
       ) : loaded.state === "ready" ? (
         <Annotator

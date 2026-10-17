@@ -545,3 +545,13 @@ test("pressing Return before the newest answer arrives does not focus the older 
   release();
   await expect(card(page).getByRole("button", { name: "Open Account" })).toBeFocused();
 });
+
+test("every message sent is logged for review on the annotate page", async ({ page }) => {
+  const { readFile } = await import("node:fs/promises");
+  const { PREDICTIONS_LOG } = await import("./paths");
+  await say(page, "Send $77 to Logan for the logging test");
+  await expect(page.getByText("Send an e-Transfer")).toBeVisible();
+  await expect
+    .poll(async () => (await readFile(PREDICTIONS_LOG, "utf8").catch(() => "")))
+    .toMatch(/^live-[^\n]*Send \$77 to Logan for the logging test,send_etransfer,/m);
+});

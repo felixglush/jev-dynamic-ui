@@ -5,7 +5,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { ANNOTATIONS_FILE } from "./paths";
 
-// These run against the real predictions.csv at the project root (100 messages from a live
+// These run against the fixed 100-message copy of predictions.csv (e2e/fixtures/predictions.csv) (100 messages from a live
 // Jev run), served by the production build. No Jev calls are made on this page.
 
 /** Open the page and wait until it is interactive: the HTML shows up before keys do anything. */
@@ -237,7 +237,7 @@ test("Clear all asks for a second click before wiping every answer", async ({ pa
 });
 
 test("re-importing a file keeps the progress saved in this browser", async ({ page }) => {
-  const csv = await readFile("predictions.csv", "utf8");
+  const csv = await readFile("e2e/fixtures/predictions.csv", "utf8");
   const file = { name: "predictions-copy.csv", mimeType: "text/csv", buffer: Buffer.from(csv) };
   await page.getByLabel("Import predictions CSV").setInputFiles(file);
   await accept(page);
@@ -318,7 +318,7 @@ test.describe("autosave to a file", () => {
     await expect(page.getByTestId("file-status")).toHaveText(/^Saved to/);
     const before = await savedFile();
 
-    const csv = await readFile("predictions.csv", "utf8");
+    const csv = await readFile("e2e/fixtures/predictions.csv", "utf8");
     await page.getByLabel("Import predictions CSV").setInputFiles({ name: "other.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
     await expect(page.getByTestId("file-status")).toHaveText("Imported file: saved in this browser only");
     await accept(page);
@@ -391,4 +391,16 @@ test.describe("fine-tuning files", () => {
     const text = await readFile((await download.path())!, "utf8");
     expect(text).toMatch(/^# \w+\n.+/);
   });
+});
+
+test("a logged message shows what the extractor read at the time, without asking it again", async ({ page }) => {
+  await open(page);
+  const csv = [
+    "id,group,message,predicted_action,action_confidence,params,missing_required,expected_action,note,extracted,extractor",
+    // The fake extractor would read "Sam" from this message; the stored answer says Zed, so Zed proves the stored one is used.
+    "live-1,live,Send $50 to Sam,send_etransfer,0.930,recipient=Sam (0.93); amount=50.00 (0.55),,,,recipient=Zed; amount=50,test-model",
+  ].join("\n");
+  await page.getByLabel("Import predictions CSV").setInputFiles({ name: "live.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
+  await expect(page.getByText("Message 1 of 1")).toBeVisible();
+  await expect(page.getByText("Zed").first()).toBeVisible();
 });
