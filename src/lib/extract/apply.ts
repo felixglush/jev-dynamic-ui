@@ -11,16 +11,19 @@ export type Extraction = { result: ClassifyResult; extracted: Record<string, str
 /**
  * Replace Jev's free-text values with the local extractor's. Jev still picks the action and the
  * choice parameters; for names, emails, phones, amounts and dates the extractor's answer wins, and a
- * blank answer stays blank so the form highlights the field. If Ollama is down the result is returned unchanged.
+ * blank answer stays blank so the form highlights the field. The extractor is required: if Ollama is down this
+ * throws `ExtractorDownError` rather than falling back to Jev's values, so the system counts as down.
  */
+export class ExtractorDownError extends Error {}
+
 export async function withExtractedFields(result: ClassifyResult, message: string): Promise<Extraction> {
   if (result.action === null) return { result, extracted: null };
   let fields;
   try {
     fields = await extractFields(result.action, message);
   } catch (error) {
-    console.error("extractor failed, keeping Jev's values:", error);
-    return { result, extracted: null };
+    console.error("extractor failed:", error);
+    throw new ExtractorDownError("The extractor is down", { cause: error });
   }
   const specs = CATALOG[result.action].params as Record<string, { type: "choice" | "name" | "email" | "phone" | "amount" | "date" | "account_number"; required?: boolean }>;
   const params = { ...result.params } as Record<string, { value: string | null; confidence: number | null }>;
