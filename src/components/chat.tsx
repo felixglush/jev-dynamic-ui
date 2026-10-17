@@ -15,20 +15,20 @@ import type { ClassifyOutcome } from "@/lib/jev/types";
 // One message from each action group in data/sample-messages.txt, picked to show something
 // a form fills in on its own (a worded amount, a schedule, a biller account number...).
 const EXAMPLES = [
-  "Send $50 to Sam for dinner last night",
-  "add my sister Priya, priya.k@example.com, so I can e-transfer her",
-  "pay the minimum on my credit card from savings",
-  "I want to open a TFSA and put 2k in it",
-  "set up a weekly $50 transfer from chequing to savings",
-  "pay my water bill $48 from savings next friday",
-  "add Rogers as a payee, my account number is 4471 2290 88",
-  "my credit card was stolen, I need a new one",
-  "show my last 5 transactions",
-  "ask my brother Kevin for $60 for the gas",
-  "cancel my $200 e-transfer to Sam",
-  "set up autodeposit for me.work@example.com into my chequing account",
-  "Acme Corp charged me $11.99 but my plan is $9.99",
-  "my new mobile number is (905) 555-0123",
+  { title: "Send an e-Transfer", text: "Send $50 to Sam for dinner last night" },
+  { title: "Add an e-Transfer contact", text: "add my sister Priya, priya.k@example.com, so I can e-transfer her" },
+  { title: "Pay a credit card", text: "pay the minimum on my credit card from savings" },
+  { title: "Open an account", text: "I want to open a TFSA and put 2k in it" },
+  { title: "Transfer between accounts", text: "set up a weekly $50 transfer from chequing to savings" },
+  { title: "Pay a bill", text: "pay my water bill $48 from savings next friday" },
+  { title: "Add a payee", text: "add Rogers as a payee, my account number is 4471 2290 88" },
+  { title: "Manage a card", text: "my credit card was stolen, I need a new one" },
+  { title: "View an account", text: "show my last 5 transactions" },
+  { title: "Request an e-Transfer", text: "ask my brother Kevin for $60 for the gas" },
+  { title: "Cancel an e-Transfer", text: "cancel my $200 e-transfer to Sam" },
+  { title: "Set up autodeposit", text: "set up autodeposit for me.work@example.com into my chequing account" },
+  { title: "Dispute a transaction", text: "Acme Corp charged me $11.99 but my plan is $9.99" },
+  { title: "Update contact info", text: "my new mobile number is (905) 555-0123" },
 ];
 
 /** How long typing must pause before Jev is asked, and the shortest text worth asking about. */
@@ -262,23 +262,24 @@ export function Chat() {
       </p>
 
       <div className="flex flex-col items-center gap-3">
-        <p className="text-sm text-muted-foreground">Try one of these, or type your own:</p>
-        <div className="flex flex-wrap justify-center gap-2">
-          {EXAMPLES.map((example) => (
-            <Button
-              key={example}
-              variant="outline"
-              size="sm"
-              className="rounded-full"
+        <p className="text-sm text-muted-foreground">Try an example, or type your own:</p>
+        <div className="grid w-full gap-x-6 gap-y-3 sm:grid-cols-2">
+          {EXAMPLES.map(({ title, text }) => (
+            <button
+              key={text}
+              type="button"
+              data-example
+              className="flex flex-col gap-0.5 rounded-lg px-3 py-2 text-left transition-colors outline-none hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50"
               onClick={() => {
-                // A chip shows its form for review; it doesn't confirm it the way Return does.
-                if (composerRef.current) composerRef.current.value = example;
+                // An example shows its form for review; it doesn't confirm it the way Return does.
+                if (composerRef.current) composerRef.current.value = text;
                 setDone("");
-                ask(example, false);
+                ask(text, false);
               }}
             >
-              {example}
-            </Button>
+              <span className="text-xs font-medium text-muted-foreground">{title}</span>
+              <span className="text-sm text-pretty">{text}</span>
+            </button>
           ))}
         </div>
       </div>

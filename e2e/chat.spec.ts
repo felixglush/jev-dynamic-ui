@@ -26,13 +26,13 @@ test("renders the chat shell from the server, before any message", async ({ requ
   // Plain HTTP fetch, no JavaScript: this is the server-rendered HTML.
   const html = await (await request.get("/")).text();
   expect(html).toContain("Banking assistant");
-  expect(html).toContain("Try one of these");
+  expect(html).toContain("Try an example");
 });
 
 test("send_etransfer: opens the e-Transfer form pre-filled from the message", async ({ page }) => {
   await say(page, "Send $50 to Sam for dinner last night");
 
-  await expect(page.getByText("Send an e-Transfer")).toBeVisible();
+  await expect(card(page).getByText("Send an e-Transfer")).toBeVisible();
   await expect(page.getByLabel("To")).toHaveValue("Sam");
   await expect(page.getByLabel("Amount (CAD)")).toHaveValue("50.00");
   // Typed-in values come from the extractor, which gives no confidence, so nothing is flagged for a second look.
@@ -44,7 +44,7 @@ test("send_etransfer: opens the e-Transfer form pre-filled from the message", as
 test("flags a required field the customer did not give", async ({ page }) => {
   await say(page, "send $20 to somebody");
 
-  await expect(page.getByText("Send an e-Transfer")).toBeVisible();
+  await expect(card(page).getByText("Send an e-Transfer")).toBeVisible();
   await expect(page.getByLabel("To")).toHaveValue("");
   await expect(page.getByLabel("To")).toHaveAttribute("aria-invalid", "true");
   await expect(page.getByText("Needed")).toBeVisible();
@@ -69,7 +69,7 @@ test("open_account: understands a TFSA with a shorthand deposit", async ({ page 
 test("add_etransfer_contact: fills name and email", async ({ page }) => {
   await say(page, "add my sister Priya, priya.k@example.com, so I can e-transfer her");
 
-  await expect(page.getByText("Add an e-Transfer Contact")).toBeVisible();
+  await expect(card(page).getByText("Add an e-Transfer Contact")).toBeVisible();
   await expect(page.getByLabel("Name")).toHaveValue("Priya");
   await expect(page.getByLabel("Email")).toHaveValue("priya.k@example.com");
 });
@@ -81,12 +81,12 @@ test("a message that is not a banking action gets a helpful reply, not a form", 
   await expect(card(page).getByRole("heading", { level: 2 })).toHaveCount(0);
 });
 
-test("an example chip sends its message", async ({ page }) => {
-  await page.getByRole("button", { name: "I want to open a TFSA and put 2k in it" }).click();
+test("an example opens its message", async ({ page }) => {
+  await page.getByRole("button", { name: /I want to open a TFSA and put 2k in it/ }).click();
   await expect(page.getByLabel("Account type")).toHaveValue("tfsa");
 });
 
-test("the example chips are one real message from each of the 14 action groups", async ({ page }) => {
+test("the examples are one real message from each of the 14 action groups", async ({ page }) => {
   const groups = new Map<string, string[]>();
   let group = "";
   for (const line of (await readFile("data/sample-messages.txt", "utf8")).split("\n")) {
@@ -94,7 +94,7 @@ test("the example chips are one real message from each of the 14 action groups",
     else if (line.trim()) groups.set(group, [...(groups.get(group) ?? []), line.trim()]);
   }
   const actions = Object.keys(CATALOG);
-  const chips = (await page.locator("button.rounded-full.border").allInnerTexts()).map((t) => t.trim());
+  const chips = (await page.locator("button[data-example] span:last-child").allInnerTexts()).map((t) => t.trim());
   expect(chips).toHaveLength(actions.length);
   expect(actions.map((a) => chips.filter((c) => groups.get(a)?.includes(c)).length)).toEqual(actions.map(() => 1));
 });
@@ -331,7 +331,7 @@ test("date fields open a calendar, and picking a day fills the field", async ({ 
 test("pay_bill: a scheduled bill keeps its date", async ({ page }) => {
   await say(page, "pay my Hydro One bill $112.30 on 2030-02-01");
 
-  await expect(page.getByText("Pay a Bill")).toBeVisible();
+  await expect(card(page).getByText("Pay a Bill")).toBeVisible();
   await expect(page.getByLabel("Pay to")).toHaveValue("Hydro One");
   await expect(page.getByLabel("Date (optional)")).toHaveValue("2030-02-01");
 });
