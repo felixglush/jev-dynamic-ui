@@ -20,14 +20,14 @@ const EXAMPLES = [
   "pay the minimum on my credit card from savings",
   "I want to open a TFSA and put 2k in it",
   "set up a weekly $50 transfer from chequing to savings",
-  "pay my Bell internet bill of $79.99 on the 15th",
-  "add Rogers as a payee, my account number is 4471 2290 88",
+  "pay my water bill $48 from savings next friday",
+  "add Rogers as a new payee",
   "my credit card was stolen, I need a new one",
   "show my last 5 transactions",
   "ask my brother Kevin for $60 for the gas",
   "cancel my $200 e-transfer to Sam",
   "set up autodeposit for me.work@example.com into my chequing account",
-  "Spotify charged me $11.99 but my plan is $9.99",
+  "Acme Corp charged me $11.99 but my plan is $9.99",
   "my new mobile number is (905) 555-0123",
 ];
 

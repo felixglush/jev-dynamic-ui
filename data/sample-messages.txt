@@ -152,6 +152,7 @@ my internet bill is due
 pay my phone bill
 settle my utilities
 # add_payee
+add Rogers as a new payee
 add Rogers as a payee, my account number is 4471 2290 88
 add a new biller: Hydro One, account 100234567
 I want to pay Enbridge, set up a new payee with account number 55512344
@@ -242,6 +243,7 @@ I was charged twice by Netflix on October 3rd
 there's a $89.99 charge from Uber I didn't make
 dispute the $230 Best Buy charge from 2026-10-02, I never got my order
 Spotify charged me $11.99 but my plan is $9.99
+Acme Corp charged me $11.99 but my plan is $9.99
 report a fraudulent charge from Walmart for $150
 # ambiguous: dispute_transaction
 what is this $12.50 charge from Apple on Oct 9
