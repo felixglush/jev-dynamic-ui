@@ -273,7 +273,7 @@ def train(files: dict[str, str], base: str = BASE_MODEL, epochs: int = 3, lr: fl
     # sample of train rows (same size as val, so the two numbers are comparable; the running train loss
     # in the log is noisy and includes dropout). Val loss rising while train loss keeps falling = overfitting.
     train_dataset = to_dataset(files["train"])
-    steps_per_epoch = max(1, len(train_dataset) // 16)
+    steps_per_epoch = max(1, -(-len(train_dataset) // 16))  # ceil: the last partial batch is a step too
     eval_every = max(1, steps_per_epoch // 4)
     val_dataset = to_dataset(files["val"])
     train_sample = train_dataset.shuffle(seed=0).select(range(min(len(val_dataset), len(train_dataset))))
@@ -309,6 +309,8 @@ def train(files: dict[str, str], base: str = BASE_MODEL, epochs: int = 3, lr: fl
         ),
     )
     trainer.train()
+    # One more measurement on the weights actually kept (the last step is not always an eval step).
+    final = trainer.evaluate()
 
     out = Path(f"/out/{run}")
     out.mkdir(parents=True, exist_ok=True)
@@ -321,6 +323,7 @@ def train(files: dict[str, str], base: str = BASE_MODEL, epochs: int = 3, lr: fl
     result["settings"] = {"base": base, "epochs": epochs, "lr": lr, "rank": rank, "targets": LORA_TARGETS}
     result["train_records"] = len(load_records(files["train"]))
     result["log"] = trainer.state.log_history
+    result["final_eval"] = {k: v for k, v in final.items() if k.endswith("_loss")}
     result["best_checkpoint_step"] = int(trainer.state.best_global_step)
     result["settings"]["seed"] = seed
     result["settings"]["keep_last"] = keep_last
