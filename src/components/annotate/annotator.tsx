@@ -331,6 +331,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
       setUsingDefault(false);
       setIndex(0);
       setGroup("");
+      setKindFilter("");
       setView("review");
       setImportError(null);
       setRestored(Object.keys(saved).length > 0);
@@ -596,6 +597,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
           summary={summary}
           onOpen={(id) => {
             setGroup("");
+            setKindFilter("");
             setIndex(allPredictions.findIndex((p) => p.id === id));
             setView("review");
           }}

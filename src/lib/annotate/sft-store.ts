@@ -4,6 +4,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { MAX_MESSAGE_LENGTH } from "@/lib/jev/catalog";
+import { freeTextParams } from "@/lib/extract/prompt";
 import { addExamples, applyReview, parseExamples, serializeExamples, type ExampleRecord } from "@/lib/sft/examples";
 import { isKind } from "@/lib/sft/kinds";
 import { datasetFromReviews, isActionName, sanitizeAnnotations, type Annotation, type Dataset } from "./dataset";
@@ -75,14 +76,15 @@ function enqueue<T>(run: () => Promise<T>): Promise<T> {
 /**
  * Put an answer approved on the real predictions page into the examples file as an approved,
  * train-only row (it never lands in val or test, so scored sets stay as they were). A message that
- * is already in the file for that action is left as it is. Returns the row id, or null when skipped.
+ * is already in the file for that action is left as it is. Actions with only choice fields (nothing for the extractor to read) are skipped too. Returns the row id, or why it was skipped.
  */
-export function addApprovedExample(raw: unknown): Promise<string | null> {
+export function addApprovedExample(raw: unknown): Promise<{ id: string } | { skipped: "duplicate" | "no-fields" }> {
   return enqueue(async () => {
     const row = raw as { action?: unknown; message?: unknown; params?: unknown; kind?: unknown; note?: unknown };
     if (typeof row?.action !== "string" || !isActionName(row.action)) throw new Error("Unknown action.");
     if (typeof row.message !== "string" || !row.message.trim() || row.message.length > MAX_MESSAGE_LENGTH) throw new Error("Message must be text of a sensible length.");
     if (!isKind(row.kind)) throw new Error("Unknown kind of example.");
+    if (freeTextParams(row.action).length === 0) return { skipped: "no-fields" as const };
     const given = typeof row.params === "object" && row.params !== null && !Array.isArray(row.params) ? (row.params as Record<string, unknown>) : {};
     const expectedParams = Object.fromEntries(Object.entries(given).flatMap(([name, value]) => (typeof value === "string" && value.trim() ? [[name, value.trim().slice(0, 200)]] : [])));
     const note = typeof row.note === "string" ? row.note.trim().slice(0, 500) : undefined;
@@ -93,10 +95,10 @@ export function addApprovedExample(raw: unknown): Promise<string | null> {
     });
     const message = row.message.trim();
     const { records: all, skipped } = addExamples(records, [{ id: "approved", action: row.action, message, fields: {}, vague: false }], "sample", { trainOnly: true, kind: row.kind });
-    if (skipped.length > 0) return null;
+    if (skipped.length > 0) return { skipped: "duplicate" as const };
     const added = all.find((r) => r.messages[1].content === message && r.meta.action === row.action && !records.includes(r))!;
     const reviewed = applyReview(added, { expectedAction: row.action, expectedParams, note, kind: row.kind });
     await writeRecords(all.map((r) => (r === added ? reviewed : r)));
-    return reviewed.meta.id;
+    return { id: reviewed.meta.id };
   });
 }

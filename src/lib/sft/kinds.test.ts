@@ -12,6 +12,8 @@ describe("kinds", () => {
     expect(guessKind("send Priya $100 on December 24", { recipient: "Priya" })).toBe("date");
     expect(guessKind("Spotify charged me $11.99 but my plan is $9.99", {})).toBe("multiple-numbers");
     expect(guessKind("pay down some debt, maybe $300", { amount: "300" })).toBe("plain");
+    expect(guessKind("add priya.k@example.com as a contact", { email: "priya.k@example.com" })).toBe("contact-details");
+    expect(guessKind("send $1.5k to Noah", { amount: "1500" })).toBe("worded-number");
     expect(guessKind("give my son some money", {})).toBe("missing-info");
   });
 

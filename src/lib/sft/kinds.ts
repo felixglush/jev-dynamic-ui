@@ -60,7 +60,7 @@ const PATTERN_KIND: Record<string, Kind> = {
   plain: "plain",
 };
 
-const NUMBER_WORDS = /\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|grand|bucks?|k)\b|\b\d+(?:\.\d+)?\s?k\b/i;
+const NUMBER_WORDS = /\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|grand|bucks?)\b|\b\d+(?:\.\d+)?\s?k\b/i;
 const MONTHS = "jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?";
 const DATE_WORDS = new RegExp(
   String.raw`\b(?:today|tonight|tomorrow|yesterday|monday|tuesday|wednesday|thursday|friday|saturday|sunday|next week|next month|(?:${MONTHS})\.?\s+\d+|may\s+\d+|\d{1,2}(?:st|nd|rd|th)|\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?|\d{4}-\d{2}-\d{2})\b`,
