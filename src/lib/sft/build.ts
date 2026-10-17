@@ -7,9 +7,9 @@
  * (or the older `trainOnly`) are left out of the hash split and go where they are pinned, so adding them
  * never moves another row.
  *
- * Versions: a row with no `meta.version` is v1. `buildSplits(rows)` builds the current version (v4: every
- * row that is not retired); `{ version: "v1" }`, `"v2"` or `"v3"` rebuilds an earlier version from the rows that
- * existed then, which must stay identical to the frozen files in data/sft/v1/, v2/ and v3/. A row that
+ * Versions: a row with no `meta.version` is v1. `buildSplits(rows)` builds the current version (v5: every
+ * row that is not retired); `{ version: "v1" }` to `"v4"` rebuilds an earlier version from the rows that
+ * existed then, which must stay identical to the frozen files in data/sft/v1/ to v4/. A row that
  * turns out to be a bad example gets `meta.retired: "v3"`: it stays in the file and in the older versions
  * (so their scores can be reproduced) but is out of v3 and later. Scores are only compared within one version.
  */
@@ -17,9 +17,9 @@ import type { SftRecord } from "./record";
 import { messageKey, type ExampleRecord } from "./examples";
 import { groupOf, pinnedSplit, stratifiedSplit, type Split } from "./split";
 
-export const VERSIONS = ["v1", "v2", "v3", "v4"] as const;
+export const VERSIONS = ["v1", "v2", "v3", "v4", "v5"] as const;
 export type Version = (typeof VERSIONS)[number];
-export const CURRENT_VERSION: Version = "v4";
+export const CURRENT_VERSION: Version = "v5";
 export const rowVersion = (r: ExampleRecord): Version => r.meta.version ?? "v1";
 const rank = (v: Version) => VERSIONS.indexOf(v);
 

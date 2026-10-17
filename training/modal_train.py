@@ -447,7 +447,7 @@ def main(
     --seed    training seed (default 0, the seed of Runs 1 to 4)
     --patience  stop early after this many evals (four per epoch) without a better val loss (default 100: effectively never for runs this short, but 100 non-improving evals do stop a long one)
     --keep-last  keep the final-epoch weights instead of the best-val-loss checkpoint (to test whether more training hurts)
-    --label   names the local result file training/out/v4-<label>.json (default: the run name)
+    --label   names the local result file training/out/v5-<label>.json (default: the run name)
     """
     if stage == "probe":
         # --label is a path to a JSONL file of records (the data/sft format) to answer from <run>.
@@ -472,7 +472,7 @@ def main(
     def save(result: dict, kind: str) -> None:
         # One file per stage; "all" runs two scorings, so they get a suffix.
         suffix = f"-{kind}" if stage == "all" else ""
-        (out_dir / f"v4-{label or run}{suffix}.json").write_text(json.dumps(result, indent=2, ensure_ascii=False))
+        (out_dir / f"v5-{label or run}{suffix}.json").write_text(json.dumps(result, indent=2, ensure_ascii=False))
 
     if stage in ("baseline", "all"):
         result = baseline.remote(files, base, run)

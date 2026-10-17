@@ -96,14 +96,14 @@ request 20 from Priya (priya@mail.com) => from_person=Priya; from_email=priya@ma
 cancel the $50 e-transfer to Sam => recipient=Sam; amount=50
 cancel my etransfer => 
 cancel the transfer I sent yesterday =>
-cancel the transfer to sam@example.com => recipient=sam@example.com
+cancel the transfer to sam@example.com =>
 # add_etransfer_contact
 add Sam, sam@x.com, 416-555-0100 => name=Sam; email=sam@x.com; phone=416-555-0100
 add contact Sam 4165550100 => name=Sam; phone=4165550100
 add contact Sam (416) 555-0100 => name=Sam; phone=(416) 555-0100
 add contact Sam +1 416 555 0100 => name=Sam; phone=+1 416 555 0100
 add contact Sam 555-0100 => name=Sam; phone=555-0100
-add contact Sam, ext 123, 416-555-0100 x123 => name=Sam; phone=416-555-0100 x123
+add contact Sam, ext 123, 416-555-0100 x123 => name=Sam; phone=416-555-0100
 add my mom as a contact => 
 add Sam and Pat as contacts =>
 add contact sam@x.com => email=sam@x.com

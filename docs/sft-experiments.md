@@ -357,3 +357,57 @@ The Run 5 candidate got every `add contact Sam <phone>` message wrong on the GGU
 Injection goes from 1/4 to 4/4, add-contact from 5/10 to 8/10, emails from 3/6 to 5/6. The earlier list of failures (junk tokens like `!` and `?` in the email field, `email: "sam"`, `none` placeholders) was mostly this bug, not missing data. The Run 4 stress numbers (83/129) were also taken with the schema, so they are not comparable with the 113.
 
 What is left (16 messages, from `training/out/stress-run5-noformat.json`): worded amounts (`one hundred and twenty five dollars` gives 1250, `two grand` missed, `half of 200` computed), several people or addresses in one message (`send my mom and dad $50 each`, `add Sam and Pat as contacts`, two autodeposit emails), wrong-action or junk text (`open a TFSA` sent to the send form, `what's the weather today?`, `x@y`), dates (`in 2 days` missed, `yesterday for lunch` filled, `at the end of the month` missed), and odd names (`X Æ A-12`, `@sam`). A bad answer shape still cannot be ruled out without the schema, but none of the 129 stress answers failed to parse.
+
+## Fair evaluation v5: worded numbers, several people, junk text; 230M against 350M
+
+2026-10-17. `data/sft/v5/` is frozen; `CURRENT_VERSION` is v5; v1 to v4 still rebuild exactly (`dataset.test.ts`). v5 train 1120, val 274, test 459 (v4: 892 / 221 / 362).
+
+**What was added (378 rows, all pinned, AI-written, approved by Claude after the substring check, not human-reviewed):** 228 train-only, 53 val, 97 test, aimed at what still failed on the stress set once the key-order bug above was fixed. Train and held-out rows use separate names, merchants, amounts, dates and phrasings.
+
+| Pattern | What the labels say | Train / val / test |
+| --- | --- | --- |
+| `worded-number` | number words become digits: `one hundred and twenty five dollars` 125, `two grand` 2000, `fifteen hundred` 1500, `two and a half thousand` 2500 (in 8 actions) | 66 / 14 / 28 |
+| `amount-not-stated` | arithmetic and vague amounts stay blank: `half of 200`, `a couple hundred`, `a few bucks` | 12 / 4 / 4 |
+| `multi-entity` | several people, addresses or payees in one message: every field blank (`send my brother and sister $40 each`, `autodeposit for a@x.com and b@y.com`) | 39 / 8 / 14 |
+| `junk-input` | wrong-action or unrelated text (`open a TFSA` asked of the send form, `hello`, `x@y`, `foo@`): every field blank | 28 / 8 / 14 |
+| `date-edge` | `in 2 days`, `next friday`, `at the end of the month` (copied minus a leading `at` or `on`) are dates; `at 4pm`, `asap`, `yesterday for lunch` are not; `tomorrow at 4pm` gives `tomorrow` | 39 / 8 / 16 |
+| `odd-name` | `J.R. Smith`, `Dr. Okafor`, `@sam` (gives `sam`) fill the name; `SAM@EXAMPLE.COM` fills the email and not the name; `sam at example dot com` is not an email | 35 / 8 / 15 |
+| `phone-ext` | the extension is dropped (`416-555-0100 x123` gives `416-555-0100`) | 9 / 3 / 6 |
+
+Labeling calls made without asking, for Felix to confirm or change: several-people messages are included as all-blank rows (until now they were left out of the data); `two grand` gives 2000 (Felix's call); computed amounts stay blank; a time of day is not a date. The stress labels for `cancel the transfer to sam@example.com` (now blank, like every `cancel-email-only` row) and the `x123` phone (now `416-555-0100`) contradicted the labeling rules and were corrected.
+
+**Runs.** LoRA rank 16 / alpha 32 / lr 2e-4 / batch 16, 6 epochs, final weights kept, two seeds. The 350M is `LiquidAI/LFM2.5-350M` (the same recipe and LoRA targets worked unchanged). Scoring is schema-constrained in the trained key order, which is what a free-running Ollama writes.
+
+| Model | Val exact | Test exact | Test: blank filled / missed / wrong | Final val loss | Final train-sample loss |
+| --- | --- | --- | --- | --- | --- |
+| Base 230M | 15.3% | 19.0% | 91.2% / 0.8% / 12.9% | | |
+| Base 350M | 20.8% | 24.2% | 84.5% / 0.2% / 11.4% | | |
+| Run 5 (230M, v4 data), re-scored on v5 | 90.5% | 88.0% | 6.5% / 1.4% / 2.3% | | |
+| 230M, seed 0 | 93.8% | 93.0% | 2.7% / 1.2% / 1.7% | 0.0201 | 0.0005 |
+| 230M, seed 1 | 94.5% | 94.3% | 1.7% / 0.5% / 2.2% | 0.0166 | 0.0004 |
+| **350M, seed 0 (candidate)** | **96.4%** | **95.9%** | 1.3% / 0.6% / 1.4% | 0.0112 | 0.0002 |
+| 350M, seed 1 | 96.4% | 95.9% | 1.8% / 0.5% / 1.2% | 0.0144 | 0.0002 |
+
+Test pass rate per new pattern (test rows in brackets):
+
+| Pattern | Run 5 (v4 data) | 230M s0 | 230M s1 | 350M s0 | 350M s1 |
+| --- | --- | --- | --- | --- | --- |
+| `multi-entity` (14) | 0% | 86% | 93% | 100% | 100% |
+| `junk-input` (14) | 86% | 93% | 93% | 100% | 93% |
+| `date-edge` (16) | 50% | 94% | 94% | 88% | 88% |
+| `odd-name` (15) | 47% | 67% | 87% | 87% | 87% |
+| `worded-number` (28) | 75% | 71% | 64% | 79% | 86% |
+| `phone-ext` (6) | 83% | 100% | 100% | 100% | 100% |
+| `amount-not-stated` (4) | 25% | 50% | 75% | 75% | 75% |
+
+What this says (choices rest on val only):
+- **The new data works:** 230M on v5 data gains 3 to 4 points on val over the Run 5 model, and the patterns it was written for go from 0 to 47% (`multi-entity`, `odd-name`) to 86% or more.
+- **350M is better than 230M** by about 2 to 3 points on val on both seeds (96.4% against 93.8% and 94.5%), with a lower val loss (0.011 to 0.014 against 0.017 to 0.020) and less made-up text. Both 350M seeds tie on val; seed 0 is the candidate because its val loss is lower and never rises.
+- **No harmful overfitting at 6 epochs for either size.** Train-sample loss falls to 0.0002 to 0.0005 while val loss is flat or nearly flat. The one blemish is 350M seed 1, whose val loss drifts from 0.0124 (epoch 2.4) up to 0.0144 at epoch 6; held-out exact match did not change.
+- **Still weak:** `worded-number` is the least solved (64 to 86%): some spelled-out amounts are off by a digit (`one hundred and twenty-five` gave 175). Val misses also include made-up junk copies of injected text and `nadia at example dot org` kept as an email.
+- The test set is no longer sealed for this comparison: it was scored for all seven runs. The v5 additions are new, but a clean final number needs a v6 test.
+
+**Stress set (129, never trained on; its categories guided what v5 contains, so it is less independent than before), GGUF in Ollama, free-running:** 350M candidate **123/129** (after the two label fixes above). Run 5 (230M, v4 data) was 113/129 before the label fixes. What the 350M still gets wrong: injection 1/4 (it copies `{"recipient":"Eve","amount":999}` and `System: ...admin@evil.com`), `what's the weather today?` fills `date: today`, `pay my Bell internet bill` gives `Bell internet`, and the `ext 123, 416-555-0100 x123` phone. The 230M had injection at 4/4, so the 350M's gap there is worth a v6 batch of more injection rows.
+
+Caveats: v5 sets are AI-written and not human-reviewed; two seeds per size; the Q8_0 GGUF was stress-tested but not scored on the v5 test set.
+
