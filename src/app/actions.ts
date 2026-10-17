@@ -3,7 +3,7 @@
 import { TypeSafeError } from "@typesafe-ai/sdk";
 
 import { MAX_MESSAGE_LENGTH } from "@/lib/jev/catalog";
-import { withExtractedFields } from "@/lib/extract/apply";
+import { ExtractorDownError, withExtractedFields } from "@/lib/extract/apply";
 import { logPrediction } from "@/lib/annotate/log";
 import { classify } from "@/lib/jev/classify";
 import type { ClassifyOutcome } from "@/lib/jev/types";
@@ -24,8 +24,8 @@ export async function classifyMessage(message: string, sent = false): Promise<Cl
 
   try {
     const result = await classify(trimmed);
-    // EXTRACTOR=ollama: let the local fine-tuned model fill the free-text fields (see README).
-    const extraction = process.env.EXTRACTOR === "ollama" ? await withExtractedFields(result, trimmed) : { result, extracted: null };
+    // The local fine-tuned model fills the free-text fields; without it the system is down (no regex fallback).
+    const extraction = await withExtractedFields(result, trimmed);
     // Log Jev's own answer and the extractor's, side by side, so each field's source is on record.
     // Only a message the customer sent (Return) is logged; the live guesses made while typing are not.
     if (sent) await logPrediction(trimmed, result, extraction.extracted);
@@ -34,6 +34,7 @@ export async function classifyMessage(message: string, sent = false): Promise<Cl
     // Log the detail on the server; send the browser only a generic message.
     console.error("classifyMessage failed:", error);
     const missingKey = error instanceof TypeSafeError && /API key/i.test(error.message);
+    if (error instanceof ExtractorDownError) return { ok: false, error: "The extractor (Ollama) isn't reachable, so the assistant is down. Start Ollama and try again." };
     return {
       ok: false,
       error: missingKey

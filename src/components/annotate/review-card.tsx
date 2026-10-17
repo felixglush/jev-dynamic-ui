@@ -193,7 +193,7 @@ export function ReviewCard({ mode, prediction, split, extraction, annotation, po
           <>
             <p className="text-xs text-muted-foreground" data-testid="extractor-status">
               {extraction.status === "off" && "Values are Jev's."}
-              {extraction.status === "imported" && "These are the imported file's own answers; no model was run on them."}
+              {extraction.status === "imported" && "These are the file's own answers (a training label, or an imported file's); no model was run on them."}
               {extraction.status === "loading" && "LiquidFM is reading the message…"}
               {extraction.status === "ready" && fields.every((f) => f.spec.type === "choice") && "Every field of this action is a choice, so all of it is Jev's."}
               {extraction.status === "ready" && fields.some((f) => f.spec.type !== "choice") && "Jev picked the action and the choices; LiquidFM read the typed-in values."}
