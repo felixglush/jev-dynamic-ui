@@ -401,8 +401,8 @@ Test pass rate per new pattern (test rows in brackets):
 | `amount-not-stated` (4) | 25% | 50% | 75% | 75% | 75% |
 
 What this says (choices rest on val only):
-- **The new data works:** 230M on v5 data gains 3 to 4 points on val over the Run 5 model, and the patterns it was written for go from 0 to 47% (`multi-entity`, `odd-name`) to 86% or more.
-- **350M is better than 230M** by about 2 to 3 points on val on both seeds (96.4% against 93.8% and 94.5%), with a lower val loss (0.011 to 0.014 against 0.017 to 0.020) and less made-up text. Both 350M seeds tie on val; seed 0 is the candidate because its val loss is lower and never rises.
+- **The new data works:** 230M on v5 data gains 3 to 4 points on val over the Run 5 model, and the patterns it was written for improve a lot (`multi-entity` 0% to 86 to 93%, `odd-name` 47% to 67 to 87%, `date-edge` 50% to 94%).
+- **350M is better than 230M** by about 2 to 3 points on val on both seeds (96.4% against 93.8% and 94.5%), with a lower val loss (0.011 to 0.014 against 0.017 to 0.020) and less made-up text. Both 350M seeds tie on val; seed 0 is the candidate because its val loss is lower (best 0.0107 at epoch 3.2, 0.0112 at the end).
 - **No harmful overfitting at 6 epochs for either size.** Train-sample loss falls to 0.0002 to 0.0005 while val loss is flat or nearly flat. The one blemish is 350M seed 1, whose val loss drifts from 0.0124 (epoch 2.4) up to 0.0144 at epoch 6; held-out exact match did not change.
 - **Still weak:** `worded-number` is the least solved (64 to 86%): some spelled-out amounts are off by a digit (`one hundred and twenty-five` gave 175). Val misses also include made-up junk copies of injected text and `nadia at example dot org` kept as an email.
 - The test set is no longer sealed for this comparison: it was scored for all seven runs. The v5 additions are new, but a clean final number needs a v6 test.
