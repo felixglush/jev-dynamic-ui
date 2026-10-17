@@ -13,8 +13,8 @@ type Row = { category: string; action: string; message: string; expected: Record
 const rows: Row[] = [];
 let category = "", action = "";
 for (const raw of (await readFile(casesPath, "utf8")).split("\n")) {
-  const line = raw.trim();
-  if (!line) continue;
+  const line = raw.replace(/\r$/, "");
+  if (!line.trim()) continue;
   if (line.startsWith("#")) {
     const [c, a] = line.replace(/^#\s*/, "").split("|").map((s) => s.trim());
     category = c ?? ""; action = a ?? c ?? "";
@@ -27,11 +27,12 @@ for (const raw of (await readFile(casesPath, "utf8")).split("\n")) {
   const fields = await extractFields(action as keyof typeof CATALOG, message);
   const got: Record<string, string> = {};
   for (const [n, f] of Object.entries(fields)) got[n] = f.value === null ? "" : String(f.value);
-  const same = (a: string, b: string) => a === b || (a !== "" && b !== "" && !isNaN(Number(a)) && !isNaN(Number(b)) && Number(a) === Number(b));
+  const isAmount = (n: string) => n === "amount" || n === "initial_deposit";
+  const same = (n: string, a: string, b: string) => a === b || (isAmount(n) && a !== "" && b !== "" && !isNaN(Number(a)) && !isNaN(Number(b)) && Number(a) === Number(b));
   const fabricated: string[] = [], missed: string[] = [], wrong: string[] = [];
   for (const n of Object.keys(got)) {
     const e = expected[n] ?? "", g = got[n] ?? "";
-    if (same(e, g)) continue;
+    if (same(n, e, g)) continue;
     if (e === "") fabricated.push(n); else if (g === "") missed.push(n); else wrong.push(n);
   }
   rows.push({ category, action, message, expected, got, fabricated, missed, wrong, exact: !fabricated.length && !missed.length && !wrong.length });
