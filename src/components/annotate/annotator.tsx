@@ -5,11 +5,11 @@ import { ChevronLeft, ChevronRight, Download, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import type { LoadResult, SaveResult } from "@/app/annotate/actions";
-import { parseDataset, serializeDataset, type Annotation, type Annotations, type Dataset } from "@/lib/annotate/dataset";
+import { label, parseAnyDataset, serializeDataset, serializeLabels, type Annotation, type Annotations, type Dataset } from "@/lib/annotate/dataset";
 import { saveFile } from "@/lib/annotate/save-file";
 import { summarize, verdict } from "@/lib/annotate/summary";
 import { cn } from "@/lib/utils";
-import { ReviewCard } from "./review-card";
+import { ReviewCard, type ReviewMode } from "./review-card";
 import { SummaryView } from "./summary-view";
 
 type Props = {
@@ -19,6 +19,12 @@ type Props = {
   loadFromFile?: () => Promise<LoadResult>;
   /** Write every annotation to that file. Left out in the static preview. */
   saveToFile?: (changes: Changes) => Promise<SaveResult>;
+  /** Heading above the progress. */
+  title?: string;
+  /** Which view opens first. */
+  defaultMode?: ReviewMode;
+  /** Keep a copy in this browser too. Off when the file on the server is the only source of truth. */
+  persistLocal?: boolean;
 };
 
 /** Where the annotations last went: a file on the server, or only this browser. */
@@ -86,6 +92,9 @@ function FileStatusText({ status, enabled, usingDefault }: { status: FileStatus;
   );
 }
 
+/** How many group blocks of squares are visible before the grid scrolls. */
+const GROUPS_SHOWN = 3;
+
 /** Typing in a field shouldn't trigger shortcuts. */
 function isTyping(target: EventTarget | null) {
   return target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|SELECT|TEXTAREA)$/.test(target.tagName));
@@ -95,11 +104,14 @@ function isTyping(target: EventTarget | null) {
  * The annotation screen: one message at a time, a progress strip to jump around, and a summary.
  * Annotations autosave in this browser and can be downloaded as CSV (and imported again).
  */
-export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: Props) {
+export function Annotator({ initial, initialSource, loadFromFile, saveToFile, title = "Annotate Jev's predictions", defaultMode = "full", persistLocal = true }: Props) {
   const [dataset, setDataset] = useState(initial);
   const [source, setSource] = useState(initialSource);
   const [index, setIndex] = useState(0);
   const [view, setView] = useState<"review" | "summary">("review");
+  const [mode, setMode] = useState<ReviewMode>(defaultMode);
+  // Which group of messages to walk through ("" = all of them).
+  const [group, setGroup] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
   const [restored, setRestored] = useState(false);
   // False in the server's HTML; true once the browser has taken over and shortcuts work.
@@ -117,16 +129,49 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: 
   const latest = useRef<Annotations>({});
   const writing = useRef(false);
 
-  const { predictions, annotations } = dataset;
+  const { predictions: allPredictions, annotations } = dataset;
+  const groups = useMemo(() => {
+    const tally = new Map<string, { total: number; reviewed: number }>();
+    for (const p of allPredictions) {
+      const t = tally.get(p.group) ?? { total: 0, reviewed: 0 };
+      t.total += 1;
+      if (annotations[p.id]) t.reviewed += 1;
+      tally.set(p.group, t);
+    }
+    return [...tally].sort(([a], [b]) => a.localeCompare(b));
+  }, [allPredictions, annotations]);
+  // The messages being walked through: one group, or everything. Progress and the summary stay global.
+  const predictions = useMemo(() => (group ? allPredictions.filter((p) => p.group === group) : allPredictions), [allPredictions, group]);
   const key = useMemo(() => storageKey(dataset), [dataset]);
   const summary = useMemo(() => summarize(dataset), [dataset]);
   const current = predictions[index];
+  // The grid scrolls and is as tall as its first GROUPS_SHOWN blocks, so that many groups show at once.
+  const gridRef = useRef<HTMLElement>(null);
+  const [gridHeight, setGridHeight] = useState<number>();
+  // The squares, one block per group in the order groups first appear. Numbers follow the walk order.
+  const squareGroups = useMemo(() => {
+    const blocks = new Map<string, { p: (typeof predictions)[number]; i: number }[]>();
+    predictions.forEach((p, i) => blocks.set(p.group, [...(blocks.get(p.group) ?? []), { p, i }]));
+    return [...blocks].map(([name, items]) => ({ name, items }));
+  }, [predictions]);
+
+  useEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return;
+    const blocks = [...grid.children].slice(0, GROUPS_SHOWN) as HTMLElement[];
+    const last = blocks.at(-1);
+    // Blocks can be taller than the window shows; scroll their group into view when you jump to a message.
+    setGridHeight(last && grid.children.length > GROUPS_SHOWN ? last.offsetTop - grid.offsetTop + last.offsetHeight : undefined);
+  }, [squareGroups, allPredictions.length]);
+  useEffect(() => {
+    gridRef.current?.querySelector('[aria-current="true"]')?.scrollIntoView({ block: "nearest" });
+  }, [index, group, view]);
 
   // Restore saved progress once, after the first render. It can't happen during render because the
   // server has no localStorage, and the first browser render must match the server's HTML.
   // Progress in this browser is newer than the file, so it wins where the two disagree.
   useEffect(() => {
-    const local = readSaved(storageKey(initial)) ?? {};
+    const local = (persistLocal && readSaved(storageKey(initial))) || {};
     // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing from browser storage
     setInteractive(true);
     void (async () => {
@@ -150,7 +195,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: 
       if (usingDefaultRef.current && Object.keys(merged).length > 0) {
         // Answers given while the file was loading are newer than anything restored, so they win.
         setDataset((d) => ({ ...d, annotations: { ...merged, ...d.annotations } }));
-        writeSaved(storageKey(initial), { ...merged, ...latest.current });
+        if (persistLocal) writeSaved(storageKey(initial), { ...merged, ...latest.current });
         setRestored(true);
         // Anything only the browser had goes to the file too, except what was answered since.
         const browserOnly = Object.keys(local).filter((id) => !(id in latest.current) && JSON.stringify(local[id]) !== JSON.stringify(fromFile[id]));
@@ -193,7 +238,8 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: 
 
   function setAnnotations(next: Annotations) {
     setDataset((d) => ({ ...d, annotations: next }));
-    writeSaved(key, next);
+    // The file-backed data set keeps its answers in the file; an imported file has only this browser.
+    if (persistLocal || !usingDefaultRef.current) writeSaved(key, next);
     latest.current = next;
     queueFileSave(changesBetween(annotations, next));
   }
@@ -216,7 +262,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: 
 
   async function importFile(file: File) {
     try {
-      const imported = parseDataset(await file.text());
+      const imported = parseAnyDataset(await file.text());
       // Work saved in this browser for the same messages is newer than the file, so it wins.
       const key = storageKey(imported);
       const saved = readSaved(key) ?? {};
@@ -227,6 +273,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: 
       usingDefaultRef.current = false;
       setUsingDefault(false);
       setIndex(0);
+      setGroup("");
       setView("review");
       setImportError(null);
       setRestored(Object.keys(saved).length > 0);
@@ -266,16 +313,16 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: 
   });
 
   const done = summary.reviewed;
-  const percent = Math.round((done / predictions.length) * 100);
+  const percent = Math.round((done / allPredictions.length) * 100);
 
   return (
     <div className="flex flex-col gap-6" data-interactive={interactive || undefined}>
       <header className="flex flex-col gap-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="flex flex-col gap-1">
-            <h1 className="text-2xl font-semibold tracking-tight text-balance">Annotate Jev&apos;s predictions</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-balance">{title}</h1>
             <p className="text-sm text-muted-foreground">
-              <span className="font-mono">{source}</span> · {predictions.length} messages
+              <span className="font-mono">{source}</span> · {allPredictions.length} messages
               {restored && " · restored your saved progress"}
             </p>
           </div>
@@ -283,7 +330,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: 
             <input
               ref={fileInput}
               type="file"
-              accept=".csv,text/csv"
+              accept=".csv,.jsonl,text/csv,application/jsonl,application/json"
               className="sr-only"
               aria-label="Import predictions CSV"
               tabIndex={-1}
@@ -295,7 +342,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: 
             />
             <Button variant="outline" size="sm" onClick={() => fileInput.current?.click()}>
               <Upload aria-hidden="true" />
-              Import CSV
+              Import file
             </Button>
             <Button
               variant="outline"
@@ -306,6 +353,15 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: 
             >
               <Download aria-hidden="true" />
               Download CSV
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              title="Reviewed answers as message => field=value lines (the batch format npm run sft:add reads)"
+              onClick={() => void saveFile(`labels-${new Date().toISOString().slice(0, 10)}.txt`, serializeLabels(dataset))}
+            >
+              <Download aria-hidden="true" />
+              Download labels
             </Button>
           </div>
         </div>
@@ -318,7 +374,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: 
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between text-sm">
             <span className="tabular-nums" data-testid="progress">
-              {done} of {predictions.length} reviewed
+              {done} of {allPredictions.length} reviewed
             </span>
             <FileStatusText status={fileStatus} enabled={Boolean(saveToFile)} usingDefault={usingDefault} />
             <span className="text-muted-foreground tabular-nums">{percent}%</span>
@@ -327,7 +383,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: 
             role="progressbar"
             aria-label="Reviewed"
             aria-valuemin={0}
-            aria-valuemax={predictions.length}
+            aria-valuemax={allPredictions.length}
             aria-valuenow={done}
             className="h-1.5 overflow-hidden rounded-full bg-muted"
           >
@@ -336,30 +392,48 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: 
         </div>
 
         {/* One square per message: green right, amber wrong values, red wrong action, grey not yet. */}
-        <nav aria-label="Messages" className="flex flex-wrap gap-1">
-          {predictions.map((p, i) => {
-            const a = annotations[p.id];
-            const result = a ? verdict(p, a) : null;
-            return (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => go(i)}
-                aria-label={`Message ${i + 1}${result ? `, ${result.replace("_", " ")}` : ", not reviewed"}`}
-                aria-current={view === "review" && i === index ? "true" : undefined}
-                className={cn(
-                  "size-6 rounded text-[10px] font-medium tabular-nums outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
-                  result === null && "bg-muted text-muted-foreground",
-                  result === "correct" && "bg-success/25 text-foreground",
-                  result === "wrong_values" && "bg-warning/35 text-foreground",
-                  result === "wrong_action" && "bg-destructive/20 text-destructive",
-                  view === "review" && i === index && "ring-2 ring-foreground",
-                )}
-              >
-                {i + 1}
-              </button>
-            );
-          })}
+        <nav
+          ref={gridRef}
+          aria-label="Messages"
+          tabIndex={0}
+          style={{ maxHeight: gridHeight }}
+          className="flex flex-col gap-3 overflow-y-auto overscroll-contain rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        >
+          {squareGroups.map(({ name, items }) => (
+            <div key={name} role="group" aria-label={name ? label(name) : "Messages"} className="flex flex-col gap-1">
+              {name && squareGroups.length > 1 && (
+                <span className="text-xs text-muted-foreground">
+                  {label(name)} · {items.filter(({ p }) => annotations[p.id]).length}/{items.length}
+                </span>
+              )}
+              <div className="flex flex-wrap gap-1">
+                {items.map(({ p, i }) => {
+                  const a = annotations[p.id];
+                  const result = a ? verdict(p, a) : null;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => go(i)}
+                      aria-label={`Message ${i + 1}${result ? `, ${result.replace("_", " ")}` : ", not reviewed"}`}
+                      aria-current={view === "review" && i === index ? "true" : undefined}
+                      className={cn(
+                        "size-6 rounded text-[10px] font-medium tabular-nums outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                        result === null && "bg-muted text-muted-foreground",
+                        result === "correct" && "bg-success/25 text-foreground",
+                        result === "fixed" && "bg-warning/15 ring-1 ring-inset ring-warning/60 text-foreground",
+                        result === "wrong_values" && "bg-warning/35 text-foreground",
+                        result === "wrong_action" && "bg-destructive/20 text-destructive",
+                        view === "review" && i === index && "ring-2 ring-foreground",
+                      )}
+                    >
+                      {i + 1}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -376,6 +450,41 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: 
             Next
             <ChevronRight aria-hidden="true" />
           </Button>
+          <div role="group" aria-label="What to show" className="flex rounded-md border">
+            {(["full", "fields"] as const).map((option) => (
+              <Button
+                key={option}
+                variant={mode === option ? "secondary" : "ghost"}
+                size="sm"
+                aria-pressed={mode === option}
+                onClick={() => {
+                  setMode(option);
+                  setView("review");
+                }}
+              >
+                {option === "full" ? "Full" : "Fields only"}
+              </Button>
+            ))}
+          </div>
+          {groups.length > 1 && (
+            <select
+              aria-label="Group"
+              value={group}
+              onChange={(event) => {
+                setGroup(event.target.value);
+                setIndex(0);
+                setView("review");
+              }}
+              className="h-8 rounded-md border bg-background px-2 text-sm"
+            >
+              <option value="">All groups ({allPredictions.length})</option>
+              {groups.map(([name, t]) => (
+                <option key={name} value={name}>
+                  {label(name)} ({t.reviewed}/{t.total})
+                </option>
+              ))}
+            </select>
+          )}
           <Button
             variant={view === "summary" ? "secondary" : "ghost"}
             size="sm"
@@ -399,13 +508,18 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile }: 
       {view === "summary" ? (
         <SummaryView
           summary={summary}
-          onOpen={(id) => go(predictions.findIndex((p) => p.id === id))}
+          onOpen={(id) => {
+            setGroup("");
+            setIndex(allPredictions.findIndex((p) => p.id === id));
+            setView("review");
+          }}
         />
       ) : (
         current && (
           <ReviewCard
             // A new key per message (and per saved answer) resets the form's pre-filled values.
-            key={`${current.id}:${JSON.stringify(annotations[current.id] ?? null)}`}
+            key={`${current.id}:${mode}:${JSON.stringify(annotations[current.id] ?? null)}`}
+            mode={mode}
             prediction={current}
             annotation={annotations[current.id]}
             position={index + 1}

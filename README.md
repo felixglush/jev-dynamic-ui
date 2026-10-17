@@ -32,6 +32,15 @@ ActionPanel picks a form  <---  typed result (action + params)  <---
 - `src/components/ui/` is shadcn/ui style components (Tailwind + Radix). `src/components/forms/` holds one form per banking action. `src/app/actions.ts` is the Next.js *Server Action* (server code the browser can call); it's unrelated to the banking "actions".
 - Server and client split: `page.tsx`, `layout.tsx` and `not-found.tsx` are Server Components. Only what needs state or events is a Client Component (`"use client"`): `chat.tsx`, `forms/action-form.tsx`, the `annotate/` components and `app/error.tsx`. The Jev call and the API key live only in `lib/jev/classify.ts` (`server-only`).
 
+### Who fills which parameter
+
+| Kind of parameter | Examples | Filled by |
+| --- | --- | --- |
+| Free text: the value comes from what the customer typed | names, emails, phones, amounts, dates, biller account numbers | the extractor model (`src/lib/extract/`), which copies it from the message or leaves it empty |
+| Choice: the answer is one of the catalog's fixed options | which account to pay from or move money to, credit card payment option (minimum, statement balance, current balance, custom), account type to open, frequency, card, dispute reason | Jev, picking from the options in `catalog.ts` |
+
+The rule is `param.type === "choice"`. `freeTextParams()` in `src/lib/extract/prompt.ts` returns everything that isn't a choice, and that list is the extractor's output fields and its fine-tuning answers. A new choice parameter needs no training data: add it to the catalog with its options. Jev also picks the action itself. For the free-text parameters Jev still chooses among code-found candidates (`candidates.ts`), and the extractor's values are a separate proposal for the same fields.
+
 ## Tests
 
 ```bash
@@ -54,7 +63,7 @@ npm run extract:eval                        # data/sample-messages.txt -> extrac
 
 The setup script downloads from huggingface.co directly because `ollama run hf.co/...` needs the `hf.co` host. Ollama's installer needs `zstd`. `OLLAMA_URL` and `OLLAMA_MODEL` override the defaults.
 
-Zero-shot, this model fills every field whether or not the message states it (invented emails, "John Doe", a constant date). So `ground.ts` checks each value against the message and drops anything not literally there (spelled-out amounts like "two hundred" and "$1.5k" are understood); dropped and empty fields stay blank for the customer to fill in. On the sample messages that removes the inventions, at about 0.35 s per message on 4 CPU cores. Fine-tuning should teach the model to leave absent fields empty itself.
+Zero-shot, this model fills every field whether or not the message states it (invented emails, "John Doe", a constant date). The extractor passes the model's values on as they are (there is no run-time check against the message), so fine-tuning (see `docs/sft-dataset.md`) is what teaches the model to leave absent fields empty. Empty fields stay blank for the customer to fill in.
 
 ## Validating Jev's predictions
 
@@ -72,6 +81,8 @@ Open [`/annotate`](http://localhost:3000/annotate) (`npm run dev`). It shows `pr
 Every answer is saved as you go, in two places. The browser keeps it in localStorage, and the server applies each change to `data/annotations.csv` (a server action in `src/app/annotate/actions.ts`; set `ANNOTATIONS_FILE` to use another path). The page shows `Saved to data/annotations.csv` beside the progress count. Open the page in a different browser and it restores the answers from that file; answers for messages whose text has since changed are ignored. If the file can't be read (say, a hand edit left an unknown action), autosave stays off and the page tells you, so nothing is overwritten. This needs a writable local filesystem and has no login yet, so don't deploy it as is. A CSV you **Import** is kept in the browser only and never touches the file.
 
 **Download CSV** writes the predictions with `expected_action`, `expected_params` and `annotator_note` filled in; **Import CSV** loads any predictions CSV, including one downloaded earlier, so you can pick up where you left off. The page reads `predictions.csv` at build time: restart `npm run dev` after re-running `npm run predict`, or import the new file.
+
+**Fine-tuning data.** The **Fine-tuning data** switch above the progress opens `data/sft/examples.jsonl` (sample and generated rows; `SFT_REVIEW_FILE` to use another path): Y approves a row, N corrects it, action `none` rejects it, and every answer is written into the row in the file for `npm run sft:build` to train on. Import also takes the JSONL files from `docs/sft-dataset.md` (`data/sft/*.jsonl`, or model output from `npm run extract:eval -- data/sample-messages.txt out.jsonl`). The **Full / Fields only** switch next to Summary changes the card: Full is the whole picture, Fields only shows just the extractor model's fields for the action, blanks marked, and a fix-it form without the choice fields. **Download labels** writes the reviewed answers as `message => field=value` lines, the batch format `npm run sft:add` reads.
 
 - `src/app/annotate/page.tsx` is a Server Component that reads the file (`lib/annotate/load.ts`, `"use cache"`) and passes the rows to `components/annotate/annotator.tsx`, the client component that does the rest.
 - `src/lib/annotate/` holds the plain functions: CSV reading and writing (`dataset.ts`, `csv.ts`) and the scoring (`summary.ts`). Values are compared loosely: `50` matches `50.00`, phone numbers by digits, names ignoring case.

@@ -5,6 +5,7 @@ import { useId, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DateField } from "./date-field";
 import { LOW_CONFIDENCE } from "@/lib/jev/catalog";
 import type { ParamValue } from "@/lib/jev/types";
 
@@ -86,6 +87,16 @@ export function ParamField({ name, label, param, required, options, emptyLabel =
             </option>
           ))}
         </select>
+      ) : type === "date" ? (
+        <DateField
+          id={id}
+          name={name}
+          value={current}
+          onValue={track}
+          required={required}
+          aria-invalid={missing || undefined}
+          aria-describedby={describedBy}
+        />
       ) : (
         <Input
           id={id}
