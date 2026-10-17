@@ -433,3 +433,9 @@ What this says:
 
 So the extractor sends the schema again (`format`), which guarantees valid JSON, and it is safe only with a model trained this way: pointing it at an older GGUF without dropping `format` brings the serving bug back (note in `extractFields`). The GGUF is `o350e2s0/` on the Modal volume (`modal volume get jev-sft o350e2s0/LFM2.5-230M-SFT-Q8_0.gguf ...`; the file name still says 230M, it is the 350M), registered locally as `lfm25-350m-sft-shuffled`.
 
+
+## Release: shuffled-key 350M on Hugging Face, and the app default
+
+2026-10-17. Run `o350e2s0` (LFM2.5-350M, 1,120 v5 train rows, 3 key-order copies, 2 epochs; val 98.9%, test 96.9%) was exported to Q8_0 (379 MB) and uploaded with a model card (`training/hf/MODEL_CARD_350M.md`) and the base model's LICENSE to the **private** repo `felixglush156/LFM2.5-350M-banking-extractor-GGUF` (`modal run training/modal_train.py --stage upload --run o350e2s0 --base LiquidAI/LFM2.5-350M --label training/hf/MODEL_CARD_350M.md`, which uses the Modal secret `huggingface-secret`). The card says that only about 62 rows were human-reviewed, that the scores are on the merged bf16 weights, and that the test set is not sealed.
+
+The extractor's default model is now `lfm25-350m-sft` (set `OLLAMA_MODEL` to use another); `scripts/ollama/use-tuned.sh` registers it from `models/LFM2.5-350M-SFT-Q8_0.gguf` with `temperature 0` only (the old Modelfile also set `top_k 50` and `repeat_penalty 1.05`, which the requests did not need; removing `repeat_penalty` made no difference on the stress set). Default model through the real extractor with the schema: 125/129 on the stress set.

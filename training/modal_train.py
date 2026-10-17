@@ -8,8 +8,8 @@ LoRA fine-tune LiquidAI/LFM2.5-230M on the field-extraction data, on Modal, and 
 Stages (--stage): baseline | train | score | gguf | snapshot | all (default); see main() for the options. The training data is read from the local
 data/sft/ folder and sent to Modal; results land in the Modal Volume "jev-sft" under latest/. Then:
 
-    modal volume get jev-sft latest/LFM2.5-230M-SFT-Q8_0.gguf scripts/ollama/models/
-    scripts/ollama/use-tuned.sh                # registers it with Ollama as lfm25-230m-sft
+    modal volume get jev-sft latest/LFM2.5-230M-SFT-Q8_0.gguf scripts/ollama/models/LFM2.5-350M-SFT-Q8_0.gguf   # the converter always names it 230M
+    scripts/ollama/use-tuned.sh                # registers it with Ollama as lfm25-350m-sft
 
 Not run in CI: it needs a Modal account and a GPU. The LoRA settings follow the model's own layer
 names, read from its safetensors header: attention q/k/v/out_proj, the short-convolution blocks'
@@ -406,6 +406,27 @@ def to_gguf(run: str = "latest") -> str:
     return target
 
 
+@app.function(
+    image=modal.Image.debian_slim(python_version="3.12").pip_install("huggingface_hub"),
+    timeout=1800,
+    volumes={"/out": volume},
+    secrets=[modal.Secret.from_name("huggingface-secret")],
+)
+def upload_hf(run: str, repo: str, card: str, gguf_name: str, base: str) -> str:
+    """Upload <run>'s GGUF, a model card and the base model's license to a PRIVATE Hugging Face repo (created if missing)."""
+    import os
+    from huggingface_hub import HfApi, hf_hub_download
+
+    token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN") or os.environ.get("HUGGINGFACE_TOKEN")
+    api = HfApi(token=token)
+    volume.reload()
+    api.create_repo(repo, private=True, exist_ok=True)
+    api.upload_file(path_or_fileobj=f"/out/{run}/LFM2.5-230M-SFT-Q8_0.gguf", path_in_repo=gguf_name, repo_id=repo)
+    api.upload_file(path_or_fileobj=card.encode(), path_in_repo="README.md", repo_id=repo)
+    api.upload_file(path_or_fileobj=hf_hub_download(base, "LICENSE", token=token), path_in_repo="LICENSE", repo_id=repo)
+    return f"https://huggingface.co/{repo}"
+
+
 @app.function(image=modal.Image.debian_slim(python_version="3.12"), timeout=1800, volumes={"/out": volume})
 def snapshot(src: str, dst: str) -> list[str]:
     """Copy a folder of the volume to a new name (the volume CLI cannot copy folders), so a later run cannot overwrite it."""
@@ -468,7 +489,7 @@ def main(
     """
     --run     folder in the Modal volume that the stage reads or writes (default latest, which every training
               run overwrites: give each run its own name)
-    --stage   baseline | train | score (a saved <run>/merged model, no training) | gguf | snapshot (copy latest to <run>) | probe (answer the records in the JSONL file named by --label) | all
+    --stage   baseline | train | score (a saved <run>/merged model, no training) | gguf | snapshot (copy latest to <run>) | probe (answer the records in the JSONL file named by --label) | upload (private Hugging Face repo, --label = model card) | all
     --train-subset  all | run1 (the rows Run 1 trained on: no trainOnly / split / v2 rows)
     --seed    training seed (default 0, the seed of Runs 1 to 4)
     --patience  stop early after this many evals (four per epoch) without a better val loss (default 100: effectively never for runs this short, but 100 non-improving evals do stop a long one)
@@ -481,6 +502,11 @@ def main(
         records = [json.loads(line) for line in Path(label).read_text().splitlines() if line.strip()]
         for row in probe.remote(run, records):
             print(json.dumps(row, ensure_ascii=False))
+        return
+    if stage == "upload":
+        # --label is the path of the model card (Markdown); --base names the base model whose LICENSE is copied.
+        repo = "felixglush156/LFM2.5-350M-banking-extractor-GGUF"
+        print(upload_hf.remote(run, repo, Path(label).read_text(), "LFM2.5-350M-SFT-Q8_0.gguf", base))
         return
     if stage == "snapshot":
         print("\n".join(snapshot.remote("latest", run)))

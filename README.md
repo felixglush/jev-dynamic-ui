@@ -54,7 +54,7 @@ The fake Jev (`e2e/fake-jev.mts`) is a crude rule-based stand-in. These tests ch
 
 ## Extracting values with a local model (experimental)
 
-`src/lib/extract/` asks a small local model, [LiquidAI's LFM2.5-230M](https://huggingface.co/LiquidAI/LFM2.5-230M-GGUF) running in [Ollama](https://ollama.com), for the free-text values of one action (names, emails, phones, amounts, dates, account numbers; choices stay with Jev). Set `EXTRACTOR=ollama` (and `OLLAMA_MODEL`, e.g. `lfm25-230m-sft` after `scripts/ollama/use-tuned.sh`) to let it fill the free-text fields of the form the chat opens; Jev still picks the action and the choices. Without it the chat uses Jev's values only.
+`src/lib/extract/` asks a small local model, [LiquidAI's LFM2.5-230M](https://huggingface.co/LiquidAI/LFM2.5-230M-GGUF) running in [Ollama](https://ollama.com), for the free-text values of one action (names, emails, phones, amounts, dates, account numbers; choices stay with Jev). Set `EXTRACTOR=ollama` (the default model is `lfm25-350m-sft`, the fine-tuned LFM2.5-350M, registered by `scripts/ollama/use-tuned.sh`; set `OLLAMA_MODEL` to use another) to let it fill the free-text fields of the form the chat opens; Jev still picks the action and the choices. Without it the chat uses Jev's values only.
 
 ```bash
 scripts/ollama/setup.sh                     # downloads the Q8_0 GGUF (~235 MB) and runs `ollama create lfm25-230m`

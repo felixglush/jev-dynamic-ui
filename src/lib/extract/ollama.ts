@@ -14,7 +14,7 @@ export { freeTextParams, systemPromptFor };
  */
 
 const OLLAMA_URL = process.env.OLLAMA_URL ?? "http://127.0.0.1:11434";
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "lfm25-230m";
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "lfm25-350m-sft";
 const TIMEOUT_MS = 60_000;
 
 export type ExtractStatus =
