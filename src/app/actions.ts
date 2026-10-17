@@ -3,6 +3,7 @@
 import { TypeSafeError } from "@typesafe-ai/sdk";
 
 import { MAX_MESSAGE_LENGTH } from "@/lib/jev/catalog";
+import { withExtractedFields } from "@/lib/extract/apply";
 import { classify } from "@/lib/jev/classify";
 import type { ClassifyOutcome } from "@/lib/jev/types";
 
@@ -21,7 +22,9 @@ export async function classifyMessage(message: string): Promise<ClassifyOutcome>
   }
 
   try {
-    return { ok: true, result: await classify(trimmed) };
+    const result = await classify(trimmed);
+    // EXTRACTOR=ollama: let the local fine-tuned model fill the free-text fields (see README).
+    return { ok: true, result: process.env.EXTRACTOR === "ollama" ? await withExtractedFields(result, trimmed) : result };
   } catch (error) {
     // Log the detail on the server; send the browser only a generic message.
     console.error("classifyMessage failed:", error);
