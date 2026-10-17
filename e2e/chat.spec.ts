@@ -569,7 +569,7 @@ test("pressing Return before the newest answer arrives does not focus the older 
   await expect(card(page).getByRole("button", { name: "Open Account" })).toBeFocused();
 });
 
-test("every message sent is logged for review on the annotate page", async ({ page }) => {
+test("every message sent (not typed) is logged for review on the annotate page", async ({ page }) => {
   const { readFile } = await import("node:fs/promises");
   const { PREDICTIONS_LOG } = await import("./paths");
   await say(page, "Send $77 to Logan for the logging test");
@@ -577,4 +577,17 @@ test("every message sent is logged for review on the annotate page", async ({ pa
   await expect
     .poll(async () => (await readFile(PREDICTIONS_LOG, "utf8").catch(() => "")))
     .toMatch(/^live-[^\n]*Send \$77 to Logan for the logging test,send_etransfer,/m);
+});
+
+test("what is typed while the card updates is not logged until Return sends it", async ({ page }) => {
+  const { readFile } = await import("node:fs/promises");
+  const { PREDICTIONS_LOG } = await import("./paths");
+  const logged = async () => (await readFile(PREDICTIONS_LOG, "utf8").catch(() => "")).split("\n").filter((line) => line.includes("Send $88 to Quinn for the typing test"));
+  await composer(page).pressSequentially("Send $88 to Quinn for the typing test");
+  await expect(card(page).getByText("Send an e-Transfer")).toBeVisible();
+  await page.waitForTimeout(500);
+  expect(await logged()).toHaveLength(0);
+
+  await composer(page).press("Enter");
+  await expect.poll(async () => (await logged()).length).toBe(1);
 });

@@ -57,11 +57,12 @@ export function Chat() {
       wantFocus.current = true;
       setOpen(true);
       // The card already shows this text's answer: nothing new to ask, just move into it.
-      if (unchanged && outcome && shownText.current === text) {
-        focusForm();
-        return;
+      if (unchanged) {
+        // Only a sent message is logged, and the answer for this text was asked for while typing: ask once more, just to log it.
+        void classifyMessage(text, true).catch(() => {});
+        if (outcome && shownText.current === text) focusForm();
+        return; // otherwise that answer is still on its way, and focus will follow it
       }
-      if (unchanged) return; // that answer is still on its way, and focus will follow it
     }
     const id = ++latestId.current;
     lastText.current = text;
@@ -70,7 +71,7 @@ export function Chat() {
     startTransition(async () => {
       let answer: ClassifyOutcome;
       try {
-        answer = await classifyMessage(text);
+        answer = await classifyMessage(text, explicit);
       } catch {
         answer = NETWORK_ERROR;
       }
