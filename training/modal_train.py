@@ -326,6 +326,7 @@ def train(files: dict[str, str], base: str = BASE_MODEL, epochs: int = 3, lr: fl
     result["final_eval"] = {k: v for k, v in final.items() if k.endswith("_loss")}
     result["best_checkpoint_step"] = int(trainer.state.best_global_step)
     result["settings"]["seed"] = seed
+    result["settings"]["patience"] = patience
     result["settings"]["keep_last"] = keep_last
     (out / "tuned.json").write_text(json.dumps(result, indent=2, ensure_ascii=False))
     volume.commit()
@@ -424,7 +425,7 @@ def main(
     --stage   baseline | train | score (a saved <run>/merged model, no training) | gguf | snapshot (copy latest to <run>) | all
     --train-subset  all | run1 (the rows Run 1 trained on: no trainOnly / split / v2 rows)
     --seed    training seed (default 0, the seed of Runs 1 to 4)
-    --patience  stop early after this many evals (four per epoch) without a better val loss (default 100 = never)
+    --patience  stop early after this many evals (four per epoch) without a better val loss (default 100: effectively never for runs this short, but 100 non-improving evals do stop a long one)
     --keep-last  keep the final-epoch weights instead of the best-val-loss checkpoint (to test whether more training hurts)
     --label   names the local result file training/out/v4-<label>.json (default: the run name)
     """
