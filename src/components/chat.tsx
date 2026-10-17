@@ -59,7 +59,7 @@ export function Chat() {
   const lastText = useRef("");
   // The text the card's current form was made from, so a form for older text is never taken for this text's.
   const shownText = useRef("");
-  // Set when the customer pressed Return: once the answer is in, focus moves into the card.
+  // Set when the customer pressed Return: once the answer is in, the card's form is confirmed.
   const wantFocus = useRef(false);
 
   function ask(text: string, explicit: boolean) {
@@ -72,7 +72,7 @@ export function Chat() {
       if (unchanged) {
         // Only a sent message is logged, and the answer for this text was asked for while typing: ask once more, just to log it.
         void classifyMessage(text, true).catch(() => {});
-        if (outcome && shownText.current === text) focusForm();
+        if (outcome && shownText.current === text) confirmCard();
         return; // otherwise that answer is still on its way, and focus will follow it
       }
     }
@@ -131,6 +131,17 @@ export function Chat() {
     else timer.current = setTimeout(() => ask(text, false), DEBOUNCE_MS);
   }
 
+  // Return in the message bar confirms the shown action. If a required field is still blank the form
+  // is left open and the cursor goes to the first blank one (checkValidity is the browser's own
+  // `required` check, the same one the Send Money button runs).
+  function confirmCard() {
+    const form = cardRef.current?.querySelector("form");
+    if (!form) return;
+    wantFocus.current = false;
+    if (form.checkValidity()) form.requestSubmit();
+    else focusForm();
+  }
+
   function focusForm() {
     const card = cardRef.current;
     if (!card) return;
@@ -153,12 +164,13 @@ export function Chat() {
   // Stop a pending debounce if the page goes away.
   useEffect(() => () => clearTimeout(timer.current), []);
 
-  // After Return, once the answer has rendered, put the cursor where Return does the right thing:
-  // the first field still needed, or else the confirm button.
+  // After Return, once the answer has rendered, confirm it (or focus the first field still needed).
   useEffect(() => {
     if (!wantFocus.current || !outcome) return;
     wantFocus.current = false;
-    focusForm();
+    confirmCard();
+    // Only a new answer should trigger this, not a re-created confirmCard.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [outcome]);
 
   const host: ActionHost = {
@@ -259,8 +271,10 @@ export function Chat() {
               size="sm"
               className="rounded-full"
               onClick={() => {
+                // A chip shows its form for review; it doesn't confirm it the way Return does.
                 if (composerRef.current) composerRef.current.value = example;
-                submit(example);
+                setDone("");
+                ask(example, false);
               }}
             >
               {example}

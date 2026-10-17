@@ -2,7 +2,14 @@ import { expect, test, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { CATALOG } from "../src/lib/jev/catalog";
 
+/** Types a message and lets the live prediction open the form. Sending (Return) would confirm it. */
 async function say(page: Page, message: string) {
+  await composer(page).fill(message);
+  await expect(card(page)).toBeVisible();
+}
+
+/** Presses Send, like Return: the shown action is confirmed, or explained when there is none. */
+async function send(page: Page, message: string) {
   await composer(page).fill(message);
   await page.getByRole("button", { name: "Send", exact: true }).click();
 }
@@ -68,7 +75,7 @@ test("add_etransfer_contact: fills name and email", async ({ page }) => {
 });
 
 test("a message that is not a banking action gets a helpful reply, not a form", async ({ page }) => {
-  await say(page, "what time does the branch close");
+  await send(page, "what time does the branch close");
 
   await expect(page.getByText("I can help with e-Transfers")).toBeVisible();
   await expect(card(page).getByRole("heading", { level: 2 })).toHaveCount(0);
@@ -100,14 +107,15 @@ test("the form opens in a floating card right away, before Jev answers", async (
     if (route.request().method() === "POST") await held;
     await route.continue();
   });
-  await say(page, "Send $50 to Sam");
+  await send(page, "Send $50 to Sam");
   await expect(card(page)).toBeVisible();
   await expect(composer(page)).toHaveValue("Send $50 to Sam");
   await expect(card(page).getByText("Thinking…")).toBeVisible();
 
+  // Return was pressed, so the answer is confirmed as soon as it arrives.
   release();
-  await expect(card(page).getByText("Send an e-Transfer")).toBeVisible();
-  await expect(card(page).getByText("Thinking…")).toHaveCount(0);
+  await expect(page.getByRole("status")).toContainText("Send an e-Transfer: $50.00 to Sam");
+  await expect(card(page)).toBeHidden();
 });
 
 test("confirming closes the card and sums up what was confirmed", async ({ page }) => {
@@ -120,21 +128,30 @@ test("confirming closes the card and sums up what was confirmed", async ({ page 
   await expect(composer(page)).toHaveValue("");
 });
 
-test("Return confirms on the spot: focus lands on the confirm button when nothing is missing", async ({ page }) => {
+test("Return in the message bar confirms the action and closes the card", async ({ page }) => {
   await composer(page).fill("pay the minimum on my credit card from savings");
   await composer(page).press("Enter");
 
-  await expect(card(page).getByRole("button", { name: "Make Payment" })).toBeFocused();
-  await page.keyboard.press("Enter");
   await expect(card(page)).toBeHidden();
   await expect(page.getByRole("status")).toContainText("minimum payment from savings");
+  await expect(composer(page)).toHaveValue("");
 });
 
-test("focus lands on the missing field, so typing it and pressing Return confirms", async ({ page }) => {
+test("Return on a form that was already open from live typing confirms it too", async ({ page }) => {
+  await say(page, "Send $50 to Sam");
+  await expect(page.getByLabel("To")).toHaveValue("Sam");
+  await composer(page).press("Enter");
+
+  await expect(card(page)).toBeHidden();
+  await expect(page.getByRole("status")).toContainText("Send an e-Transfer: $50.00 to Sam");
+});
+
+test("Return with a required field blank keeps the card open and focuses that field", async ({ page }) => {
   await composer(page).fill("send $20 to somebody");
   await composer(page).press("Enter");
 
-  await expect(page.getByLabel("To")).toBeFocused();
+  await expect(card(page)).toBeVisible();
+  await expect(page.getByRole("status")).toHaveText("");
   await page.keyboard.type("Sam");
   await page.keyboard.press("Enter");
   await expect(page.getByRole("status")).toContainText("$20.00 to Sam");
@@ -154,7 +171,7 @@ test("Esc dismisses the card, empties the message box and keeps focus there", as
 });
 
 test("an API failure shows a friendly error and keeps the chat usable", async ({ page }) => {
-  await say(page, "simulate-server-error");
+  await send(page, "simulate-server-error");
   await expect(page.getByText("Something went wrong classifying that message")).toBeVisible();
   await page.keyboard.press("Escape");
 
@@ -162,18 +179,18 @@ test("an API failure shows a friendly error and keeps the chat usable", async ({
   await expect(page.getByLabel("To")).toHaveValue("Sam");
 });
 
-test("sends on Enter, like a normal chat box", async ({ page }) => {
+test("live typing opens the form without confirming it", async ({ page }) => {
   await composer(page).fill("I want to open a TFSA");
-  await composer(page).press("Enter");
   await expect(page.getByLabel("Account type")).toHaveValue("tfsa");
   // The message stays in the bar so it can be refined while the card is open.
   await expect(composer(page)).toHaveValue("I want to open a TFSA");
+  await expect(page.getByRole("status")).toHaveText("");
 });
 
 test("a request that fails to reach the server shows an error instead of hanging on Thinking", async ({ page }) => {
   // Server Actions are POSTs to the page URL, so block every POST to simulate being offline.
   await page.route("**/*", (route) => (route.request().method() === "POST" ? route.abort() : route.continue()));
-  await say(page, "Send $50 to Sam");
+  await send(page, "Send $50 to Sam");
   await expect(page.getByText("Couldn’t reach the server")).toBeVisible();
   await expect(page.getByText("Thinking…")).toHaveCount(0);
   await page.keyboard.press("Escape");
@@ -205,7 +222,7 @@ test("a choice Jev is unsure about is flagged for a second look, and a screen re
 test("when the extractor is down the assistant says so instead of guessing", async ({ page, request }) => {
   await request.post("http://127.0.0.1:8788/__mode", { data: { fail: true } });
   try {
-    await say(page, "Send $50 to Sam");
+    await send(page, "Send $50 to Sam");
     await expect(page.getByText("The extractor (Ollama) isn't reachable")).toBeVisible();
   } finally {
     await request.post("http://127.0.0.1:8788/__mode", { data: { fail: false } });
@@ -593,17 +610,18 @@ test("pressing Return before the newest answer arrives does not focus the older 
   await composer(page).fill("I want to open a TFSA");
   await asked;
   await composer(page).press("Enter");
-  await expect(card(page).getByRole("button", { name: "Send Money" })).not.toBeFocused();
+  await expect(page.getByRole("status")).toHaveText("");
 
   release();
-  await expect(card(page).getByRole("button", { name: "Open Account" })).toBeFocused();
+  // Return confirms the newest answer, not the older form that was on screen.
+  await expect(page.getByRole("status")).toContainText("Open");
+  await expect(page.getByRole("status")).not.toContainText("Send an e-Transfer");
 });
 
 test("every message sent (not typed) is logged for review on the annotate page", async ({ page }) => {
   const { readFile } = await import("node:fs/promises");
   const { PREDICTIONS_LOG } = await import("./paths");
-  await say(page, "Send $77 to Logan for the logging test");
-  await expect(page.getByText("Send an e-Transfer")).toBeVisible();
+  await send(page, "Send $77 to Logan for the logging test");
   await expect
     .poll(async () => (await readFile(PREDICTIONS_LOG, "utf8").catch(() => "")))
     .toMatch(/^live-[^\n]*Send \$77 to Logan for the logging test,send_etransfer,/m);
