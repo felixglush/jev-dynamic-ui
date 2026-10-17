@@ -252,12 +252,12 @@ def baseline(files: dict[str, str], base: str = BASE_MODEL, run: str = "latest")
 
 
 @app.function(image=train_image, gpu="L4", timeout=7200, volumes={"/out": volume})
-def train(files: dict[str, str], base: str = BASE_MODEL, epochs: int = 3, lr: float = 2e-4, rank: int = 16, run: str = "latest", seed: int = 0) -> dict:
-    """LoRA fine-tune on train.jsonl, keep the best epoch by validation loss, score it, save adapter and merged model."""
+def train(files: dict[str, str], base: str = BASE_MODEL, epochs: int = 3, lr: float = 2e-4, rank: int = 16, run: str = "latest", seed: int = 0, patience: int = 100, keep_last: bool = False) -> dict:
+    """LoRA fine-tune on train.jsonl, keep the best checkpoint by validation loss (stop early after `patience` evals without improvement), score it, save adapter and merged model."""
     import torch
     from datasets import Dataset
     from peft import LoraConfig
-    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from transformers import AutoModelForCausalLM, AutoTokenizer, EarlyStoppingCallback
     from trl import SFTConfig, SFTTrainer
 
     def to_dataset(text: str) -> Dataset:
@@ -269,6 +269,14 @@ def train(files: dict[str, str], base: str = BASE_MODEL, epochs: int = 3, lr: fl
 
     tokenizer = AutoTokenizer.from_pretrained(base)
     model = AutoModelForCausalLM.from_pretrained(base, dtype=torch.bfloat16).to("cuda")
+    # Overfitting watch: loss is measured four times an epoch on the held-out val rows AND on a fixed
+    # sample of train rows (same size as val, so the two numbers are comparable; the running train loss
+    # in the log is noisy and includes dropout). Val loss rising while train loss keeps falling = overfitting.
+    train_dataset = to_dataset(files["train"])
+    steps_per_epoch = max(1, len(train_dataset) // 16)
+    eval_every = max(1, steps_per_epoch // 4)
+    val_dataset = to_dataset(files["val"])
+    train_sample = train_dataset.shuffle(seed=0).select(range(min(len(val_dataset), len(train_dataset))))
     trainer = SFTTrainer(
         model=model,
         args=SFTConfig(
@@ -281,16 +289,20 @@ def train(files: dict[str, str], base: str = BASE_MODEL, epochs: int = 3, lr: fl
             bf16=True,
             max_length=512,
             logging_steps=10,
-            eval_strategy="epoch",
-            save_strategy="epoch",
+            eval_strategy="steps",
+            eval_steps=eval_every,
+            save_strategy="steps",
+            save_steps=eval_every,
             save_total_limit=2,
-            load_best_model_at_end=True,
-            metric_for_best_model="eval_loss",
+            load_best_model_at_end=not keep_last,
+            metric_for_best_model="eval_val_loss",
+            greater_is_better=False,
             report_to="none",
             seed=seed,
         ),
-        train_dataset=to_dataset(files["train"]),
-        eval_dataset=to_dataset(files["val"]),
+        train_dataset=train_dataset,
+        eval_dataset={"val": val_dataset, "train": train_sample},
+        callbacks=[EarlyStoppingCallback(early_stopping_patience=patience)],
         processing_class=tokenizer,
         peft_config=LoraConfig(
             r=rank, lora_alpha=2 * rank, lora_dropout=0.05, target_modules=LORA_TARGETS, task_type="CAUSAL_LM"
@@ -309,6 +321,9 @@ def train(files: dict[str, str], base: str = BASE_MODEL, epochs: int = 3, lr: fl
     result["settings"] = {"base": base, "epochs": epochs, "lr": lr, "rank": rank, "targets": LORA_TARGETS}
     result["train_records"] = len(load_records(files["train"]))
     result["log"] = trainer.state.log_history
+    result["best_checkpoint_step"] = int(trainer.state.best_global_step)
+    result["settings"]["seed"] = seed
+    result["settings"]["keep_last"] = keep_last
     (out / "tuned.json").write_text(json.dumps(result, indent=2, ensure_ascii=False))
     volume.commit()
     return result
@@ -397,6 +412,8 @@ def main(
     train_subset: str = "all",
     label: str = "",
     seed: int = 0,
+    patience: int = 100,
+    keep_last: bool = False,
 ):
     """
     --run     folder in the Modal volume that the stage reads or writes (default latest, which every training
@@ -404,6 +421,8 @@ def main(
     --stage   baseline | train | score (a saved <run>/merged model, no training) | gguf | snapshot (copy latest to <run>) | all
     --train-subset  all | run1 (the rows Run 1 trained on: no trainOnly / split / v2 rows)
     --seed    training seed (default 0, the seed of Runs 1 to 4)
+    --patience  stop early after this many evals (four per epoch) without a better val loss (default 100 = never)
+    --keep-last  keep the final-epoch weights instead of the best-val-loss checkpoint (to test whether more training hurts)
     --label   names the local result file training/out/v4-<label>.json (default: the run name)
     """
     if stage == "snapshot":
@@ -434,7 +453,7 @@ def main(
         save(result, "score")
         report(f"saved model {run}", result)
     if stage in ("train", "all"):
-        result = train.remote(files, base, epochs, lr, rank, run, seed)
+        result = train.remote(files, base, epochs, lr, rank, run, seed, patience, keep_last)
         save(result, "tuned")
         report(f"LoRA (r={rank}, lr={lr}, {epochs} epochs, {result['train_records']} train rows)", result)
     if stage in ("gguf", "all"):

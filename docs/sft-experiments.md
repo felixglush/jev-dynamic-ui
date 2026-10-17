@@ -312,10 +312,32 @@ Totals: v4 train 892, val 221, test 362 (v3: 701 / 165 / 266). v4 test has the v
 
 **Not done here:** the stress set (`data/extract-stress.txt`) was deliberately kept out of training: no row duplicates a stress message (checked by the generator), so it remains an independent check.
 
-### Run 5 and the v4 baselines (pending)
+### Run 5 and the v4 baselines
 
-The Modal runs could not start from the thread that built the data: its network policy blocked `input-plane.us-east.modal.com` (HTTP 403 from the egress proxy), which Modal needs to start functions; `api.modal.com` and the storage host worked. Planned runs, all with the Run 4 recipe (rank 16, alpha 32, lr 2e-4, 3 epochs, batch 16):
+2026-10-17. All on Modal (L4), LoRA rank 16 / alpha 32 / lr 2e-4 / batch 16 on the 892 v4 train rows, scored on v4 val (221) and test (362) with schema-constrained decoding. The earlier "could not start" note is resolved: the Modal CLI needed `pip install 'modal[api-proxy-support]'` to go through the sandbox proxy.
 
-- `--stage train --run run5` (seed 0), then `--stage gguf --run run5`
-- `--stage train --run run5s1 --seed 1` (the same data, a second seed, for the noise level)
-- `--stage score --run run4` and `--stage baseline --run base-v4` (scored on v4; Run 4 is the comparison, and only within v4)
+**Overfitting check.** `training/modal_train.py` now measures loss four times an epoch on val AND on a fixed 221-row sample of train rows (so the two are comparable), and keeps either the best-val-loss checkpoint (default) or the final weights (`--keep-last`). Val is used for picking the checkpoint; test is only read afterwards.
+
+| Run | Epochs | Weights kept | Best val loss (epoch) | Final val loss | Final train-sample loss | Val exact | Test exact | Test blank fields filled |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Base | none | | | | | 17.6% | 21.3% | 91.2% |
+| Run 4 recipe (trained on v3) | 3 | | | | | 87.8% | 88.1% | 5.8% |
+| Run 5, seed 0 | 3 | best val loss | 0.0183 (1.4) | 0.0192 | 0.0022 | 94.6% | 92.5% | 2.9% |
+| Run 5, seed 1 | 3 | best val loss | 0.0195 (2.8) | 0.0196 | 0.0019 | 94.6% | 95.0% | 1.5% |
+| Seed 0 | 3 | final | same as above | 0.0192 | 0.0022 | 95.5% | 94.5% | 1.8% |
+| Seed 0 | 6 | best val loss | 0.0144 (2.3) | 0.0154 | 0.0005 | 96.4% | 96.1% | 0.9% |
+| Seed 0 | 6 | final | same as above | 0.0154 | 0.0005 | 96.8% | 97.0% | 0.7% |
+| **Seed 1 (Run 5 candidate)** | 6 | final | 0.0148 (5.6) | 0.0150 | 0.0004 | **98.6%** | **96.7%** | 0.9% |
+
+What this says:
+- **No overfitting in the harmful sense.** Val loss falls to about 0.015 and stays flat; it never climbs, even at 6 epochs. Train loss keeps dropping to 0.0004, so the gap is large (10 to 40 times) but a gap alone only matters if val gets worse, and neither val loss nor held-out exact match did.
+- **If anything the 3-epoch recipe was slightly undertrained.** Both 6-epoch runs beat all 3-epoch runs on val and test exact match (96.7 to 97.0% against 92.5 to 95.0% on test). Val loss is a poor way to pick a checkpoint here: it is flat after about epoch 2, so it picked early checkpoints (seed 0 at epoch 1.4) that scored worse.
+- **Seed noise is about 2.5 points** (same recipe, seeds 0 and 1: 92.5% against 95.0% on test), so one-point differences between runs mean nothing. The 3-epoch against 6-epoch gap is bigger than that on both seeds.
+- **Run 4 scores 88.1% on v4** (it was 95.9% on v3): the v4 test adds 96 hard rows for failure modes Run 4 never saw. Only compare within a version.
+- Candidate chosen by val exact match (98.6%), not by test. Both 6-epoch final runs are within noise of each other on test.
+
+**Stress set (129 adversarial messages, kept out of training), Q8_0 GGUF in Ollama, greedy:** Run 5 candidate **95/129 exact**, Run 4 83/129, base 17/129. Still weak: injection 1/4, add contact 5/10, emails 3/6, spelled-out and odd amounts 9/13, `cancel_etransfer` 2/4. Per-case results: `stress-run5.json` in the project's `tuned-model-run/` folder.
+
+Caveats: v4 val/test are AI-written and not human-reviewed; the stress set is my own labels; one candidate per seed pair, so no confidence intervals beyond the two-seed spread.
+
+Next if more is wanted: the remaining stress failures (injection and email shapes) as more train-only rows, and 8 to 10 epochs to see whether anything more is left (val loss says plateau).
