@@ -392,3 +392,15 @@ test.describe("fine-tuning files", () => {
     expect(text).toMatch(/^# \w+\n.+/);
   });
 });
+
+test("a logged message shows what the extractor read at the time, without asking it again", async ({ page }) => {
+  await open(page);
+  const csv = [
+    "id,group,message,predicted_action,action_confidence,params,missing_required,expected_action,note,extracted,extractor",
+    // The fake extractor would read "Sam" from this message; the stored answer says Zed, so Zed proves the stored one is used.
+    "live-1,live,Send $50 to Sam,send_etransfer,0.930,recipient=Sam (0.93); amount=50.00 (0.55),,,,recipient=Zed; amount=50,test-model",
+  ].join("\n");
+  await page.getByLabel("Import predictions CSV").setInputFiles({ name: "live.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
+  await expect(page.getByText("Message 1 of 1")).toBeVisible();
+  await expect(page.getByText("Zed").first()).toBeVisible();
+});

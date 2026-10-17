@@ -272,8 +272,9 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
   // answer arrives after an await, so setting state here isn't the "set state in an effect" trap.
   const currentAction = current?.predictedAction;
   const currentMessage = current?.message;
+  const stored = current?.extracted;
   useEffect(() => {
-    if (!extract || skipExtract || !currentMessage || !currentAction || !isActionName(currentAction)) return;
+    if (!extract || skipExtract || stored || !currentMessage || !currentAction || !isActionName(currentAction)) return;
     const k = extractionKey(currentAction, currentMessage);
     if (requested.current.has(k)) return;
     requested.current.add(k);
@@ -283,7 +284,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
         const entry: Extraction = result.ok ? { status: "ready", fields: result.fields } : { status: "error", message: result.error };
         setExtractions((all) => ({ ...all, [k]: entry }));
       });
-  }, [extract, skipExtract, currentAction, currentMessage]);
+  }, [extract, skipExtract, stored, currentAction, currentMessage]);
 
   /** Send changed answers to the file. Changes made while a save is running go out together in the next one. */
   function queueFileSave(changes: Changes) {
@@ -407,7 +408,8 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
   });
 
   // Nothing to read when Jev picked no action; "off" also covers the static preview.
-  const extraction: Extraction = skipExtract ? { status: "imported" } : !extract || !current?.message || !isActionName(current.predictedAction)
+  // A message the chat logged carries what the extractor read at the time, so that is shown instead of asking again.
+  const extraction: Extraction = skipExtract ? { status: "imported" } : stored && current && isActionName(current.predictedAction) ? { status: "ready", fields: stored } : !extract || !current?.message || !isActionName(current.predictedAction)
     ? { status: "off" }
     : (extractions[extractionKey(current.predictedAction, current.message)] ?? { status: "loading" });
 

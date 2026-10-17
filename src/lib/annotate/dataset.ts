@@ -22,6 +22,8 @@ export type Prediction = {
   missing: string[];
   /** The predict script's note, e.g. an error message. */
   note: string;
+  /** What the extractor read when the chat logged this message (blank value = found nothing). Absent for older rows. */
+  extracted?: Record<string, string>;
   /** For fine-tuning rows: the kind of example it is (typo, accented-name...). */
   kind?: Kind;
   /** For fine-tuning rows: which file the row ends up in (train, val or test). Absent until it is approved. */
@@ -63,6 +65,16 @@ export function isExpectedAction(value: string): value is ExpectedAction {
 export const label = (name: string) => name.replaceAll("_", " ");
 
 /** "recipient=Sam (1.00); amount=50.00 (0.98)" → { recipient: { value: "Sam", confidence: 1 }, ... } */
+/** "recipient=Sam; amount=50; date=" as written by the chat log. */
+export function parseExtracted(text: string): Record<string, string> {
+  return Object.fromEntries(
+    text.split(";").flatMap((part) => {
+      const at = part.indexOf("=");
+      return at === -1 ? [] : [[part.slice(0, at).trim(), part.slice(at + 1).trim()]];
+    }),
+  );
+}
+
 export function parseParams(text: string): Record<string, ParamValue> {
   const params: Record<string, ParamValue> = {};
   for (const part of text.split(";")) {
@@ -228,6 +240,7 @@ export function parseDataset(text: string): Dataset {
       params: parseParams(column(row, "params")),
       missing: column(row, "missing_required").split(";").map((s) => s.trim()).filter(Boolean),
       note: column(row, "note"),
+      ...(column(row, "extractor") ? { extracted: parseExtracted(column(row, "extracted")) } : {}),
     });
 
     const expected = column(row, "expected_action");
