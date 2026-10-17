@@ -121,6 +121,8 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
   const [source, setSource] = useState(initialSource);
   const [index, setIndex] = useState(0);
   const [skipExtract, setSkipExtract] = useState(false);
+  // Starts as the tab says; an imported file brings its own provenance (a CSV of predictions is not training labels).
+  const [own, setOwn] = useState(ownAnswers);
   const [view, setView] = useState<"review" | "summary">("review");
   const [mode, setMode] = useState<ReviewMode>(defaultMode);
   // Which group of messages to walk through ("" = all of them).
@@ -276,7 +278,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
   const currentMessage = current?.message;
   const stored = current?.extracted;
   useEffect(() => {
-    if (!extract || skipExtract || ownAnswers || stored || !currentMessage || !currentAction || !isActionName(currentAction)) return;
+    if (!extract || skipExtract || own || stored || !currentMessage || !currentAction || !isActionName(currentAction)) return;
     const k = extractionKey(currentAction, currentMessage);
     if (requested.current.has(k)) return;
     requested.current.add(k);
@@ -286,7 +288,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
         const entry: Extraction = result.ok ? { status: "ready", fields: result.fields } : { status: "error", message: result.error };
         setExtractions((all) => ({ ...all, [k]: entry }));
       });
-  }, [extract, skipExtract, ownAnswers, stored, currentAction, currentMessage]);
+  }, [extract, skipExtract, own, stored, currentAction, currentMessage]);
 
   /** Send changed answers to the file. Changes made while a save is running go out together in the next one. */
   function queueFileSave(changes: Changes) {
@@ -356,6 +358,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
       const imported = parseAnyDataset(text);
       // A JSONL file already holds the answers to review, so LiquidFM must not replace them.
       setSkipExtract(isJsonl(text));
+      setOwn(false);
       // Work saved in this browser for the same messages is newer than the file, so it wins.
       const key = storageKey(imported);
       const saved = readSaved(key) ?? {};
@@ -411,7 +414,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
 
   // Nothing to read when Jev picked no action; "off" also covers the static preview.
   // A message the chat logged carries what the extractor read at the time, so that is shown instead of asking again.
-  const extraction: Extraction = skipExtract || ownAnswers ? { status: "imported" } : stored && current && isActionName(current.predictedAction) ? { status: "ready", fields: stored } : !extract || !current?.message || !isActionName(current.predictedAction)
+  const extraction: Extraction = skipExtract || own ? { status: "imported" } : stored && current && isActionName(current.predictedAction) ? { status: "ready", fields: stored } : !extract || !current?.message || !isActionName(current.predictedAction)
     ? { status: "off" }
     : (extractions[extractionKey(current.predictedAction, current.message)] ?? { status: "loading" });
 

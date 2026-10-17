@@ -148,3 +148,16 @@ test("fine-tuning rows are training labels: no field is credited to Jev or Liqui
   await expect(page.getByTestId("action-source")).toHaveCount(0);
   await expect(page.getByText("Values are Jev's.")).toHaveCount(0);
 });
+
+test("importing a predictions CSV on the fine-tuning tab shows that file's own provenance", async ({ page }) => {
+  await page.getByRole("button", { name: "Fine-tuning data" }).click();
+  await page.getByRole("button", { name: "Full", exact: true }).click();
+  const csv = [
+    "id,group,message,predicted_action,action_confidence,params,missing_required,expected_action,note,extracted,extractor",
+    "live-1,live,Send $50 to Sam,send_etransfer,0.930,recipient=Sam (0.93); amount=50.00 (0.55),,,,recipient=Zed; amount=50,test-model",
+  ].join("\n");
+  await page.getByLabel("Import predictions CSV").setInputFiles({ name: "live.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
+  await expect(page.getByText("Message 1 of 1")).toBeVisible();
+  await expect(page.getByTestId("extractor-status")).not.toContainText("no model was run on them");
+  await expect(page.getByText("Zed").first()).toBeVisible();
+});
