@@ -13,7 +13,7 @@
  *   trainOnly older spelling of `split: "train"`; still honoured
  *   pattern   the failure pattern the row probes (e.g. "spelled-amount"); training/modal_train.py reports
  *             pass rate per pattern on val and test
- *   version   which evaluation set the row was added for: "v1" (the default when absent), "v2" or "v3".
+ *   version   which evaluation set the row was added for: "v1" (the default when absent), "v2", "v3" or "v4".
  *             Scores are only compared within one version (docs/sft-experiments.md, "Fair evaluation v2")
  *   retired   the first version that no longer contains the row (a bad example); older versions keep it
  *
