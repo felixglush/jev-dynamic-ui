@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 
-import { loadSavedAnnotations, loadSftAnnotations, loadSftReviews, saveAnnotationsToFile, saveSftReviews } from "@/app/annotate/actions";
+import { extractMessageFields, loadSavedAnnotations, loadSftAnnotations, loadSftReviews, saveAnnotationsToFile, saveSftReviews } from "@/app/annotate/actions";
 import { Workspace } from "@/components/annotate/workspace";
 import { DEFAULT_PREDICTIONS_FILE, loadDefaultDataset } from "@/lib/annotate/load";
 
 export const metadata: Metadata = {
   title: "Annotate predictions",
-  description: "Mark each of Jev's predictions right or wrong, and see how accurate it is.",
+  description: "Mark each of Jev's and LiquidFM's predictions right or wrong, and see how accurate it is.",
 };
 
 // A Server Component: it reads predictions.csv on the server and hands the parsed rows to the
@@ -17,7 +17,13 @@ export default async function AnnotatePage() {
   return (
     <main id="main" className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-4 pt-10 pb-24">
       <Workspace
-        jev={{ initial: dataset, source: DEFAULT_PREDICTIONS_FILE, loadFromFile: loadSavedAnnotations, saveToFile: saveAnnotationsToFile }}
+        jev={{
+          initial: dataset,
+          source: DEFAULT_PREDICTIONS_FILE,
+          loadFromFile: loadSavedAnnotations,
+          saveToFile: saveAnnotationsToFile,
+          extract: extractMessageFields,
+        }}
         sft={{ load: loadSftReviews, loadAnnotations: loadSftAnnotations, save: saveSftReviews }}
       />
     </main>
