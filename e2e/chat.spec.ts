@@ -26,8 +26,8 @@ test("send_etransfer: opens the e-Transfer form pre-filled from the message", as
   await expect(page.getByText("Send an e-Transfer")).toBeVisible();
   await expect(page.getByLabel("To")).toHaveValue("Sam");
   await expect(page.getByLabel("Amount (CAD)")).toHaveValue("50.00");
-  // The fake reports low confidence for amounts, so the form asks the customer to double-check it.
-  await expect(page.getByText("Please check")).toBeVisible();
+  // Typed-in values come from the extractor, which gives no confidence, so nothing is flagged for a second look.
+  await expect(page.getByText("Please check")).toHaveCount(0);
   // Nothing was said about the account, so no guess was made.
   await expect(page.getByLabel("From account")).toHaveValue("");
 });
@@ -179,7 +179,22 @@ test("an empty required field blocks submit and takes focus, instead of showing 
 test("a screen reader hears why a field needs attention", async ({ page }) => {
   await say(page, "send $20 to somebody");
   await expect(page.getByLabel("To")).toHaveAccessibleDescription("Needed");
-  await expect(page.getByLabel("Amount (CAD)")).toHaveAccessibleDescription("Please check");
+});
+
+test("a choice Jev is unsure about is flagged for a second look, and a screen reader hears it", async ({ page }) => {
+  await say(page, "send $50 to Sam every week");
+  await expect(page.getByLabel("Repeats")).toHaveValue("weekly");
+  await expect(page.getByLabel("Repeats")).toHaveAccessibleDescription("Please check");
+});
+
+test("when the extractor is down the assistant says so instead of guessing", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:8788/__mode", { data: { fail: true } });
+  try {
+    await say(page, "Send $50 to Sam");
+    await expect(page.getByText("The extractor (Ollama) isn't reachable")).toBeVisible();
+  } finally {
+    await request.post("http://127.0.0.1:8788/__mode", { data: { fail: false } });
+  }
 });
 
 test("headings stay in order: one h1 for the page and one h2 for the form", async ({ page }) => {

@@ -33,6 +33,8 @@ type Props = {
   defaultMode?: ReviewMode;
   /** Keep a copy in this browser too. Off when the file on the server is the only source of truth. */
   persistLocal?: boolean;
+  /** The rows are training labels (written by the generator or corrected by a person), not model output, so no field is credited to Jev or LiquidFM. */
+  ownAnswers?: boolean;
 };
 
 /** Where the annotations last went: a file on the server, or only this browser. */
@@ -114,11 +116,13 @@ function isTyping(target: EventTarget | null) {
  * The annotation screen: one message at a time, a progress strip to jump around, and a summary.
  * Annotations autosave in this browser and can be downloaded as CSV (and imported again).
  */
-export function Annotator({ initial, initialSource, loadFromFile, saveToFile, extract, addToTraining, lookupSplits, title = "Annotate Jev's predictions", defaultMode = "full", persistLocal = true }: Props) {
+export function Annotator({ initial, initialSource, loadFromFile, saveToFile, extract, addToTraining, lookupSplits, title = "Annotate Jev's predictions", defaultMode = "full", persistLocal = true, ownAnswers = false }: Props) {
   const [dataset, setDataset] = useState(initial);
   const [source, setSource] = useState(initialSource);
   const [index, setIndex] = useState(0);
   const [skipExtract, setSkipExtract] = useState(false);
+  // Starts as the tab says; an imported file brings its own provenance (a CSV of predictions is not training labels).
+  const [own, setOwn] = useState(ownAnswers);
   const [view, setView] = useState<"review" | "summary">("review");
   const [mode, setMode] = useState<ReviewMode>(defaultMode);
   // Which group of messages to walk through ("" = all of them).
@@ -274,7 +278,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
   const currentMessage = current?.message;
   const stored = current?.extracted;
   useEffect(() => {
-    if (!extract || skipExtract || stored || !currentMessage || !currentAction || !isActionName(currentAction)) return;
+    if (!extract || skipExtract || own || stored || !currentMessage || !currentAction || !isActionName(currentAction)) return;
     const k = extractionKey(currentAction, currentMessage);
     if (requested.current.has(k)) return;
     requested.current.add(k);
@@ -284,7 +288,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
         const entry: Extraction = result.ok ? { status: "ready", fields: result.fields } : { status: "error", message: result.error };
         setExtractions((all) => ({ ...all, [k]: entry }));
       });
-  }, [extract, skipExtract, stored, currentAction, currentMessage]);
+  }, [extract, skipExtract, own, stored, currentAction, currentMessage]);
 
   /** Send changed answers to the file. Changes made while a save is running go out together in the next one. */
   function queueFileSave(changes: Changes) {
@@ -354,6 +358,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
       const imported = parseAnyDataset(text);
       // A JSONL file already holds the answers to review, so LiquidFM must not replace them.
       setSkipExtract(isJsonl(text));
+      setOwn(false);
       // Work saved in this browser for the same messages is newer than the file, so it wins.
       const key = storageKey(imported);
       const saved = readSaved(key) ?? {};
@@ -409,7 +414,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
 
   // Nothing to read when Jev picked no action; "off" also covers the static preview.
   // A message the chat logged carries what the extractor read at the time, so that is shown instead of asking again.
-  const extraction: Extraction = skipExtract ? { status: "imported" } : stored && current && isActionName(current.predictedAction) ? { status: "ready", fields: stored } : !extract || !current?.message || !isActionName(current.predictedAction)
+  const extraction: Extraction = skipExtract || own ? { status: "imported" } : stored && current && isActionName(current.predictedAction) ? { status: "ready", fields: stored } : !extract || !current?.message || !isActionName(current.predictedAction)
     ? { status: "off" }
     : (extractions[extractionKey(current.predictedAction, current.message)] ?? { status: "loading" });
 
