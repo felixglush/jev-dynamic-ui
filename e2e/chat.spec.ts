@@ -446,9 +446,22 @@ test("a space asks Jev right away, without waiting for the pause", async ({ page
   let asked = 0;
   page.on("request", (request) => request.method() === "POST" && asked++);
   await composer(page).pressSequentially("Send $50 to Sam");
-  // Three spaces were typed, each ending a word, so Jev was asked before the pause could elapse.
-  expect(asked).toBeGreaterThanOrEqual(3);
+  // Three spaces were typed, each ending a word, so Jev is asked once per space; the pause alone would ask once.
+  await expect.poll(() => asked).toBeGreaterThanOrEqual(3);
   await expect(page.getByLabel("To")).toHaveValue("Sam");
+});
+
+test("deleting back to a space does not skip the pause", async ({ page }) => {
+  await composer(page).pressSequentially("Send $50 to Sam");
+  await expect(page.getByLabel("To")).toHaveValue("Sam");
+  let asked = 0;
+  page.on("request", (request) => request.method() === "POST" && asked++);
+  // Backspace over "Sam": the last deletion leaves the text ending in a space, but no space was typed.
+  await composer(page).press("Backspace");
+  await composer(page).press("Backspace");
+  await composer(page).press("Backspace");
+  expect(asked).toBe(0);
+  await expect.poll(() => asked).toBe(1);
 });
 
 test("a field the customer already edited keeps their value when more is typed", async ({ page }) => {

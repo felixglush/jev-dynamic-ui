@@ -102,7 +102,7 @@ export function Chat() {
     }
   }
 
-  function onType(value: string) {
+  function onType(value: string, typedSpace: boolean) {
     clearTimeout(timer.current);
     // Whatever is still in flight was asked about older text, so its answer must not be shown.
     latestId.current++;
@@ -113,8 +113,8 @@ export function Chat() {
       return;
     }
     if (text.length < MIN_LIVE_LENGTH) return;
-    // A space ends a word, so ask right away; otherwise wait for a short pause in typing.
-    if (/\s$/.test(value)) ask(text, false);
+    // A space just typed ends a word, so ask right away (editing earlier text or deleting back to a space does not count); otherwise wait for a short pause in typing.
+    if (typedSpace) ask(text, false);
     else timer.current = setTimeout(() => ask(text, false), DEBOUNCE_MS);
   }
 
@@ -196,7 +196,7 @@ export function Chat() {
             autoComplete="off"
             maxLength={MAX_MESSAGE_LENGTH}
             aria-label="Message"
-            onChange={(event) => onType(event.target.value)}
+            onChange={(event) => onType(event.target.value, /^\s$/.test((event.nativeEvent as InputEvent).data ?? ""))}
             className="h-10 min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-muted-foreground"
           />
           <Button type="submit" size="icon" aria-label="Send" className="size-10 rounded-full">
