@@ -252,7 +252,7 @@ def baseline(files: dict[str, str], base: str = BASE_MODEL, run: str = "latest")
 
 
 @app.function(image=train_image, gpu="L4", timeout=7200, volumes={"/out": volume})
-def train(files: dict[str, str], base: str = BASE_MODEL, epochs: int = 3, lr: float = 2e-4, rank: int = 16, run: str = "latest") -> dict:
+def train(files: dict[str, str], base: str = BASE_MODEL, epochs: int = 3, lr: float = 2e-4, rank: int = 16, run: str = "latest", seed: int = 0) -> dict:
     """LoRA fine-tune on train.jsonl, keep the best epoch by validation loss, score it, save adapter and merged model."""
     import torch
     from datasets import Dataset
@@ -287,7 +287,7 @@ def train(files: dict[str, str], base: str = BASE_MODEL, epochs: int = 3, lr: fl
             load_best_model_at_end=True,
             metric_for_best_model="eval_loss",
             report_to="none",
-            seed=0,
+            seed=seed,
         ),
         train_dataset=to_dataset(files["train"]),
         eval_dataset=to_dataset(files["val"]),
@@ -396,13 +396,15 @@ def main(
     base: str = BASE_MODEL,
     train_subset: str = "all",
     label: str = "",
+    seed: int = 0,
 ):
     """
     --run     folder in the Modal volume that the stage reads or writes (default latest, which every training
               run overwrites: give each run its own name)
     --stage   baseline | train | score (a saved <run>/merged model, no training) | gguf | snapshot (copy latest to <run>) | all
     --train-subset  all | run1 (the rows Run 1 trained on: no trainOnly / split / v2 rows)
-    --label   names the local result file training/out/v3-<label>.json (default: the run name)
+    --seed    training seed (default 0, the seed of Runs 1 to 4)
+    --label   names the local result file training/out/v4-<label>.json (default: the run name)
     """
     if stage == "snapshot":
         print("\n".join(snapshot.remote("latest", run)))
@@ -421,7 +423,7 @@ def main(
     def save(result: dict, kind: str) -> None:
         # One file per stage; "all" runs two scorings, so they get a suffix.
         suffix = f"-{kind}" if stage == "all" else ""
-        (out_dir / f"v3-{label or run}{suffix}.json").write_text(json.dumps(result, indent=2, ensure_ascii=False))
+        (out_dir / f"v4-{label or run}{suffix}.json").write_text(json.dumps(result, indent=2, ensure_ascii=False))
 
     if stage in ("baseline", "all"):
         result = baseline.remote(files, base, run)
@@ -432,7 +434,7 @@ def main(
         save(result, "score")
         report(f"saved model {run}", result)
     if stage in ("train", "all"):
-        result = train.remote(files, base, epochs, lr, rank, run)
+        result = train.remote(files, base, epochs, lr, rank, run, seed)
         save(result, "tuned")
         report(f"LoRA (r={rank}, lr={lr}, {epochs} epochs, {result['train_records']} train rows)", result)
     if stage in ("gguf", "all"):
