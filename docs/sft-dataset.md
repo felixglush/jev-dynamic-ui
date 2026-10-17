@@ -137,3 +137,9 @@ Felix's first pass on `/annotate` (62 sample rows approved, 10 of them with a no
 1. Multi-recipient messages stay out of the data.
 2. Relationship-only names are blank.
 3. Claude generates the synthetic messages; Felix reviews them on the `/annotate` page.
+
+## Who reviewed a row, and keeping the splits clean
+
+`meta.reviewedBy` is `human` when the review came from the annotate page and `claude` when Claude approved the row. The 62 rows approved by hand before the first training run were recovered from git (`e56efb1^`); everything else was approved by Claude. Taking a review back drops the field.
+
+`npm run sft:check` (and a vitest assertion for every version) fails if any message is in train and also in val or test, under any action. It also lists messages that sit in both val and test; v5 has six (for example "k" and "tell me about mortgages"). They never train, so they are only reported, and v5's val and test stay as scored.

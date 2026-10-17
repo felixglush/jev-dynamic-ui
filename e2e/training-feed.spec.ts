@@ -8,7 +8,7 @@ import { ANNOTATIONS_FILE, SFT_REVIEW_FILE } from "./paths";
 // Answers approved on the real predictions page feed the fine-tuning file, and every row there carries
 // a kind. Against a copy of e2e/fixtures/examples.jsonl; no model and no network.
 
-type Row = { messages: { content: string }[]; meta: { id: string; status: string; action: string; kind?: string; trainOnly?: boolean; split?: string; source: string } };
+type Row = { messages: { content: string }[]; meta: { id: string; reviewedBy?: string; status: string; action: string; kind?: string; trainOnly?: boolean; split?: string; source: string } };
 
 async function rows(): Promise<Row[]> {
   return (await readFile(SFT_REVIEW_FILE, "utf8")).trim().split("\n").map((line) => JSON.parse(line) as Row);
@@ -22,7 +22,7 @@ test.beforeEach(async ({ page }) => {
   // The first three rows are approved and pinned: smp-001 ("Send $50 to Sam...", also on the predictions
   // page) to val, the next to test, the third to train. The rest stay pending.
   const lines = (await readFile(SFT_REVIEW_FILE, "utf8")).trim().split("\n").map((line) => JSON.parse(line) as Row);
-  (["val", "test", "train"] as const).forEach((split, i) => Object.assign(lines[i]!.meta, { status: "approved", split }));
+  (["val", "test", "train"] as const).forEach((split, i) => Object.assign(lines[i]!.meta, { status: "approved", split, reviewedBy: i === 0 ? "human" : "claude" }));
   await writeFile(SFT_REVIEW_FILE, lines.map((r) => JSON.stringify(r)).join("\n") + "\n");
   await page.goto("/annotate");
   await expect(page.locator("[data-interactive]")).toBeVisible();
@@ -57,7 +57,7 @@ test("a message already in the fine-tuning file is not added twice", async ({ pa
   // "Send $50 to Sam for dinner last night" is row smp-001 of the fixture.
   await expect(page.locator("[data-accept]")).toBeEnabled();
   await page.keyboard.press("y");
-  await expect(page.getByTestId("training-status")).toHaveText("Already in the fine-tuning data, held out in val, so never trained on");
+  await expect(page.getByTestId("training-status")).toHaveText("Saved onto the row already in the fine-tuning data (smp-001, val, held out, never trained on)");
   expect(await rows()).toHaveLength(before);
 
   await square(page, 5).click();
@@ -67,7 +67,7 @@ test("a message already in the fine-tuning file is not added twice", async ({ pa
   await square(page, 5).click();
   await expect(page.locator("[data-accept]")).toBeEnabled();
   await page.keyboard.press("y");
-  await expect(page.getByTestId("training-status")).toHaveText(/^Already in the fine-tuning data/);
+  await expect(page.getByTestId("training-status")).toHaveText(/^Saved onto the row already in the fine-tuning data/);
   expect(await rows()).toHaveLength(before + 1);
 });
 
@@ -105,7 +105,7 @@ test("a message held out in val is flagged and can never be added to train", asy
   const before = (await rows()).length;
   await expect(page.locator("[data-accept]")).toBeEnabled();
   await page.keyboard.press("y");
-  await expect(page.getByTestId("training-status")).toContainText("held out in val");
+  await expect(page.getByTestId("training-status")).toContainText("val, held out, never trained on");
   expect(await rows()).toHaveLength(before);
   expect((await rows())[0]!.meta).toMatchObject({ split: "val", status: "approved" });
 
@@ -127,4 +127,16 @@ test("the Split menu filters both tabs to train, val or test", async ({ page }) 
   await sft.selectOption("test");
   await expect(page.getByText(/Message 1 of 1$/)).toBeVisible();
   await expect(page.getByTestId("split-badge")).toHaveText("test: held out, never trained on");
+});
+
+test("the Reviewer menu separates rows you reviewed from rows Claude approved", async ({ page }) => {
+  await page.getByRole("button", { name: "Fine-tuning data" }).click();
+  const reviewer = page.getByRole("combobox", { name: "Reviewer", exact: true });
+  await expect(reviewer.locator("option")).toHaveText(["All reviewers", "Reviewed by you (1)", "Approved by Claude (2)"]);
+  await reviewer.selectOption("human");
+  await expect(page.getByText("Message 1 of 1")).toBeVisible();
+  await expect(page.getByTestId("reviewer-badge")).toHaveText("reviewed by you");
+  await reviewer.selectOption("claude");
+  await expect(page.getByText("Message 1 of 2")).toBeVisible();
+  await expect(page.getByTestId("reviewer-badge")).toHaveText("approved by Claude");
 });

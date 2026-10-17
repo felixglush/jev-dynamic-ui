@@ -134,6 +134,11 @@ export function ReviewCard({ mode, prediction, split, extraction, annotation, po
               {split === "val" || split === "test" ? `${split}: held out, never trained on` : split === "pending" ? "in fine-tuning data (not approved yet)" : split}
             </Badge>
           )}
+          {prediction.reviewedBy && (
+            <Badge data-testid="reviewer-badge" variant="outline">
+              {prediction.reviewedBy === "human" ? "reviewed by you" : "approved by Claude"}
+            </Badge>
+          )}
           {result && <Badge variant={VERDICT_BADGE[result].variant}>{VERDICT_BADGE[result].text}</Badge>}
         </div>
         <blockquote className="rounded-2xl rounded-bl-sm bg-primary px-4 py-3 text-base break-words text-primary-foreground">

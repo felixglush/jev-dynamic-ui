@@ -5,7 +5,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { ANNOTATIONS_FILE } from "./paths";
 
-// These run against the real predictions.csv at the project root (100 messages from a live
+// These run against the fixed 100-message copy of predictions.csv (e2e/fixtures/predictions.csv) (100 messages from a live
 // Jev run), served by the production build. No Jev calls are made on this page.
 
 /** Open the page and wait until it is interactive: the HTML shows up before keys do anything. */
@@ -237,7 +237,7 @@ test("Clear all asks for a second click before wiping every answer", async ({ pa
 });
 
 test("re-importing a file keeps the progress saved in this browser", async ({ page }) => {
-  const csv = await readFile("predictions.csv", "utf8");
+  const csv = await readFile("e2e/fixtures/predictions.csv", "utf8");
   const file = { name: "predictions-copy.csv", mimeType: "text/csv", buffer: Buffer.from(csv) };
   await page.getByLabel("Import predictions CSV").setInputFiles(file);
   await accept(page);
@@ -318,7 +318,7 @@ test.describe("autosave to a file", () => {
     await expect(page.getByTestId("file-status")).toHaveText(/^Saved to/);
     const before = await savedFile();
 
-    const csv = await readFile("predictions.csv", "utf8");
+    const csv = await readFile("e2e/fixtures/predictions.csv", "utf8");
     await page.getByLabel("Import predictions CSV").setInputFiles({ name: "other.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
     await expect(page.getByTestId("file-status")).toHaveText("Imported file: saved in this browser only");
     await accept(page);

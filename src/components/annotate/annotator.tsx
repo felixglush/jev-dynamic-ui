@@ -126,6 +126,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
   // Fine-tuning rows can also be walked through one kind at a time ("" = all kinds).
   const [kindFilter, setKindFilter] = useState("");
   const [splitFilter, setSplitFilter] = useState("");
+  const [reviewerFilter, setReviewerFilter] = useState("");
   // Messages the fine-tuning file already holds, by text (only asked for on the predictions page).
   const [looked, setLooked] = useState<Record<string, string>>({});
   const [trainingStatus, setTrainingStatus] = useState("");
@@ -164,9 +165,9 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
   }, [allPredictions, annotations]);
   // The messages being walked through: one group, or everything. Progress and the summary stay global.
   const predictions = useMemo(
-    () => allPredictions.filter((p) => (!group || p.group === group) && (!kindFilter || p.kind === kindFilter) && (!splitFilter || splitOf(p) === splitFilter)),
+    () => allPredictions.filter((p) => (!group || p.group === group) && (!kindFilter || p.kind === kindFilter) && (!splitFilter || splitOf(p) === splitFilter) && (!reviewerFilter || p.reviewedBy === reviewerFilter)),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- splitOf only reads `looked`
-    [allPredictions, group, kindFilter, splitFilter, looked],
+    [allPredictions, group, kindFilter, splitFilter, reviewerFilter, looked],
   );
   const splitCounts = useMemo(() => {
     const tally = new Map<string, { total: number; reviewed: number }>();
@@ -365,6 +366,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
       setGroup("");
       setKindFilter("");
       setSplitFilter("");
+      setReviewerFilter("");
       setLooked({});
       setView("review");
       setImportError(null);
@@ -606,6 +608,25 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
               ))}
             </select>
           )}
+          {allPredictions.some((p) => p.reviewedBy) && (
+            <select
+              aria-label="Reviewer"
+              value={reviewerFilter}
+              onChange={(event) => {
+                setReviewerFilter(event.target.value);
+                setIndex(0);
+                setView("review");
+              }}
+              className="h-8 rounded-md border bg-background px-2 text-sm"
+            >
+              <option value="">All reviewers</option>
+              {(["human", "claude"] as const).map((who) => (
+                <option key={who} value={who}>
+                  {who === "human" ? "Reviewed by you" : "Approved by Claude"} ({allPredictions.filter((p) => p.reviewedBy === who).length})
+                </option>
+              ))}
+            </select>
+          )}
           {kindCounts.size > 0 && (
             <select
               aria-label="Kind"
@@ -652,6 +673,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
             setGroup("");
             setKindFilter("");
             setSplitFilter("");
+            setReviewerFilter("");
             setIndex(allPredictions.findIndex((p) => p.id === id));
             setView("review");
           }}

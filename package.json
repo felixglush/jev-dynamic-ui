@@ -16,7 +16,9 @@
     "extract:eval": "tsx --conditions=react-server scripts/extract-eval.mts",
     "sft:build": "tsx --conditions=react-server scripts/sft-build.mts",
     "sft:add": "tsx --conditions=react-server scripts/sft-add.mts",
-    "sft:kind": "tsx --conditions=react-server scripts/sft-kind.mts"
+    "sft:kind": "tsx --conditions=react-server scripts/sft-kind.mts",
+    "predict:examples": "tsx --conditions=react-server scripts/predict-examples.mts",
+    "sft:check": "tsx --conditions=react-server scripts/sft-check.mts"
   },
   "dependencies": {
     "@radix-ui/react-label": "^2.1.17",

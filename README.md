@@ -69,6 +69,8 @@ Zero-shot, this model fills every field whether or not the message states it (in
 
 ```bash
 npm run predict                                  # data/sample-messages.txt -> predictions.csv
+npm run predict:examples                         # Jev on every fine-tuning example message not yet in predictions.csv (resumable)
+npm run sft:check                                # fails if a message is in train and also in val/test
 npm run predict -- my-messages.txt out.csv       # your own messages: one per line, `# group` lines label sections
 ```
 
@@ -80,7 +82,7 @@ Open [`/annotate`](http://localhost:3000/annotate) (`npm run dev`). It shows `pr
 
 Every answer is saved as you go, in two places. The browser keeps it in localStorage, and the server applies each change to `data/annotations.csv` (a server action in `src/app/annotate/actions.ts`; set `ANNOTATIONS_FILE` to use another path). The page shows `Saved to data/annotations.csv` beside the progress count. Open the page in a different browser and it restores the answers from that file; answers for messages whose text has since changed are ignored. If the file can't be read (say, a hand edit left an unknown action), autosave stays off and the page tells you, so nothing is overwritten. This needs a writable local filesystem and has no login yet, so don't deploy it as is. A CSV you **Import** is kept in the browser only and never touches the file.
 
-**Download CSV** writes the predictions with `expected_action`, `expected_params` and `annotator_note` filled in; **Import CSV** loads any predictions CSV, including one downloaded earlier, so you can pick up where you left off. The page reads `predictions.csv` at build time: restart `npm run dev` after re-running `npm run predict`, or import the new file.
+**Download CSV** writes the predictions with `expected_action`, `expected_params` and `annotator_note` filled in; **Import CSV** loads any predictions CSV, including one downloaded earlier, so you can pick up where you left off. `predictions.csv` covers the whole dataset (the original 100 messages plus every fine-tuning example, filled by `npm run predict:examples`). The **Split** menu filters to train, val, test or pending, **Kind** to the kind of example, and **Reviewer** to rows you reviewed yourself versus rows Claude approved (`meta.reviewedBy`; the first 62 human reviews were recovered from git history before training). Approving a prediction whose message is already in the fine-tuning file puts the review on that row; any other message is added as a train-only row, so val and test never change. The page reads `predictions.csv` (override with `PREDICTIONS_FILE`) at build time: restart `npm run dev` after re-running `npm run predict`, or import the new file.
 
 **Who filled each field.** On the Jev predictions view, the action and every field row carry a badge: **Jev** (the action and the choice fields), **LiquidFM** (the typed-in values, read by the fine-tuned extractor) or **Blank** (neither found it). The badges always show; if Ollama is down the card says so and every value is Jev's.
 

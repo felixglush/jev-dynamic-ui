@@ -95,10 +95,13 @@ export type TrainingResult = { ok: true; message: string } | { ok: false; error:
 export async function addApprovedExample(row: { action: string; message: string; params: Record<string, string>; kind: string; note: string }): Promise<TrainingResult> {
   try {
     const result = await appendApprovedExample(row);
+    if ("id" in result && result.updated) {
+      const where = result.split === "val" || result.split === "test" ? `${result.split}, held out, never trained on` : result.split;
+      return { ok: true, message: `Saved onto the row already in the fine-tuning data (${result.id}, ${where})` };
+    }
     if ("id" in result) return { ok: true, message: `Added to the fine-tuning data (${result.id}, ${sftLabel()})` };
     if (result.skipped === "no-fields") return { ok: true, message: "Not added: this action has no typed-in fields for the extractor to read" };
-    const where = result.split === "val" || result.split === "test" ? `, held out in ${result.split}, so never trained on` : result.split ? ` (${result.split})` : "";
-    return { ok: true, message: `Already in the fine-tuning data${where}` };
+    return { ok: true, message: "Already in the fine-tuning data" };
   } catch (error) {
     console.error("addApprovedExample failed:", error);
     return { ok: false, error: error instanceof Error ? error.message : "Couldn't write the file." };

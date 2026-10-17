@@ -8,6 +8,7 @@ import { assignSplits } from "@/lib/sft/build";
 import { freeTextParams } from "@/lib/extract/prompt";
 import { addExamples, applyReview, normalizeMessage, parseExamples, serializeExamples, type ExampleRecord } from "@/lib/sft/examples";
 import { isKind } from "@/lib/sft/kinds";
+import { pinnedSplit } from "@/lib/sft/split";
 import { datasetFromReviews, isActionName, sanitizeAnnotations, type Annotation, type Dataset } from "./dataset";
 
 /**
@@ -78,9 +79,9 @@ function enqueue<T>(run: () => Promise<T>): Promise<T> {
 /**
  * Put an answer approved on the real predictions page into the examples file as an approved,
  * train-only row (it never lands in val or test, so scored sets stay as they were). A message that
- * is already in the file for that action is left as it is. Actions with only choice fields (nothing for the extractor to read) are skipped too. Returns the row id, or why it was skipped.
+ * is already in the file gets the review on its existing row instead of a second copy. Actions with only choice fields (nothing for the extractor to read) are skipped too. Returns the row id, or why it was skipped.
  */
-export function addApprovedExample(raw: unknown): Promise<{ id: string } | { skipped: "duplicate"; split?: string } | { skipped: "no-fields" }> {
+export function addApprovedExample(raw: unknown): Promise<{ id: string; updated?: true; split?: string } | { skipped: "duplicate" } | { skipped: "no-fields" }> {
   return enqueue(async () => {
     const row = raw as { action?: unknown; message?: unknown; params?: unknown; kind?: unknown; note?: unknown };
     if (typeof row?.action !== "string" || !isActionName(row.action)) throw new Error("Unknown action.");
@@ -96,10 +97,18 @@ export function addApprovedExample(raw: unknown): Promise<{ id: string } | { ski
       throw error;
     });
     const message = row.message.trim();
-    // The same text anywhere in the file, under any action, is left alone: a message in val or test
-    // must never also train, and one split holding it twice only skews the counts.
+    // The same text anywhere in the file, under any action, is never added a second time: a message in
+    // val or test must never also train, and one split holding it twice only skews the counts. The review
+    // goes onto the row that is already there instead. Its split stays as it was; a row that was not
+    // approved yet is pinned to train first so approving it cannot move any other row's hash split.
     const twin = records.find((r) => normalizeMessage(r.messages[1].content) === normalizeMessage(message));
-    if (twin) return { skipped: "duplicate" as const, split: assignSplits(records).get(twin.meta.id) };
+    if (twin) {
+      const split = assignSplits(records).get(twin.meta.id);
+      const pinned = twin.meta.status === "approved" || pinnedSplit(twin.meta) ? twin : { ...twin, meta: { ...twin.meta, trainOnly: true as const } };
+      const reviewed = applyReview(pinned, { expectedAction: row.action, expectedParams, note, kind: row.kind });
+      await writeRecords(records.map((r) => (r === twin ? reviewed : r)));
+      return { id: twin.meta.id, updated: true as const, split: split ?? "train" };
+    }
     const { records: all, skipped } = addExamples(records, [{ id: "approved", action: row.action, message, fields: {}, vague: false }], "sample", { trainOnly: true, kind: row.kind });
     if (skipped.length > 0) return { skipped: "duplicate" as const };
     const added = all.find((r) => r.messages[1].content === message && r.meta.action === row.action && !records.includes(r))!;

@@ -46,6 +46,7 @@ export default defineConfig({
         TYPESAFE_BASE_URL: `http://localhost:${FAKE_JEV_PORT}`,
         OLLAMA_URL: `http://127.0.0.1:${FAKE_OLLAMA_PORT}`,
         ANNOTATIONS_FILE,
+        PREDICTIONS_FILE: "e2e/fixtures/predictions.csv",
         SFT_REVIEW_FILE,
       },
       url: `http://localhost:${APP_PORT}`,
