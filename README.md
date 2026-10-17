@@ -63,8 +63,10 @@ Caveats: only about 62 training rows were reviewed by a person (the rest were ap
 ```bash
 npm install
 cp .env.example .env.local   # add your TYPESAFE_API_KEY
-scripts/ollama/use-tuned.sh  # registers the fine-tuned extractor in Ollama
+scripts/ollama/use-tuned.sh  # registers the fine-tuned extractor in Ollama (see below for the model file)
 npm run dev                  # http://localhost:3000
 ```
+
+The fine-tuned model file (`scripts/ollama/models/LFM2.5-350M-SFT-Q8_0.gguf`) is not in the repo. It is in a private Hugging Face repo (`felixglush156/LFM2.5-350M-banking-extractor-GGUF`) and on the project's Modal volume, so `use-tuned.sh` only works for people with access. Without it, run `scripts/ollama/setup.sh` (downloads the public base LFM2.5-230M, not fine-tuned and much less accurate: it invents values for fields the message doesn't state) and set `OLLAMA_MODEL=lfm25-230m` in `.env.local`.
 
 Needs Node 22+ and [Ollama](https://ollama.com). Everything else (architecture, tests, annotation page, fine-tuning data, dependency notes) is in [`AGENTS.md`](AGENTS.md) and [`docs/`](docs).
