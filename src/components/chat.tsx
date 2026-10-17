@@ -20,7 +20,7 @@ const EXAMPLES = [
 ];
 
 /** How long typing must pause before Jev is asked, and the shortest text worth asking about. */
-const DEBOUNCE_MS = 450;
+const DEBOUNCE_MS = 200;
 const MIN_LIVE_LENGTH = 3;
 /** Matches the fade-out in globals.css; the card's contents are dropped once it has faded. */
 const CLOSE_MS = 280;
@@ -113,7 +113,9 @@ export function Chat() {
       return;
     }
     if (text.length < MIN_LIVE_LENGTH) return;
-    timer.current = setTimeout(() => ask(text, false), DEBOUNCE_MS);
+    // A space ends a word, so ask right away; otherwise wait for a short pause in typing.
+    if (/\s$/.test(value)) ask(text, false);
+    else timer.current = setTimeout(() => ask(text, false), DEBOUNCE_MS);
   }
 
   function focusForm() {

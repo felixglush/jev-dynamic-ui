@@ -435,10 +435,20 @@ test("the card opens by itself while typing, and refills as more is said", async
 test("typing in quick bursts asks Jev once, after the pause", async ({ page }) => {
   let asked = 0;
   page.on("request", (request) => request.method() === "POST" && asked++);
-  await composer(page).pressSequentially("Send $50 to Sam for dinner last night");
-  await expect(page.getByLabel("To")).toHaveValue("Sam");
+  // No spaces, so nothing ends a word: only the pause triggers a question.
+  await composer(page).pressSequentially("Send$50toSamfordinnerlastnight");
+  await expect.poll(() => asked).toBe(1);
   await page.waitForTimeout(800);
   expect(asked).toBe(1);
+});
+
+test("a space asks Jev right away, without waiting for the pause", async ({ page }) => {
+  let asked = 0;
+  page.on("request", (request) => request.method() === "POST" && asked++);
+  await composer(page).pressSequentially("Send $50 to Sam");
+  // Three spaces were typed, each ending a word, so Jev was asked before the pause could elapse.
+  expect(asked).toBeGreaterThanOrEqual(3);
+  await expect(page.getByLabel("To")).toHaveValue("Sam");
 });
 
 test("a field the customer already edited keeps their value when more is typed", async ({ page }) => {
