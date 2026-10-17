@@ -384,7 +384,7 @@ test.describe("fine-tuning files", () => {
     await page.getByLabel("Import predictions CSV").setInputFiles({ ...sft, buffer });
     await expect(page.getByRole("heading", { name: /Message 1 of 48/ })).toBeVisible();
     // The file's own answers are what gets reviewed: LiquidFM is not asked to replace them.
-    await expect(page.getByTestId("extractor-status")).toContainText("imported file's own answers");
+    await expect(page.getByTestId("extractor-status")).toContainText("file's own answers");
     await expect(page.getByTestId("action-source")).toHaveCount(0);
     await page.keyboard.press("y"); // accept the first row as is
     const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Download labels" }).click()]);

@@ -140,3 +140,11 @@ test("the Reviewer menu separates rows you reviewed from rows Claude approved", 
   await expect(page.getByText("Message 1 of 2")).toBeVisible();
   await expect(page.getByTestId("reviewer-badge")).toHaveText("approved by Claude");
 });
+
+test("fine-tuning rows are training labels: no field is credited to Jev or LiquidFM", async ({ page }) => {
+  await page.getByRole("button", { name: "Fine-tuning data" }).click();
+  await page.getByRole("button", { name: "Full", exact: true }).click();
+  await expect(page.getByTestId("extractor-status")).toContainText("no model was run on them");
+  await expect(page.getByTestId("action-source")).toHaveCount(0);
+  await expect(page.getByText("Values are Jev's.")).toHaveCount(0);
+});

@@ -80,6 +80,7 @@ export function Workspace({ jev, sft }: Props) {
           title="Review the fine-tuning data"
           defaultMode="fields"
           persistLocal={false}
+          ownAnswers
           initial={loaded.dataset}
           initialSource={loaded.path}
           loadFromFile={sft.loadAnnotations}
