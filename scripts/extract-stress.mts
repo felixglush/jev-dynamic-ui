@@ -20,7 +20,7 @@ for (const raw of (await readFile(casesPath, "utf8")).split("\n")) {
     category = c ?? ""; action = a ?? c ?? "";
     continue;
   }
-  const [msgRaw, exp = ""] = line.split(" =>");
+  const [msgRaw = "", exp = ""] = line.split(" =>");
   const message = msgRaw.replaceAll("\\n", "\n").replaceAll("\\t", "\t");
   const expected: Record<string, string> = {};
   for (const part of exp.split(";")) { const i = part.indexOf("="); if (i > 0) expected[part.slice(0, i).trim()] = part.slice(i + 1).trim(); }
@@ -30,7 +30,7 @@ for (const raw of (await readFile(casesPath, "utf8")).split("\n")) {
   const same = (a: string, b: string) => a === b || (a !== "" && b !== "" && !isNaN(Number(a)) && !isNaN(Number(b)) && Number(a) === Number(b));
   const fabricated: string[] = [], missed: string[] = [], wrong: string[] = [];
   for (const n of Object.keys(got)) {
-    const e = expected[n] ?? "", g = got[n];
+    const e = expected[n] ?? "", g = got[n] ?? "";
     if (same(e, g)) continue;
     if (e === "") fabricated.push(n); else if (g === "") missed.push(n); else wrong.push(n);
   }
@@ -38,6 +38,10 @@ for (const raw of (await readFile(casesPath, "utf8")).split("\n")) {
 }
 await writeFile(outPath, JSON.stringify(rows, null, 1));
 const by: Record<string, [number, number]> = {};
-for (const r of rows) { by[r.category] ??= [0, 0]; by[r.category][1]++; if (r.exact) by[r.category][0]++; }
+for (const r of rows) {
+  const tally = (by[r.category] ??= [0, 0]);
+  tally[1]++;
+  if (r.exact) tally[0]++;
+}
 console.log(`exact ${rows.filter((r) => r.exact).length}/${rows.length}`);
 for (const [c, [p, t]] of Object.entries(by)) console.log(`${c}: ${p}/${t}`);
