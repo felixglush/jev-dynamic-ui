@@ -263,6 +263,24 @@ test("transfer_between_accounts: fills both accounts and a start date", async ({
   await expect(page.getByLabel("Date (optional)")).toHaveValue("2030-01-15");
 });
 
+test("date fields open a calendar, and picking a day fills the field", async ({ page }) => {
+  await say(page, "pay my Hydro One bill $112.30 on 2030-02-01");
+  const date = page.getByLabel("Date (optional)");
+  await date.focus();
+  // The calendar opens on the month of the date Jev found, with that day marked.
+  await expect(page.getByRole("group", { name: "February 2030" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "February 1, 2030" })).toHaveAttribute("aria-pressed", "true");
+
+  await page.getByRole("button", { name: "Next month" }).click();
+  await page.getByRole("button", { name: "March 15, 2030" }).click();
+  await expect(date).toHaveValue("2030-03-15");
+  await expect(page.getByRole("group", { name: "March 2030" })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Open calendar" }).click();
+  await page.getByRole("button", { name: "Clear date" }).click();
+  await expect(date).toHaveValue("");
+});
+
 test("pay_bill: a scheduled bill keeps its date", async ({ page }) => {
   await say(page, "pay my Hydro One bill $112.30 on 2030-02-01");
 

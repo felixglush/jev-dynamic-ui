@@ -1,8 +1,9 @@
 import { defineConfig } from "@playwright/test";
 
-import { ANNOTATIONS_FILE } from "./e2e/paths";
+import { ANNOTATIONS_FILE, SFT_REVIEW_FILE } from "./e2e/paths";
 
-const APP_PORT = 3100;
+// Something else may hold 3100 on a dev machine; PW_APP_PORT picks another.
+const APP_PORT = Number(process.env.PW_APP_PORT ?? 3100);
 const FAKE_JEV_PORT = 8787;
 
 export default defineConfig({
@@ -34,6 +35,7 @@ export default defineConfig({
         TYPESAFE_API_KEY: "test-key",
         TYPESAFE_BASE_URL: `http://localhost:${FAKE_JEV_PORT}`,
         ANNOTATIONS_FILE,
+        SFT_REVIEW_FILE,
       },
       url: `http://localhost:${APP_PORT}`,
       // Never reuse: a server started elsewhere wouldn't have ANNOTATIONS_FILE set and would write to data/.

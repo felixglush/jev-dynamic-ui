@@ -37,7 +37,7 @@ export function summarize(action: ActionName, values: Record<string, string>): s
       break;
     case "open_account": {
       const deposit = formatAmount(values.initial_deposit);
-      parts = [words(values.account_type), deposit ? `with ${deposit}` : null];
+      parts = [words(values.account_type), deposit ? `with ${deposit}` : null, deposit ? from : null];
       break;
     }
     case "transfer_between_accounts":

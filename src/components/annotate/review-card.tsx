@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   acceptPrediction,
+  freeTextParams,
   isActionName,
   label,
   type Annotation,
@@ -23,18 +24,19 @@ import type { ActionCall, ActionName, ParamValue } from "@/lib/jev/types";
 
 const ACTIONS = Object.keys(CATALOG) as ActionName[];
 
-/** The <input type> for each kind of parameter. */
+/** The <input type> for each kind of parameter. Dates are plain text: the fine-tuning data keeps them as written ("tomorrow", "the 1st"). */
 const INPUT_TYPE = {
   name: "text",
   email: "email",
   phone: "tel",
   amount: "number",
-  date: "date",
+  date: "text",
   account_number: "text",
 } as const;
 
 const VERDICT_BADGE = {
   correct: { text: "Correct", variant: "success" },
+  fixed: { text: "Fixed", variant: "warning" },
   wrong_action: { text: "Wrong action", variant: "destructive" },
   wrong_values: { text: "Wrong values", variant: "warning" },
 } as const;
@@ -52,7 +54,11 @@ function toActionCall(action: ActionName, prediction: Prediction): ActionCall {
   return { action, confidence: prediction.actionConfidence ?? 0, params, missing: prediction.missing } as ActionCall;
 }
 
+/** "full" is the whole picture; "fields" is only what the extractor model fills in. */
+export type ReviewMode = "full" | "fields";
+
 type Props = {
+  mode: ReviewMode;
   prediction: Prediction;
   annotation: Annotation | undefined;
   position: number;
@@ -61,13 +67,19 @@ type Props = {
 };
 
 /** One message: what Jev predicted, one-click "correct", and a form to write the right answer. */
-export function ReviewCard({ prediction, annotation, position, total, onSave }: Props) {
+export function ReviewCard({ mode, prediction, annotation, position, total, onSave }: Props) {
   const accepted = acceptPrediction(prediction);
   const start = annotation ?? accepted;
   const [expectedAction, setExpectedAction] = useState<ExpectedAction>(start?.expectedAction ?? "none");
   const lowConfidence = prediction.actionConfidence !== null && prediction.actionConfidence < LOW_CONFIDENCE;
   const result = annotation ? verdict(prediction, annotation) : null;
   const predictedAction = prediction.predictedAction;
+  const fieldsOnly = mode === "fields";
+  // Fields view: one row per field the extractor model fills in, blanks included, so a missing value is visible.
+  const outputRows: [string, ParamValue | undefined][] =
+    fieldsOnly && isActionName(predictedAction)
+      ? freeTextParams(predictedAction).map(([name]) => [name, prediction.params[name]])
+      : Object.entries(prediction.params);
 
   // Values to pre-fill for the chosen action: the saved answer if it is for that action, else
   // Jev's values if Jev picked that action, else nothing.
@@ -104,19 +116,19 @@ export function ReviewCard({ prediction, annotation, position, total, onSave }: 
       <section aria-labelledby="prediction-heading" className="flex flex-col gap-3 rounded-xl border bg-card p-5">
         <div className="flex flex-wrap items-center gap-2">
           <h3 id="prediction-heading" className="text-sm font-medium text-muted-foreground">
-            Jev predicted
+            {fieldsOnly ? "Extractor output" : "Jev predicted"}
           </h3>
           <span data-testid="predicted-action" className="font-mono text-sm font-semibold">
             {predictedAction}
           </span>
-          {prediction.actionConfidence !== null && (
+          {!fieldsOnly && prediction.actionConfidence !== null && (
             <Badge variant={lowConfidence ? "warning" : "secondary"} className="tabular-nums">
               {Math.round(prediction.actionConfidence * 100)}% sure
             </Badge>
           )}
         </div>
         {prediction.note && <p className="text-sm text-destructive">{prediction.note}</p>}
-        {Object.keys(prediction.params).length > 0 ? (
+        {outputRows.length > 0 ? (
           <table className="w-full text-sm">
             <thead className="sr-only">
               <tr>
@@ -126,12 +138,14 @@ export function ReviewCard({ prediction, annotation, position, total, onSave }: 
               </tr>
             </thead>
             <tbody>
-              {Object.entries(prediction.params).map(([name, p]) => (
+              {outputRows.map(([name, p]) => (
                 <tr key={name} className="border-t first:border-t-0">
                   <td className="py-1.5 pr-3 text-muted-foreground">{label(name)}</td>
-                  <td className="py-1.5 pr-3 font-medium break-all">{p.value}</td>
+                  <td className="py-1.5 pr-3 font-medium break-all">
+                    {p?.value || (fieldsOnly && <span className="rounded bg-warning/15 px-1.5 text-muted-foreground">blank</span>)}
+                  </td>
                   <td className="py-1.5 text-right text-muted-foreground tabular-nums">
-                    {p.confidence === null ? "" : `${Math.round(p.confidence * 100)}%`}
+                    {p?.confidence == null ? "" : `${Math.round(p.confidence * 100)}%`}
                   </td>
                 </tr>
               ))}
@@ -140,7 +154,7 @@ export function ReviewCard({ prediction, annotation, position, total, onSave }: 
         ) : (
           <p className="text-sm text-muted-foreground">No values extracted.</p>
         )}
-        {prediction.missing.length > 0 && (
+        {!fieldsOnly && prediction.missing.length > 0 && (
           <p className="text-sm text-muted-foreground">
             Would ask the customer for: {prediction.missing.map(label).join(", ")}
           </p>
@@ -205,7 +219,9 @@ export function ReviewCard({ prediction, annotation, position, total, onSave }: 
         {isActionName(expectedAction) && (
           // `key` remounts the fields when the action changes, so their pre-filled values reset.
           <div key={expectedAction} className="grid gap-4 sm:grid-cols-2">
-            {Object.entries(CATALOG[expectedAction].params as Record<string, ParamSpec>).map(([name, spec]) => (
+            {Object.entries(CATALOG[expectedAction].params as Record<string, ParamSpec>)
+              .filter(([, spec]) => !fieldsOnly || spec.type !== "choice")
+              .map(([name, spec]) => (
               <ParamField
                 key={name}
                 idPrefix="expected"
@@ -230,7 +246,7 @@ export function ReviewCard({ prediction, annotation, position, total, onSave }: 
         </div>
       </form>
 
-      {isActionName(predictedAction) && (
+      {!fieldsOnly && isActionName(predictedAction) && (
         <details className="group flex flex-col gap-3">
           <summary className="cursor-pointer text-sm text-muted-foreground hover:text-foreground">
             Show the form the customer would get
