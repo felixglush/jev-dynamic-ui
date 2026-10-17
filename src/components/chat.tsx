@@ -21,7 +21,7 @@ const EXAMPLES = [
   "I want to open a TFSA and put 2k in it",
   "set up a weekly $50 transfer from chequing to savings",
   "pay my water bill $48 from savings next friday",
-  "add Rogers as a new payee",
+  "add Rogers as a payee, my account number is 4471 2290 88",
   "my credit card was stolen, I need a new one",
   "show my last 5 transactions",
   "ask my brother Kevin for $60 for the gas",

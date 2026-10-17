@@ -152,7 +152,6 @@ my internet bill is due
 pay my phone bill
 settle my utilities
 # add_payee
-add Rogers as a new payee
 add Rogers as a payee, my account number is 4471 2290 88
 add a new biller: Hydro One, account 100234567
 I want to pay Enbridge, set up a new payee with account number 55512344
