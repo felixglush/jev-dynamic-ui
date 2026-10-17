@@ -104,8 +104,8 @@ function pick(question: string, labels: string[], query: string): string {
   }
 }
 
-/** Confidence the fake reports; the repeat (a choice Jev still picks) is deliberately "unsure" so the UI's warning path is covered. */
-const confidenceFor = (question: string) => (question.endsWith("frequency") ? 0.55 : 0.93);
+/** Confidence the fake reports; amounts and the repeat are deliberately "unsure" so the UI's warning path is covered (only the repeat shows it in the chat, since the extractor reads amounts). */
+const confidenceFor = (question: string) => (question.endsWith("amount") || question.endsWith("frequency") ? 0.55 : 0.93);
 
 function handle(body: Sent): { status: number; payload: unknown } {
   const { query } = body.state;
