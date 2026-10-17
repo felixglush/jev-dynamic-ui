@@ -1,6 +1,6 @@
 # Fine-tuning dataset for the field extractor
 
-Goal: teach LFM2.5-230M to fill each action's free-text fields from a banking message, and to leave a field **empty** when the message doesn't state it, so the UI highlights it for the customer. The base model fills every field and invents values (emails, dates, amounts). There is no run-time check against the message (Felix removed the grounding filter), so the model itself has to say "not stated": that is what fine-tuning is for.
+Goal: teach LFM2.5-350M to fill each action's free-text fields from a banking message, and to leave a field **empty** when the message doesn't state it, so the UI highlights it for the customer. The base model fills every field and invents values (emails, dates, amounts). There is no run-time check against the message (Felix removed the grounding filter), so the model itself has to say "not stated": that is what fine-tuning is for.
 
 SFT = supervised fine-tuning: show the model many (input, correct answer) pairs and nudge it to produce the correct answer.
 
@@ -19,7 +19,7 @@ One JSON object per line (JSONL), chat style:
 Why this shape:
 
 - **Same conversation the extractor sends.** The system prompt comes from `systemPromptFor()` in `src/lib/extract/ollama.ts` (I split it out of `extractFields` so both use one function). If training and run time word the prompt differently, the tuning helps less. A test pins this.
-- **The schema is not in the text.** Ollama forces the output to match the JSON schema while decoding (`format`), so the model only needs to learn the values, not the JSON syntax. Training text stays short, which matters for a 230M model.
+- **The schema is not in the text.** Ollama forces the output to match the JSON schema while decoding (`format`), so the model only needs to learn the values, not the JSON syntax. Training text stays short, which matters for a 350M model.
 - **The answer has every field, in schema order**, with `""` for absent text and `0` for absent amounts. That is exactly the "required but may be empty" contract in `schemaFor()`, and the extractor already treats `""`/`0` as blank.
 - **Each action has its own system prompt and field list**, so the model learns per-action groups (Felix's requirement). Choice fields (which account, which card, how much of a card balance to pay) stay with Jev, which picks from the supported options in the catalog, and are not in the answer.
 - `meta` is for humans and the split script. Train on the `messages` column only.
@@ -75,7 +75,7 @@ The 187 sample rows (from `data/sample-messages.txt`) plus 458 generated rows ar
 | Phrasing | typos, lowercase, no punctuation, slang (`bucks`, `interac`), spelled-out numbers, accented and hyphenated names, two or three word names | covered in the first batch |
 | Look-alikes | field A present but B absent (email without name, name without email, amount in the message but no date) | covered in the first batch |
 
-Run `npm run sft:build` after a review session to see the real counts. Why a few thousand and not tens of thousands: this is one narrow, mechanical task and 230M parameters. Label quality and covering the "absent" cases matter more than volume.
+Run `npm run sft:build` after a review session to see the real counts. Why a few thousand and not tens of thousands: this is one narrow, mechanical task and 350M parameters. Label quality and covering the "absent" cases matter more than volume.
 
 ## 4. Workflow
 
@@ -113,11 +113,11 @@ Rules that keep the test honest:
 
 ## 6. Training (LoRA on Modal)
 
-LoRA trains small add-on matrices next to the frozen model instead of changing all 230M weights. It is cheap, hard to overfit on a small set, and the add-on is a few MB.
+LoRA trains small add-on matrices next to the frozen model instead of changing all 350M weights. It is cheap, hard to overfit on a small set, and the add-on is a few MB.
 
 `training/modal_train.py` does the whole run on a Modal GPU (an L4): `modal run training/modal_train.py`.
 
-1. **Baseline.** Scores the untouched `LiquidAI/LFM2.5-230M` on val and test, so there is something to compare with.
+1. **Baseline.** Scores the untouched `LiquidAI/LFM2.5-350M` on val and test, so there is something to compare with.
 2. **Train.** LoRA with rank 16, alpha 32, dropout 0.05, learning rate 2e-4, 3 epochs, batch 16. It targets every linear layer type the model has, which I read from the model's safetensors header: attention `q_proj k_proj v_proj out_proj`, the convolution blocks' `in_proj out_proj`, and the feed-forward `w1 w2 w3`. The records are given as prompt (system + user) and completion (the assistant JSON), so the loss is counted on the answer only. The best epoch by validation loss is kept.
 3. **Score.** The merged model answers every val and test message with greedy decoding, and the script reports per field: *fabricated* (label blank, model filled it in), *missed*, *wrong*, plus exact-record match and invalid JSON. Fabrication rate is the number to watch. The misses are saved to `training/out/*.json` to read.
 4. **GGUF.** Converts the merged model to Q8_0 with llama.cpp. Fetch it with `modal volume get jev-sft <run>/<base model>-SFT-Q8_0.gguf scripts/ollama/models/` (e.g. `LFM2.5-350M-SFT-Q8_0.gguf`; runs converted before 2026-10-17 are all named `LFM2.5-230M-SFT-Q8_0.gguf`, whatever the base), run `scripts/ollama/use-tuned.sh`, and the extractor uses it by default (`lfm25-350m-sft`).
