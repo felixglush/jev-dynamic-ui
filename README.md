@@ -40,7 +40,7 @@ message --> Jev (TypeSafe AI)  --> which action, plus every choice field
 
 | Part | Does | Doesn't |
 | --- | --- | --- |
-| **Jev** ([TypeSafe AI](https://typesafe.ai) decision model, called server-side) | Picks the action. Picks the answer for each choice field (account, payment option, frequency, card action...) from the catalog's fixed options. For names, emails, phones and amounts it picks among candidates found by regex in [`candidates.ts`](src/lib/jev/candidates.ts), or "none". | Never writes text. |
+| **Jev** ([TypeSafe AI](https://typesafe.ai) decision model, called server-side) | Reads the whole message. Picks the action, and picks the answer for each choice field (account, payment option, frequency, card action...) from the catalog's fixed options. | Never writes text, so it doesn't touch free-text fields. No regex or candidate lists are involved. |
 | **Fine-tuned extractor** (LFM2.5-350M, trained to leave absent fields empty; Ollama model `lfm25-350m-sft`) | Copies the free-text values (names, emails, phones, amounts, dates, account numbers) out of the message, or leaves them blank. It is required: if Ollama is down the app reports the assistant as down. | Doesn't pick the action or the choices. |
 
 The split is `param.type === "choice"` in the catalog: choices go to Jev, everything else to the extractor.

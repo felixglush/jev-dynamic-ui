@@ -25,7 +25,7 @@ ActionPanel picks a form  <---  typed result (action + params)  <---
 
 - `src/lib/jev/catalog.ts` is the single source of truth: each action and its parameters. Adding an action here is how you extend the app.
 - `src/lib/jev/classify.ts` sends **one** request per message with a question for the action plus a question for every parameter of every action. Code keeps only the chosen action's answers (TypeSafe's function-calling pattern).
-- Jev picks, it never writes text. For amounts, emails, phones and names, code first finds candidates in the message (`candidates.ts`) and Jev chooses which one fills each parameter, or "none". Choice parameters (account type and so on) pick from the options in the catalog.
+- Jev picks, it never writes text. It reads the whole message and answers only the action question and the choice parameters (account type and so on), each picked from the options in the catalog. Free-text parameters (names, emails, phones, amounts, dates) are not asked of Jev; the extractor fills them. There are no regex candidate lists.
 - `src/lib/jev/types.ts` derives the result types from the catalog. `ActionPanel` switches on `call.action`; TypeScript narrows the params in each case and fails the build if an action has no component.
 - `src/components/ui/` is shadcn/ui style components (Tailwind + Radix). `src/components/forms/` holds one form per banking action. `src/app/actions.ts` is the Next.js *Server Action* (server code the browser can call); it's unrelated to the banking "actions".
 - Server and client split: `page.tsx`, `layout.tsx` and `not-found.tsx` are Server Components. Only what needs state or events is a Client Component (`"use client"`): `chat.tsx`, `forms/action-form.tsx`, the `annotate/` components and `app/error.tsx`. The Jev call and the API key live only in `lib/jev/classify.ts` (`server-only`).
@@ -37,7 +37,7 @@ ActionPanel picks a form  <---  typed result (action + params)  <---
 | Free text: the value comes from what the customer typed | names, emails, phones, amounts, dates, biller account numbers | the extractor model (`src/lib/extract/`), which copies it from the message or leaves it empty |
 | Choice: the answer is one of the catalog's fixed options | which account to pay from or move money to, credit card payment option (minimum, statement balance, current balance, custom), account type to open, frequency, card, dispute reason | Jev, picking from the options in `catalog.ts` |
 
-The rule is `param.type === "choice"`. `freeTextParams()` in `src/lib/extract/prompt.ts` returns everything that isn't a choice, and that list is the extractor's output fields and its fine-tuning answers. A new choice parameter needs no training data: add it to the catalog with its options. Jev also picks the action itself. For the free-text parameters Jev still chooses among code-found candidates (`candidates.ts`), and the extractor's values are a separate proposal for the same fields.
+The rule is `param.type === "choice"`. `freeTextParams()` in `src/lib/extract/prompt.ts` returns everything that isn't a choice, and that list is the extractor's output fields and its fine-tuning answers. A new choice parameter needs no training data: add it to the catalog with its options. Jev also picks the action itself. Jev is not asked about the free-text parameters at all.
 
 ## Tests
 
@@ -48,7 +48,7 @@ npm run typecheck
 npm run lint
 ```
 
-The fake Jev (`e2e/fake-jev.mts`) is a crude rule-based stand-in. These tests check the wiring (questions built, candidates offered, answers turned into forms) but say nothing about how accurate the real model is. First run of the browser tests needs a Chromium: `npx playwright install chromium`, or set `PW_CHROMIUM_PATH` to one you already have.
+The fake Jev (`e2e/fake-jev.mts`) is a crude rule-based stand-in. These tests check the wiring (questions built, answers turned into forms) but say nothing about how accurate the real model is. First run of the browser tests needs a Chromium: `npx playwright install chromium`, or set `PW_CHROMIUM_PATH` to one you already have.
 
 ## Extracting values with a local model (experimental)
 
