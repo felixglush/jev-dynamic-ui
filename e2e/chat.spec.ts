@@ -597,8 +597,10 @@ test("every message sent (not typed) is logged for review on the annotate page",
 test("what is typed while the card updates is not logged until Return sends it", async ({ page }) => {
   const { readFile } = await import("node:fs/promises");
   const { PREDICTIONS_LOG } = await import("./paths");
-  const logged = async () => (await readFile(PREDICTIONS_LOG, "utf8").catch(() => "")).split("\n").filter((line) => line.includes("Send $88 to Quinn for the typing test"));
-  await composer(page).pressSequentially("Send $88 to Quinn for the typing test");
+  // The log file outlives a test run, so make the message unique to this run.
+  const message = `Send $88 to Quinn, typing test ${Date.now()}`;
+  const logged = async () => (await readFile(PREDICTIONS_LOG, "utf8").catch(() => "")).split("\n").filter((line) => line.includes(message));
+  await composer(page).pressSequentially(message);
   await expect(card(page).getByText("Send an e-Transfer")).toBeVisible();
   await page.waitForTimeout(500);
   expect(await logged()).toHaveLength(0);
