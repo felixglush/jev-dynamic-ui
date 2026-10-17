@@ -151,8 +151,10 @@ export function datasetFromReviews(records: ExampleRecord[]): Dataset {
 }
 
 /** A predictions CSV or an SFT JSONL file: JSONL lines start with "{". */
+export const isJsonl = (text: string) => text.replace(/^\uFEFF/, "").trimStart().startsWith("{");
+
 export function parseAnyDataset(text: string): Dataset {
-  return text.replace(/^\uFEFF/, "").trimStart().startsWith("{") ? parseSftJsonl(text) : parseDataset(text);
+  return isJsonl(text) ? parseSftJsonl(text) : parseDataset(text);
 }
 
 /**

@@ -6,7 +6,7 @@ import { ChevronLeft, ChevronRight, Download, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ExtractResult, LoadResult, SaveResult } from "@/app/annotate/actions";
 import type { Extraction } from "@/lib/annotate/combine";
-import { isActionName, label, parseAnyDataset, serializeDataset, serializeLabels, type Annotation, type Annotations, type Dataset } from "@/lib/annotate/dataset";
+import { isActionName, isJsonl, label, parseAnyDataset, serializeDataset, serializeLabels, type Annotation, type Annotations, type Dataset } from "@/lib/annotate/dataset";
 import { saveFile } from "@/lib/annotate/save-file";
 import { summarize, verdict } from "@/lib/annotate/summary";
 import { cn } from "@/lib/utils";
@@ -113,6 +113,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
   const [dataset, setDataset] = useState(initial);
   const [source, setSource] = useState(initialSource);
   const [index, setIndex] = useState(0);
+  const [skipExtract, setSkipExtract] = useState(false);
   const [view, setView] = useState<"review" | "summary">("review");
   const [mode, setMode] = useState<ReviewMode>(defaultMode);
   // Which group of messages to walk through ("" = all of them).
@@ -219,7 +220,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
   const currentAction = current?.predictedAction;
   const currentMessage = current?.message;
   useEffect(() => {
-    if (!extract || !currentMessage || !currentAction || !isActionName(currentAction)) return;
+    if (!extract || skipExtract || !currentMessage || !currentAction || !isActionName(currentAction)) return;
     const k = extractionKey(currentAction, currentMessage);
     if (requested.current.has(k)) return;
     requested.current.add(k);
@@ -229,7 +230,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
         const entry: Extraction = result.ok ? { status: "ready", fields: result.fields } : { status: "error", message: result.error };
         setExtractions((all) => ({ ...all, [k]: entry }));
       });
-  }, [extract, currentAction, currentMessage]);
+  }, [extract, skipExtract, currentAction, currentMessage]);
 
   /** Send changed answers to the file. Changes made while a save is running go out together in the next one. */
   function queueFileSave(changes: Changes) {
@@ -288,7 +289,10 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
 
   async function importFile(file: File) {
     try {
-      const imported = parseAnyDataset(await file.text());
+      const text = await file.text();
+      const imported = parseAnyDataset(text);
+      // A JSONL file already holds the answers to review, so LiquidFM must not replace them.
+      setSkipExtract(isJsonl(text));
       // Work saved in this browser for the same messages is newer than the file, so it wins.
       const key = storageKey(imported);
       const saved = readSaved(key) ?? {};
@@ -339,7 +343,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
   });
 
   // Nothing to read when Jev picked no action; "off" also covers the static preview.
-  const extraction: Extraction = !extract || !current?.message || !isActionName(current.predictedAction)
+  const extraction: Extraction = !extract || skipExtract || !current?.message || !isActionName(current.predictedAction)
     ? { status: "off" }
     : (extractions[extractionKey(current.predictedAction, current.message)] ?? { status: "loading" });
 
