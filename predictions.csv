@@ -1,1 +1,1 @@
-id,group,message,predicted_action,action_confidence,params,missing_required,expected_action,note
+id,group,message,predicted_action,action_confidence,params,missing_required,expected_action,note,extracted,extractor

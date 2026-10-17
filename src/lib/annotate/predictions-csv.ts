@@ -2,6 +2,8 @@
 import type { ClassifyResult } from "@/lib/jev/types";
 
 export const HEADER = ["id", "group", "message", "predicted_action", "action_confidence", "params", "missing_required", "expected_action", "note"];
+/** The chat log adds what the extractor read and which model read it. */
+export const LOG_HEADER = [...HEADER, "extracted", "extractor"];
 
 export function csvCell(value: string | number | null): string {
   const text = value === null ? "" : String(value);
