@@ -1,8 +1,7 @@
 "use server";
 
 import { annotationsLabel, readAnnotationsFile, writeAnnotationChanges } from "@/lib/annotate/store";
-import { isActionName, type Annotation, type Annotations, type Dataset } from "@/lib/annotate/dataset";
-import { readReviewDataset, sftLabel, writeReviewChanges } from "@/lib/annotate/sft-store";
+import { isActionName, type Annotation, type Annotations } from "@/lib/annotate/dataset";
 import { extractFields } from "@/lib/extract/ollama";
 import { MAX_MESSAGE_LENGTH } from "@/lib/jev/catalog";
 
@@ -54,34 +53,5 @@ export async function extractMessageFields(action: string, message: string): Pro
   } catch (error) {
     console.error("extractMessageFields failed:", error);
     return { ok: false, error: "Couldn't reach the extractor. Is Ollama running?" };
-  }
-}
-
-export type SftLoadResult = { ok: true; dataset: Dataset; path: string } | { ok: false; error: string };
-
-/** The examples file as rows to review, with the reviews already saved in it. */
-export async function loadSftReviews(): Promise<SftLoadResult> {
-  try {
-    return { ok: true, dataset: await readReviewDataset(), path: sftLabel() };
-  } catch (error) {
-    console.error("loadSftReviews failed:", error);
-    return { ok: false, error: error instanceof Error ? error.message : "Couldn't read the file." };
-  }
-}
-
-/** Same shape as loadSavedAnnotations, for the SFT file. */
-export async function loadSftAnnotations(): Promise<LoadResult> {
-  const loaded = await loadSftReviews();
-  return loaded.ok ? { ok: true, annotations: loaded.dataset.annotations, path: loaded.path } : loaded;
-}
-
-/** Write reviews into the SFT file's rows: an annotation approves or corrects a row, "none" rejects it, null undoes. */
-export async function saveSftReviews(changes: Record<string, Annotation | null>): Promise<SaveResult> {
-  try {
-    await writeReviewChanges(changes);
-    return { ok: true, path: sftLabel() };
-  } catch (error) {
-    console.error("saveSftReviews failed:", error);
-    return { ok: false, error: error instanceof Error ? error.message : "Couldn't write the file." };
   }
 }
