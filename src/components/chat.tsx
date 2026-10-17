@@ -12,11 +12,23 @@ import { LOW_CONFIDENCE, MAX_MESSAGE_LENGTH } from "@/lib/jev/catalog";
 import { summarize } from "@/lib/summarize";
 import type { ClassifyOutcome } from "@/lib/jev/types";
 
+// One message from each action group in data/sample-messages.txt, picked to show something
+// a form fills in on its own (a worded amount, a schedule, a biller account number...).
 const EXAMPLES = [
   "Send $50 to Sam for dinner last night",
+  "add my sister Priya, priya.k@example.com, so I can e-transfer her",
   "pay the minimum on my credit card from savings",
   "I want to open a TFSA and put 2k in it",
-  "add my sister Priya, priya.k@example.com, so I can e-transfer her",
+  "set up a weekly $50 transfer from chequing to savings",
+  "pay my Bell internet bill of $79.99 on the 15th",
+  "add Rogers as a payee, my account number is 4471 2290 88",
+  "my credit card was stolen, I need a new one",
+  "show my last 5 transactions",
+  "ask my brother Kevin for $60 for the gas",
+  "cancel my $200 e-transfer to Sam",
+  "set up autodeposit for me.work@example.com into my chequing account",
+  "Spotify charged me $11.99 but my plan is $9.99",
+  "my new mobile number is (905) 555-0123",
 ];
 
 /** How long typing must pause before Jev is asked, and the shortest text worth asking about. */
