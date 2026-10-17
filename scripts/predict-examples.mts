@@ -13,7 +13,7 @@ import { readFile, rename, writeFile } from "node:fs/promises";
 
 import { classify } from "../src/lib/jev/classify";
 import { normalizeMessage, parseExamples } from "../src/lib/sft/examples";
-import { csvCell, describe, HEADER, parseCsv } from "./predict-csv.mts";
+import { csvCell, describe, HEADER, parseCsv } from "../src/lib/annotate/predictions-csv";
 
 const args = process.argv.slice(2);
 const flag = (name: string) => {

@@ -1,5 +1,5 @@
 /** Helpers shared by the scripts that write predictions.csv. */
-import type { ClassifyResult } from "../src/lib/jev/types";
+import type { ClassifyResult } from "@/lib/jev/types";
 
 export const HEADER = ["id", "group", "message", "predicted_action", "action_confidence", "params", "missing_required", "expected_action", "note"];
 

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 import type { ExtractResult, LoadResult, TrainingResult, SaveResult, SftLoadResult } from "@/app/annotate/actions";
@@ -58,7 +59,11 @@ export function Workspace({ jev, sft }: Props) {
         </Button>
       </div>
 
-      {source === "jev" ? (
+      {source === "jev" && jev.initial.predictions.length === 0 ? (
+        <p data-testid="no-live-predictions" className="rounded-xl border bg-card p-5 text-sm text-muted-foreground">
+          No live predictions yet. Every message you send in the <Link className="underline" href="/">chat</Link> is logged here with what Jev said, so you can approve or correct it. Approved ones become training rows.
+        </p>
+      ) : source === "jev" ? (
         <Annotator
           key="jev"
           initial={jev.initial}

@@ -24,7 +24,7 @@ type Props = {
   /** Ask the LiquidFM extractor for an action's typed-in values. Left out in the static preview and for the fine-tuning rows. */
   extract?: (action: string, message: string) => Promise<ExtractResult>;
   /** Add an approved or corrected answer to the fine-tuning data. Only the real predictions page passes this. */
-  addToTraining?: (row: { action: string; message: string; params: Record<string, string>; kind: string; note: string }) => Promise<TrainingResult>;
+  addToTraining?: (row: { action: string; message: string; params: Record<string, string>; kind: string; note: string; jevAction?: string }) => Promise<TrainingResult>;
   /** Where the fine-tuning file already holds each message (train, val, test, pending). The predictions page passes this to flag held-out messages. */
   lookupSplits?: (messages: string[]) => Promise<Record<string, string>>;
   /** Heading above the progress. */
@@ -331,7 +331,7 @@ export function Annotator({ initial, initialSource, loadFromFile, saveToFile, ex
     // An approved or corrected answer on the real predictions page also goes into the fine-tuning data.
     if (addToTraining && annotation.expectedAction !== "none") {
       setTrainingStatus("Adding to the fine-tuning data…");
-      void addToTraining({ action: annotation.expectedAction, message: current.message, params: annotation.expectedParams, kind: annotation.kind ?? "plain", note: annotation.note })
+      void addToTraining({ action: annotation.expectedAction, message: current.message, params: annotation.expectedParams, kind: annotation.kind ?? "plain", note: annotation.note, jevAction: current.predictedAction })
         .catch((): TrainingResult => ({ ok: false, error: "Couldn't reach the server." }))
         .then((result) => setTrainingStatus(result.ok ? result.message : `Not added to the fine-tuning data: ${result.error}`));
     }

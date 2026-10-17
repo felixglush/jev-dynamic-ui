@@ -36,7 +36,7 @@ export type ExampleSource = "sample" | "synthetic";
 export type ReviewStatus = "pending" | "approved" | "rejected";
 
 export type ExampleRecord = SftRecord & {
-  meta: SftRecord["meta"] & { source: ExampleSource; status: ReviewStatus; original?: { action: string; answer: string }; note?: string; trainOnly?: boolean; split?: Split; pattern?: string; kind?: Kind; reviewedBy?: "human" | "claude"; version?: Version; retired?: Version };
+  meta: SftRecord["meta"] & { source: ExampleSource; status: ReviewStatus; original?: { action: string; answer: string }; note?: string; trainOnly?: boolean; split?: Split; pattern?: string; kind?: Kind; reviewedBy?: "human" | "claude"; jevAction?: string; version?: Version; retired?: Version };
 };
 
 /** What a reviewer decided: an action ("none" rejects the row) and the values, as the annotate form gives them. */
@@ -161,6 +161,7 @@ export function applyReview(record: ExampleRecord, review: Review | null): Examp
       ...(record.meta.split ? { split: record.meta.split } : {}),
       ...(record.meta.pattern ? { pattern: record.meta.pattern } : {}),
       ...(kind ? { kind } : {}),
+      ...(record.meta.jevAction ? { jevAction: record.meta.jevAction } : {}),
       ...(record.meta.version ? { version: record.meta.version } : {}),
       ...(record.meta.retired ? { retired: record.meta.retired } : {}),
       // Keep the generator's first answer, not an earlier correction.

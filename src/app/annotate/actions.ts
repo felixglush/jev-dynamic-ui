@@ -92,7 +92,7 @@ export type TrainingResult = { ok: true; message: string } | { ok: false; error:
  * An answer approved or corrected on the real predictions page becomes an approved, train-only row in
  * the fine-tuning file. Same rule as the other actions: public endpoint, so the store checks the input.
  */
-export async function addApprovedExample(row: { action: string; message: string; params: Record<string, string>; kind: string; note: string }): Promise<TrainingResult> {
+export async function addApprovedExample(row: { action: string; message: string; params: Record<string, string>; kind: string; note: string; jevAction?: string }): Promise<TrainingResult> {
   try {
     const result = await appendApprovedExample(row);
     if ("id" in result && result.updated) {

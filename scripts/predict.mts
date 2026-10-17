@@ -10,7 +10,7 @@ import { readFile, writeFile } from "node:fs/promises";
 
 import { classify } from "../src/lib/jev/classify";
 import type { ClassifyResult } from "../src/lib/jev/types";
-import { csvCell, describe, HEADER } from "./predict-csv.mts";
+import { csvCell, describe, HEADER } from "../src/lib/annotate/predictions-csv";
 
 const [inputPath = "data/sample-messages.txt", outputPath = "predictions.csv"] = process.argv.slice(2);
 const CONCURRENCY = 4;

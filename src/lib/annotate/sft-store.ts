@@ -83,7 +83,7 @@ function enqueue<T>(run: () => Promise<T>): Promise<T> {
  */
 export function addApprovedExample(raw: unknown): Promise<{ id: string; updated?: true; split?: string } | { skipped: "duplicate" } | { skipped: "no-fields" }> {
   return enqueue(async () => {
-    const row = raw as { action?: unknown; message?: unknown; params?: unknown; kind?: unknown; note?: unknown };
+    const row = raw as { action?: unknown; message?: unknown; params?: unknown; kind?: unknown; note?: unknown; jevAction?: unknown };
     if (typeof row?.action !== "string" || !isActionName(row.action)) throw new Error("Unknown action.");
     if (typeof row.message !== "string" || !row.message.trim() || row.message.length > MAX_MESSAGE_LENGTH) throw new Error("Message must be text of a sensible length.");
     if (!isKind(row.kind)) throw new Error("Unknown kind of example.");
@@ -112,7 +112,8 @@ export function addApprovedExample(raw: unknown): Promise<{ id: string; updated?
     const { records: all, skipped } = addExamples(records, [{ id: "approved", action: row.action, message, fields: {}, vague: false }], "sample", { trainOnly: true, kind: row.kind });
     if (skipped.length > 0) return { skipped: "duplicate" as const };
     const added = all.find((r) => r.messages[1].content === message && r.meta.action === row.action && !records.includes(r))!;
-    const reviewed = applyReview(added, { expectedAction: row.action, expectedParams, note, kind: row.kind });
+    const jevAction = typeof row.jevAction === "string" && isActionName(row.jevAction) ? row.jevAction : undefined;
+    const reviewed = applyReview(jevAction ? { ...added, meta: { ...added.meta, jevAction } } : added, { expectedAction: row.action, expectedParams, note, kind: row.kind });
     await writeRecords(all.map((r) => (r === added ? reviewed : r)));
     return { id: reviewed.meta.id };
   });
