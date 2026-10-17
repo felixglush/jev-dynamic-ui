@@ -56,7 +56,7 @@ The shipped extractor is LFM2.5-350M fine-tuned with LoRA on 1,120 reviewed-or-g
 | Held-out validation, exact match, any key order (catalog / sorted / reversed) | 98.9 / 98.9 / 99.6 % |
 | Held-out test, same three orders | 96.9 / 96.7 / 97.4 % |
 
-Caveats: only about 62 training rows were reviewed by a person (the rest were approved by Claude), and the test set is not sealed. Full method, every run and the failure analysis are in [`docs/sft-experiments.md`](docs/sft-experiments.md).
+Caveats: only about 62 training rows were reviewed by a person (the rest were approved by Claude). The test set was never trained on, but it was scored for every candidate model while choosing the recipe, so treat its numbers as development numbers rather than a clean final estimate. Full method, every run and the failure analysis are in [`docs/sft-experiments.md`](docs/sft-experiments.md).
 
 ## Run it
 
