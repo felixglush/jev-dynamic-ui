@@ -57,10 +57,10 @@ There is a small set of harder examples: 129 in data/extract-stress.txt. Content
 ```bash
 npm install
 cp .env.example .env.local   # add your TYPESAFE_API_KEY
-scripts/ollama/use-tuned.sh  # registers the fine-tuned extractor in Ollama (see below for the model file)
+scripts/ollama/use-tuned.sh  # registers the fine-tuned extractor in Ollama (downloads the model from Hugging Face)
 npm run dev                  # http://localhost:3000
 ```
 
-The fine-tuned model file (`scripts/ollama/models/LFM2.5-350M-SFT-Q8_0.gguf`) is not in the repo. It is in a private Hugging Face repo (`felixglush156/LFM2.5-350M-banking-extractor-GGUF`) and on the project's Modal volume, so `use-tuned.sh` only works for people with access. Without it, run `scripts/ollama/setup.sh` (downloads the public base LFM2.5-230M, not fine-tuned and much less accurate: it invents values for fields the message doesn't state) and set `OLLAMA_MODEL=lfm25-230m` in `.env.local`.
+`use-tuned.sh` downloads the fine-tuned model (about 380 MB) from the public [Hugging Face repo](https://huggingface.co/felixglush156/LFM2.5-350M-banking-extractor-GGUF) and registers it in Ollama as `lfm25-350m-sft`, the extractor's default.
 
 Needs Node 22+ and [Ollama](https://ollama.com). Everything else (architecture, tests, annotation page, fine-tuning data, dependency notes) is in [`AGENTS.md`](AGENTS.md) and [`docs/`](docs).
