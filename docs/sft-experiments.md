@@ -431,7 +431,7 @@ What this says:
 
 **Through Ollama (stress set, 129 messages, GGUF Q8_0):** shuffled 350M candidate **126/129** without a schema and **125/129** with Ollama's schema (previous best 123/129). Injection is 4/4 in both. Misses: `send two grand to Mike` gives 2500, `what's the weather today?` fills `date: today`, `I don't recognize a charge at Shell yesterday` misses the date, and (schema only) a long polite message loses the recipient.
 
-So the extractor sends the schema again (`format`), which guarantees valid JSON, and it is safe only with a model trained this way: pointing it at an older GGUF without dropping `format` brings the serving bug back (note in `extractFields`). The GGUF is `o350e2s0/` on the Modal volume (`modal volume get jev-sft o350e2s0/LFM2.5-230M-SFT-Q8_0.gguf ...`; the file name still says 230M, it is the 350M), registered locally as `lfm25-350m-sft-shuffled`.
+So the extractor sends the schema again (`format`), which guarantees valid JSON, and it is safe only with a model trained this way: pointing it at an older GGUF without dropping `format` brings the serving bug back (note in `extractFields`). The GGUF is `o350e2s0/` on the Modal volume (`modal volume get jev-sft o350e2s0/LFM2.5-350M-SFT-Q8_0.gguf ...`; an older copy of the same file in that folder is named `LFM2.5-230M-SFT-Q8_0.gguf` because the converter used to hardcode that name, and it is the 350M too), registered locally as `lfm25-350m-sft-shuffled`.
 
 
 ## Release: shuffled-key 350M on Hugging Face, and the app default
