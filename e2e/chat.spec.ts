@@ -450,10 +450,33 @@ test("the card opens by itself while typing, and refills as more is said", async
 test("typing in quick bursts asks Jev once, after the pause", async ({ page }) => {
   let asked = 0;
   page.on("request", (request) => request.method() === "POST" && asked++);
-  await composer(page).pressSequentially("Send $50 to Sam for dinner last night");
-  await expect(page.getByLabel("To")).toHaveValue("Sam");
+  // No spaces, so nothing ends a word: only the pause triggers a question.
+  await composer(page).pressSequentially("Send$50toSamfordinnerlastnight");
+  await expect.poll(() => asked).toBe(1);
   await page.waitForTimeout(800);
   expect(asked).toBe(1);
+});
+
+test("a space asks Jev right away, without waiting for the pause", async ({ page }) => {
+  let asked = 0;
+  page.on("request", (request) => request.method() === "POST" && asked++);
+  await composer(page).pressSequentially("Send $50 to Sam");
+  // Three spaces were typed, each ending a word, so Jev is asked once per space; the pause alone would ask once.
+  await expect.poll(() => asked).toBeGreaterThanOrEqual(3);
+  await expect(page.getByLabel("To")).toHaveValue("Sam");
+});
+
+test("deleting back to a space does not skip the pause", async ({ page }) => {
+  await composer(page).pressSequentially("Send $50 to Sam");
+  await expect(page.getByLabel("To")).toHaveValue("Sam");
+  let asked = 0;
+  page.on("request", (request) => request.method() === "POST" && asked++);
+  // Backspace over "Sam": the last deletion leaves the text ending in a space, but no space was typed.
+  await composer(page).press("Backspace");
+  await composer(page).press("Backspace");
+  await composer(page).press("Backspace");
+  expect(asked).toBe(0);
+  await expect.poll(() => asked).toBe(1);
 });
 
 test("a field the customer already edited keeps their value when more is typed", async ({ page }) => {
@@ -561,7 +584,7 @@ test("pressing Return before the newest answer arrives does not focus the older 
   await expect(card(page).getByRole("button", { name: "Open Account" })).toBeFocused();
 });
 
-test("every message sent is logged for review on the annotate page", async ({ page }) => {
+test("every message sent (not typed) is logged for review on the annotate page", async ({ page }) => {
   const { readFile } = await import("node:fs/promises");
   const { PREDICTIONS_LOG } = await import("./paths");
   await say(page, "Send $77 to Logan for the logging test");
@@ -569,4 +592,19 @@ test("every message sent is logged for review on the annotate page", async ({ pa
   await expect
     .poll(async () => (await readFile(PREDICTIONS_LOG, "utf8").catch(() => "")))
     .toMatch(/^live-[^\n]*Send \$77 to Logan for the logging test,send_etransfer,/m);
+});
+
+test("what is typed while the card updates is not logged until Return sends it", async ({ page }) => {
+  const { readFile } = await import("node:fs/promises");
+  const { PREDICTIONS_LOG } = await import("./paths");
+  // The log file outlives a test run, so make the message unique to this run.
+  const message = `Send $88 to Quinn, typing test ${Date.now()}`;
+  const logged = async () => (await readFile(PREDICTIONS_LOG, "utf8").catch(() => "")).split("\n").filter((line) => line.includes(message));
+  await composer(page).pressSequentially(message);
+  await expect(card(page).getByText("Send an e-Transfer")).toBeVisible();
+  await page.waitForTimeout(500);
+  expect(await logged()).toHaveLength(0);
+
+  await composer(page).press("Enter");
+  await expect.poll(async () => (await logged()).length).toBe(1);
 });

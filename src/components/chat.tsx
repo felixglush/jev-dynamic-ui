@@ -20,7 +20,7 @@ const EXAMPLES = [
 ];
 
 /** How long typing must pause before Jev is asked, and the shortest text worth asking about. */
-const DEBOUNCE_MS = 450;
+const DEBOUNCE_MS = 200;
 const MIN_LIVE_LENGTH = 3;
 /** Matches the fade-out in globals.css; the card's contents are dropped once it has faded. */
 const CLOSE_MS = 280;
@@ -57,11 +57,12 @@ export function Chat() {
       wantFocus.current = true;
       setOpen(true);
       // The card already shows this text's answer: nothing new to ask, just move into it.
-      if (unchanged && outcome && shownText.current === text) {
-        focusForm();
-        return;
+      if (unchanged) {
+        // Only a sent message is logged, and the answer for this text was asked for while typing: ask once more, just to log it.
+        void classifyMessage(text, true).catch(() => {});
+        if (outcome && shownText.current === text) focusForm();
+        return; // otherwise that answer is still on its way, and focus will follow it
       }
-      if (unchanged) return; // that answer is still on its way, and focus will follow it
     }
     const id = ++latestId.current;
     lastText.current = text;
@@ -70,7 +71,7 @@ export function Chat() {
     startTransition(async () => {
       let answer: ClassifyOutcome;
       try {
-        answer = await classifyMessage(text);
+        answer = await classifyMessage(text, explicit);
       } catch {
         answer = NETWORK_ERROR;
       }
@@ -102,7 +103,7 @@ export function Chat() {
     }
   }
 
-  function onType(value: string) {
+  function onType(value: string, typedSpace: boolean) {
     clearTimeout(timer.current);
     // Whatever is still in flight was asked about older text, so its answer must not be shown.
     latestId.current++;
@@ -113,7 +114,9 @@ export function Chat() {
       return;
     }
     if (text.length < MIN_LIVE_LENGTH) return;
-    timer.current = setTimeout(() => ask(text, false), DEBOUNCE_MS);
+    // A space just typed ends a word, so ask right away (editing earlier text or deleting back to a space does not count); otherwise wait for a short pause in typing.
+    if (typedSpace) ask(text, false);
+    else timer.current = setTimeout(() => ask(text, false), DEBOUNCE_MS);
   }
 
   function focusForm() {
@@ -194,7 +197,7 @@ export function Chat() {
             autoComplete="off"
             maxLength={MAX_MESSAGE_LENGTH}
             aria-label="Message"
-            onChange={(event) => onType(event.target.value)}
+            onChange={(event) => onType(event.target.value, /^\s$/.test((event.nativeEvent as InputEvent).data ?? ""))}
             className="h-10 min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-muted-foreground"
           />
           <Button type="submit" size="icon" aria-label="Send" className="size-10 rounded-full">

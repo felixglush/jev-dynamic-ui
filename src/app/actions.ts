@@ -12,9 +12,9 @@ import type { ClassifyOutcome } from "@/lib/jev/types";
  * Server Action: runs on the server when the chat form is submitted, so the API key never leaves it.
  *
  * Server Actions are public POST endpoints, so treat the argument as untrusted input and validate it
- * even though our own form is the only caller we expect. Add authentication here before deploying.
+ * even though our own form is the only caller we expect. `sent` is true when the customer pressed Return. Add authentication here before deploying.
  */
-export async function classifyMessage(message: string): Promise<ClassifyOutcome> {
+export async function classifyMessage(message: string, sent = false): Promise<ClassifyOutcome> {
   if (typeof message !== "string") return { ok: false, error: "Message must be text." };
   const trimmed = message.trim();
   if (!trimmed) return { ok: false, error: "Type a message first." };
@@ -27,7 +27,8 @@ export async function classifyMessage(message: string): Promise<ClassifyOutcome>
     // The local fine-tuned model fills the free-text fields; without it the system is down (no regex fallback).
     const extraction = await withExtractedFields(result, trimmed);
     // Log Jev's own answer and the extractor's, side by side, so each field's source is on record.
-    await logPrediction(trimmed, result, extraction.extracted);
+    // Only a message the customer sent (Return) is logged; the live guesses made while typing are not.
+    if (sent) await logPrediction(trimmed, result, extraction.extracted);
     return { ok: true, result: extraction.result };
   } catch (error) {
     // Log the detail on the server; send the browser only a generic message.
