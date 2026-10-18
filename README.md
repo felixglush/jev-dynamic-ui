@@ -4,8 +4,9 @@ A chat UI that picks a prebuilt banking form and fills it in from what the custo
 
 ## Demo
 
-<!-- TODO: replace this placeholder with the demo video (drag the file into the GitHub editor or link it). -->
-> **Demo video coming soon.** Placeholder: no recording has been made yet.
+<a href="docs/demo.mp4"><img src="docs/demo.gif" alt="Demo: typing a request opens the matching form, pre-filled" width="100%"></a>
+
+Click for the full-quality video ([docs/demo.mp4](docs/demo.mp4)).
 
 ## Actions
 
