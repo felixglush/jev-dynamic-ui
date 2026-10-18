@@ -11,17 +11,19 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("text and the form appear while still speaking, and the final text replaces them", async ({ page }) => {
-  await say(page, { texts: ["Send $50", "Send $50 to Sam", "Send $75 to Sam for dinner last night"] });
+  // A streaming engine writes capitals and spelled-out numbers; the app turns them into what a person would type.
+  await say(page, { texts: ["SEND FIFTY", "SEND FIFTY DOLLARS TO SAM", "SEND SEVENTY FIVE DOLLARS TO SAM FOR DINNER LAST NIGHT"] });
   await page.getByRole("button", { name: "Record a message" }).click();
 
   // Still recording (the Stop button is up), yet the bar and the form already have the partial text.
   await expect(page.getByRole("button", { name: "Stop recording" })).toBeVisible();
-  await expect(bar(page)).toHaveValue("Send $50 to Sam");
-  await expect(page.getByLabel("To", { exact: true })).toHaveValue("Sam");
+  await expect(bar(page)).toHaveValue("send 50 dollars to sam");
+  // An engine that writes only capitals gives no clue that "sam" is a name, so it stays lowercase.
+  await expect(page.getByLabel("To", { exact: true })).toHaveValue("sam");
   await expect(page.getByLabel("Amount (CAD)")).toHaveValue("50.00");
 
   await page.getByRole("button", { name: "Stop recording" }).click();
-  await expect(bar(page)).toHaveValue("Send $75 to Sam for dinner last night");
+  await expect(bar(page)).toHaveValue("send 75 dollars to sam for dinner last night");
   await expect(page.getByLabel("Amount (CAD)")).toHaveValue("75.00");
   // Review first: speaking never confirms anything.
   await expect(page.getByRole("status")).not.toContainText("Demo only");

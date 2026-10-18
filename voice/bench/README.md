@@ -55,3 +55,5 @@ Run: `python run_sherpa.py clips.txt WAV16_DIR MODEL_DIR [LEAD_S] [TAIL_S]` (mod
 *Against the spoken-form script as before: spelled-out numbers count as correct, UPPERCASE is ignored.
 
 `browser_check.mjs` is the full chain by hand: a real speech clip goes through Chromium's fake microphone into the built app (`STT_STREAM_URL` set), and the message bar fills in as the clip plays: "SEND FIFTY DOLL" at 1.5 s, "SEND FIFTY DOLLARS TO SAM" at 2.1 s, the whole sentence at 3.4 s, and the form opened with To = SAM. The Amount field stayed empty: "FIFTY" is spelled out and UPPERCASE, which the stand-in extractor can't read. Cleaning that up before the extractor is the next branch.
+
+After the clean-up step (`src/lib/stt/normalize.ts`) the same real-speech check shows `send 50 dollars to sam for dinner last night` in the bar and the form open with To = sam and Amount = 50.00. Names stay lowercase because the streaming model writes only capitals.

@@ -28,4 +28,8 @@ while (Date.now() - started < 6000) {
 await page.getByRole("button", { name: "Stop recording" }).click();
 await page.waitForTimeout(1500);
 console.log("after stop:", await bar.inputValue());
+for (const label of ["To", "Amount (CAD)"]) {
+  const field = page.getByLabel(label, { exact: true });
+  console.log(`${label}:`, (await field.count()) ? await field.inputValue() : "(no such field)");
+}
 await browser.close();

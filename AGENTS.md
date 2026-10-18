@@ -103,6 +103,8 @@ Speech-to-text is a strategy plus a small factory in `src/lib/stt/`, split by re
 
 **Streaming server.** `voice/server/sherpa_server.py` (Python, sherpa-onnx streaming Zipformer) implements the streaming protocol: setup in `voice/bench/README.md`, `python -m unittest voice/server/test_sherpa_server.py` runs its tests with a stand-in recognizer (no model needed), `voice/bench/stream_bench.py` times the real model at real-time pace, and `voice/bench/browser_check.mjs` plays a speech clip through Chromium's fake microphone into the app. Run it with `STT_STREAM_URL=ws://127.0.0.1:8765` set for `npm run dev`/`start`.
 
+**Text clean-up.** Streaming engines write capitals and words for everything, so `StreamingMicButton` runs the text through `normalizeSpoken` (`src/lib/stt/normalize.ts`, pure and English only) before it reaches Jev and the extractor: spelled-out amounts become digits ("two hundred and fifty" -> 250, "eleven ninety nine" -> 11.99), digit-by-digit runs become account or phone numbers, "alex at acme dot com" becomes an email, and ordinals next to a month become dates ("march fourth" -> "march 4th"). It leaves ambiguous words alone ("one of my accounts", "my first account"). A capitals-only engine gives no clue what is a name, so names come out lowercase.
+
 `OpenAiCompatibleStt` speaks OpenAI's `/v1/audio/transcriptions`, so Whisper (faster-whisper-server, whisper.cpp) and Qwen3-ASR (vLLM) are a change of `STT_URL` and `STT_MODEL`. Tests use stand-ins (`e2e/fake-stt.mts`, Chromium's fake microphone), so they prove the wiring, not speech accuracy, and nothing has been tried against a real Whisper server yet. Model timings are in `voice/bench/README.md`.
 
 ## Dependency notes
