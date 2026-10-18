@@ -1,3 +1,4 @@
 sherpa-onnx
 websockets>=13
 numpy
+sentencepiece

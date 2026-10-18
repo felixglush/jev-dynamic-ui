@@ -28,7 +28,19 @@ MODEL_SUFFIX = "chunk-16-left-128.int8.onnx"
 log = logging.getLogger("sherpa_server")
 
 
-def load_recognizer(model_dir: Path, threads: int) -> sherpa_onnx.OnlineRecognizer:
+def load_recognizer(
+    model_dir: Path, threads: int, hotwords_file: Path | None = None, hotwords_score: float = 1.5
+) -> sherpa_onnx.OnlineRecognizer:
+    # Hotwords need beam search; without them greedy search is a little faster.
+    biasing = {}
+    if hotwords_file:
+        biasing = dict(
+            decoding_method="modified_beam_search",
+            hotwords_file=str(hotwords_file),
+            hotwords_score=hotwords_score,
+            modeling_unit="bpe",
+            bpe_vocab=str(model_dir / "bpe.vocab"),
+        )
     return sherpa_onnx.OnlineRecognizer.from_transducer(
         tokens=str(model_dir / "tokens.txt"),
         encoder=str(model_dir / f"encoder-epoch-99-avg-1-{MODEL_SUFFIX}"),
@@ -37,7 +49,7 @@ def load_recognizer(model_dir: Path, threads: int) -> sherpa_onnx.OnlineRecogniz
         num_threads=threads,
         sample_rate=SAMPLE_RATE,
         feature_dim=80,
-        decoding_method="greedy_search",
+        **{"decoding_method": "greedy_search", **biasing},
     )
 
 
@@ -123,9 +135,11 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--threads", type=int, default=4, help="CPU threads for the model")
     parser.add_argument("--workers", type=int, default=2, help="connections decoded at the same time")
+    parser.add_argument("--hotwords-file", type=Path, help="tokenized words to favour (see tokenize_hotwords.py)")
+    parser.add_argument("--hotwords-score", type=float, default=1.5, help="how strongly to favour them")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
-    recognizer = load_recognizer(args.model_dir, args.threads)
+    recognizer = load_recognizer(args.model_dir, args.threads, args.hotwords_file, args.hotwords_score)
     asyncio.run(serve(args.host, args.port, recognizer, args.workers))
 
 
