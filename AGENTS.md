@@ -93,6 +93,10 @@ Every answer is saved as you go, in two places. The browser keeps it in localSto
 - `src/lib/annotate/` holds the plain functions: CSV reading and writing (`dataset.ts`, `csv.ts`) and the scoring (`summary.ts`). Values are compared loosely: `50` matches `50.00`, phone numbers by digits, names ignoring case.
 - `npm run annotate:preview` (after `npm run build`) bundles the same component into one HTML file with the predictions embedded, for sharing where the server can't run, such as a Claude Artifact.
 
+## Voice mode (in progress)
+
+`src/lib/stt/` is the speech-to-text layer, built as a strategy plus a small factory. `SttProvider` (`types.ts`) is the one-method interface (`transcribe(audio) -> text`); `createStt()` in `index.ts` reads `STT_PROVIDER` and builds the matching class. The only provider so far, `OpenAiCompatibleStt`, speaks OpenAI's `/v1/audio/transcriptions`, so Whisper (faster-whisper-server, whisper.cpp) and Qwen3-ASR (vLLM) are a change of `STT_URL` and `STT_MODEL`. Not yet wired to a mic button or a server action, and not yet tried against a real Whisper server (the integration test uses a stand-in). Model timings are in `voice/bench/README.md`.
+
 ## Dependency notes
 
 - TypeScript 7 (the native compiler) runs `npm run typecheck`. `typescript-eslint`, which `eslint-config-next` uses, doesn't support TS 7 yet, so `typescript` in `package.json` is aliased to Microsoft's `@typescript/typescript6` compatibility package for the tools that import it (ESLint, Next), as the TS 7 announcement recommends, and `@typescript/native` provides `tsc`. Once typescript-eslint supports TS 7, replace both with a plain `typescript@7`.
