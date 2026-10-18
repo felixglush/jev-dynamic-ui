@@ -57,6 +57,7 @@ export function useStreamingSpeech(createTranscriber: () => StreamingTranscriber
     try {
       await transcriber.start({
         onPartial: (text) => latest.current.handlers.onPartial(text),
+        onEndpoint: stop, // the server heard the customer finish: same as pressing stop
         onFinal: (text) => {
           end();
           latest.current.handlers.onFinal(text);

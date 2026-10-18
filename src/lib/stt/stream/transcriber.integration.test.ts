@@ -59,6 +59,17 @@ describe("WebSocketTranscriber", () => {
     expect(h.onError).not.toHaveBeenCalled();
   });
 
+  it("tells the caller when the server hears the customer stop, and keeps going until the final text", async () => {
+    const h = { ...handlers(), onEndpoint: vi.fn() };
+    const transcriber = new WebSocketTranscriber(url);
+    await transcriber.start(h);
+    connected!.send(JSON.stringify({ type: "endpoint" }));
+    await until(() => h.onEndpoint.mock.calls.length === 1);
+    expect(h.onFinal).not.toHaveBeenCalled();
+    connected!.send(JSON.stringify({ type: "final", text: "done" }));
+    await until(() => h.onFinal.mock.calls.length === 1);
+  });
+
   it("reports a server error once and closes", async () => {
     const h = handlers();
     const transcriber = new WebSocketTranscriber(url);

@@ -27,8 +27,9 @@ class FakeStream:
 class FakeRecognizer:
     """Says the next scripted text after each 0.1 s of audio fed, and the last one once the stream is finished."""
 
-    def __init__(self, texts):
+    def __init__(self, texts, endpoint_at=float("inf")):
         self.texts = texts
+        self.endpoint_at = endpoint_at  # samples fed after which the engine reports the customer stopped
 
     def create_stream(self):
         return FakeStream()
@@ -38,6 +39,9 @@ class FakeRecognizer:
 
     def decode_stream(self, stream):
         pass
+
+    def is_endpoint(self, stream):
+        return stream.samples >= self.endpoint_at
 
     def get_result(self, stream):
         if stream.finished:
@@ -96,6 +100,23 @@ class ServerTest(unittest.IsolatedAsyncioTestCase):
                 final = json.loads(await asyncio.wait_for(client.recv(), 2))
         self.assertEqual(partials, ["send", "send fifty", "send fifty dollars"])  # "send" is not sent twice
         self.assertEqual(final, {"type": "final", "text": "send fifty dollars to sam"})
+
+    async def test_says_endpoint_once_when_the_customer_pauses(self):
+        lead = int(sherpa_server.LEAD_SILENCE_S * 16000)
+        recognizer = FakeRecognizer(["", "send fifty", "send fifty"], endpoint_at=lead + 3200)
+        async with self.serve(recognizer) as server:
+            port = next(iter(server.sockets)).getsockname()[1]
+            async with websockets.connect(f"ws://127.0.0.1:{port}") as client:
+                await client.send(json.dumps({"type": "start", "sampleRate": 16000}))
+                messages = []
+                for _ in range(5):
+                    await client.send(frame())
+                    try:
+                        while True:
+                            messages.append(json.loads(await asyncio.wait_for(client.recv(), 0.3))["type"])
+                    except asyncio.TimeoutError:
+                        pass
+        self.assertEqual(messages, ["partial", "endpoint"])
 
     async def test_ignores_audio_before_start_and_junk_messages(self):
         recognizer = FakeRecognizer(["", "hello"])

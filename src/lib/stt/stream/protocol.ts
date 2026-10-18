@@ -7,6 +7,7 @@
  *                       binary 16-bit little-endian mono PCM frames, as they are recorded
  *                       text   {"type":"stop"}                       (the customer is done talking)
  *   server  -> browser  text   {"type":"partial","text":"..."}       (the text so far, replaces the last one)
+ *                       text   {"type":"endpoint"}                   (the customer has stopped talking; the browser may send "stop")
  *                       text   {"type":"final","text":"..."}         (the finished text; the server then closes)
  *                       text   {"type":"error","message":"..."}
  */
@@ -17,6 +18,7 @@ export type ClientMessage = { type: "start"; sampleRate: number } | { type: "sto
 export type ServerMessage =
   | { type: "partial"; text: string }
   | { type: "final"; text: string }
+  | { type: "endpoint" }
   | { type: "error"; message: string };
 
 /** Read one text frame from the server. Anything that isn't a known message is ignored (returns null). */
@@ -31,6 +33,7 @@ export function parseServerMessage(data: unknown): ServerMessage | null {
   if (typeof message !== "object" || message === null) return null;
   const { type, text, message: detail } = message as Record<string, unknown>;
   if ((type === "partial" || type === "final") && typeof text === "string") return { type, text };
+  if (type === "endpoint") return { type };
   if (type === "error" && typeof detail === "string") return { type, message: detail };
   return null;
 }

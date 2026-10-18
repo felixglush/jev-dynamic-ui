@@ -22,6 +22,10 @@ SAMPLE_RATE = 16_000
 TAIL_SILENCE_S = 1.0
 # Silence put in front of the audio: the engine drops the first word if speech starts the instant the stream does.
 LEAD_SILENCE_S = 0.5
+# How long a pause ends the customer's turn: after they said something, and when they said nothing at all.
+ENDPOINT_SILENCE_S = 1.0
+ENDPOINT_EMPTY_S = 4.0
+MAX_UTTERANCE_S = 30.0
 # The chunk-16 model from the sherpa-onnx release; the int8 files are the quantized ones.
 MODEL_SUFFIX = "chunk-16-left-128.int8.onnx"
 
@@ -47,6 +51,11 @@ def load_recognizer(
         decoder=str(model_dir / f"decoder-epoch-99-avg-1-{MODEL_SUFFIX}"),
         joiner=str(model_dir / f"joiner-epoch-99-avg-1-{MODEL_SUFFIX}"),
         num_threads=threads,
+        # Silence after speech that means the customer is done (any text), or a long pause with no text at all.
+        enable_endpoint_detection=True,
+        rule1_min_trailing_silence=ENDPOINT_EMPTY_S,
+        rule2_min_trailing_silence=ENDPOINT_SILENCE_S,
+        rule3_min_utterance_length=MAX_UTTERANCE_S,
         sample_rate=SAMPLE_RATE,
         feature_dim=80,
         **{"decoding_method": "greedy_search", **biasing},
@@ -60,6 +69,7 @@ class Session:
         self.recognizer = recognizer
         self.stream = recognizer.create_stream()
         self.last_text = ""
+        self.ended = False
         self.feed(np.zeros(int(LEAD_SILENCE_S * SAMPLE_RATE), dtype=np.float32))
 
     def feed(self, samples: np.ndarray) -> None:
@@ -75,6 +85,13 @@ class Session:
             self.last_text = text
             return text
         return None
+
+    def at_endpoint(self) -> bool:
+        """True once, when the customer has said something and then paused long enough to be done."""
+        if self.ended or not self.last_text or not self.recognizer.is_endpoint(self.stream):
+            return False
+        self.ended = True
+        return True
 
     def finish(self) -> str:
         self.feed(np.zeros(int(TAIL_SILENCE_S * SAMPLE_RATE), dtype=np.float32))
@@ -99,6 +116,8 @@ async def handle(connection, recognizer: sherpa_onnx.OnlineRecognizer, pool: Thr
             text = await loop.run_in_executor(pool, session.push_pcm16, message)
             if text is not None:
                 await connection.send(json.dumps({"type": "partial", "text": text}))
+            if session.at_endpoint():
+                await connection.send(json.dumps({"type": "endpoint"}))
             continue
         try:
             kind = json.loads(message).get("type")

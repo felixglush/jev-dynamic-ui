@@ -3,6 +3,8 @@ import { SAMPLE_RATE, parseServerMessage, type ClientMessage } from "./protocol"
 export type TranscriberHandlers = {
   /** The text so far. Each one replaces the last. */
   onPartial: (text: string) => void;
+  /** The server heard the customer stop talking; the caller should `stop()` to get the final text. */
+  onEndpoint?: () => void;
   /** The finished text, after `stop()`. */
   onFinal: (text: string) => void;
   /** A message fit to show the customer. After it, the transcriber is closed. */
@@ -52,6 +54,7 @@ export class WebSocketTranscriber implements StreamingTranscriber {
         const message = parseServerMessage(event.data);
         if (!message || finished) return;
         if (message.type === "partial") handlers.onPartial(message.text);
+        else if (message.type === "endpoint") handlers.onEndpoint?.();
         else if (message.type === "final") {
           finished = true;
           handlers.onFinal(message.text);

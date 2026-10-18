@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 const FAKE_STREAM = "http://127.0.0.1:8790";
 
 /** Tells the stand-in streaming server what the next session "says": all texts but the last as partials, the last as the final text. */
-const say = (page: Page, body: { texts?: string[]; fail?: boolean }) => page.request.post(`${FAKE_STREAM}/__say`, { data: body });
+const say = (page: Page, body: { texts?: string[]; fail?: boolean; endpoint?: boolean }) => page.request.post(`${FAKE_STREAM}/__say`, { data: body });
 const bar = (page: Page) => page.getByLabel("Message", { exact: true });
 
 test.beforeEach(async ({ page }) => {
@@ -28,6 +28,17 @@ test("text and the form appear while still speaking, and the final text replaces
   // Review first: speaking never confirms anything.
   await expect(page.getByRole("status")).not.toContainText("Demo only");
   await expect(page.getByRole("button", { name: "Record a message" })).toBeEnabled();
+});
+
+test("the recording stops by itself when the server hears the customer pause", async ({ page }) => {
+  await say(page, { texts: ["SEND FIFTY", "SEND FIFTY DOLLARS TO SAM"], endpoint: true });
+  await page.getByRole("button", { name: "Record a message" }).click();
+
+  // Nobody presses Stop: the pause ends the turn, the final text lands and the mic is free again.
+  await expect(bar(page)).toHaveValue("send 50 dollars to sam");
+  await expect(page.getByRole("button", { name: "Record a message" })).toBeEnabled();
+  await expect(page.getByLabel("Amount (CAD)")).toHaveValue("50.00");
+  await expect(page.getByRole("status")).not.toContainText("Demo only");
 });
 
 test("a streaming server that is down explains itself and leaves typing working", async ({ page }) => {
