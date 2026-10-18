@@ -16,6 +16,8 @@ names, read from its safetensors header: attention q/k/v/out_proj, the short-con
 in_proj/out_proj, and the feed-forward w1/w2/w3.
 """
 
+import base64
+import gzip
 import json
 import re
 import unicodedata
@@ -178,6 +180,15 @@ def score(rows: list[dict]) -> dict:
     }
 
 
+def pack(files: dict[str, str]) -> dict[str, str]:
+    """gzip + base64 each file so a large dataset stays under Modal's inline argument limit (about 2 MiB); bigger arguments are uploaded to blob storage."""
+    return {k: "gz:" + base64.b64encode(gzip.compress(v.encode())).decode() for k, v in files.items()}
+
+
+def unpack(files: dict[str, str]) -> dict[str, str]:
+    return {k: gzip.decompress(base64.b64decode(v[3:])).decode() if v.startswith("gz:") else v for k, v in files.items()}
+
+
 def load_records(text: str) -> list[dict]:
     return [json.loads(line) for line in text.splitlines() if line.strip()]
 
@@ -260,6 +271,7 @@ def evaluate(model, tokenizer, files: dict[str, str], other_orders: bool = False
 @app.function(image=train_image, gpu="L4", timeout=3600, volumes={"/out": volume})
 def baseline(files: dict[str, str], base: str = BASE_MODEL, run: str = "latest") -> dict:
     """Score the untouched base model, so the tuned model has something to be compared with."""
+    files = unpack(files)
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -275,6 +287,7 @@ def baseline(files: dict[str, str], base: str = BASE_MODEL, run: str = "latest")
 @app.function(image=train_image, gpu="L4", timeout=7200, volumes={"/out": volume})
 def train(files: dict[str, str], base: str = BASE_MODEL, epochs: int = 3, lr: float = 2e-4, rank: int = 16, run: str = "latest", seed: int = 0, patience: int = 100, keep_last: bool = False, order_copies: int = 1) -> dict:
     """LoRA fine-tune on train.jsonl, keep the best checkpoint by validation loss (stop early after `patience` evals without improvement), score it, save adapter and merged model."""
+    files = unpack(files)
     import torch
     from datasets import Dataset
     from peft import LoraConfig
@@ -370,6 +383,7 @@ def train(files: dict[str, str], base: str = BASE_MODEL, epochs: int = 3, lr: fl
 @app.function(image=train_image, gpu="L4", timeout=3600, volumes={"/out": volume})
 def score_saved(files: dict[str, str], run: str) -> dict:
     """Score a merged model saved in the volume under <run>/merged (no training), on val and test."""
+    files = unpack(files)
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -532,6 +546,7 @@ def main(
             "then run `npm run sft:build`."
         )
     files["train"] = select_train(files["train"], train_subset)
+    files = pack(files)
     out_dir = Path("training/out")
     out_dir.mkdir(exist_ok=True)
 

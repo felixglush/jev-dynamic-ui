@@ -77,6 +77,13 @@ for (const [split, rows] of [["train", out.train], ["val", out.val]] as const) {
   if (out[split].length < before) console.warn(`dropped ${before - out[split].length} ${split} row(s) that repeat a later split`);
 }
 
+// The combined set: the extraction records and the action records in one file per split, to train one model on both.
+await mkdir("data/sft/combined", { recursive: true });
+for (const split of ["train", "val", "test"] as const) {
+  const extraction = (await readFile(`data/sft/${split}.jsonl`, "utf8")).split("\n").filter(Boolean);
+  await writeFile(`data/sft/combined/${split}.jsonl`, [...extraction, ...out[split].map((r) => JSON.stringify(r))].join("\n") + "\n");
+}
+
 await mkdir("data/sft/action", { recursive: true });
 for (const [split, rows] of Object.entries(out)) {
   await writeFile(`data/sft/action/${split}.jsonl`, rows.map((r) => JSON.stringify(r)).join("\n") + "\n");

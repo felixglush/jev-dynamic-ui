@@ -34,3 +34,26 @@ Both right 461, model only 13, Jev only 9, neither 14. The gap is within noise o
 | Jev (API, from the earlier run) | 105 ms | 142 ms (90th) | |
 
 A request is about 124 prompt tokens and 9 output tokens. This model is a separate fine-tune that only picks the action: it was not trained on the field extraction, so using it means a second model next to `lfm25-350m-sft`.
+
+## One model for both steps (`combined1`)
+
+Run `combined1` trains the same base on the extraction rows and the action rows together (`data/sft/combined/`, built by `scripts/sft-actions.mts`; 2,360 train rows, shuffled key order with 3 copies like the current extractor, 3 epochs). Scored on the two test splits separately with schema-constrained decoding:
+
+| Model | Action test (497) | Extraction test (459), exact record |
+| --- | --- | --- |
+| `action1` (action only) | 474 (95.4%) | n/a |
+| `m350s0` (current extractor recipe) | n/a | 440 (95.9%) |
+| `combined1` | 471 (94.8%) | 436 (95.0%) |
+
+Differences of 3 to 4 records are noise at this size, so one model does both about as well as two. Fabricated values on blank fields: 9 of 600 (combined) against 8 of 600 (`m350s0`).
+
+Latency in Ollama on the 4-core sandbox (200 test messages per row, Q8_0, after two warm-up calls; `python3 scripts/time-action.py <model> 200 action|extract`):
+
+| Step | Model | Median | 95th percentile |
+| --- | --- | --- | --- |
+| Action | `combined1` | 202 ms | 255 ms |
+| Extraction | `combined1` | 242 ms | 333 ms |
+| Extraction | `lfm25-350m-sft` (current) | 228 ms | 324 ms |
+| Action | Jev (API) | 105 ms | |
+
+Today's flow (Jev, then the extractor) is about 105 + 228 = 333 ms median. All-local with `combined1` is about 202 + 242 = 444 ms, with no API call and no credits. The README's 0.64 s extractor figure was measured on different hardware, so compare these rows only with each other.
