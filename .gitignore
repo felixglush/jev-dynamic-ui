@@ -25,3 +25,4 @@ extractions.csv
 training/out/
 __pycache__/
 .pytest_cache/
+.venv-laya/

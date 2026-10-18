@@ -93,6 +93,19 @@ Every answer is saved as you go, in two places. The browser keeps it in localSto
 - `src/lib/annotate/` holds the plain functions: CSV reading and writing (`dataset.ts`, `csv.ts`) and the scoring (`summary.ts`). Values are compared loosely: `50` matches `50.00`, phone numbers by digits, names ignoring case.
 - `npm run annotate:preview` (after `npm run build`) bundles the same component into one HTML file with the predictions embedded, for sharing where the server can't run, such as a Claude Artifact.
 
+## Trying Laya instead of Jev (experimental)
+
+[Laya](https://github.com/NandhaKishorM/laya) is a local, open-source decision model (a Python/PyTorch library) that answers the same kind of choice questions. `CLASSIFIER=laya` makes `classify()` use it instead of Jev; the questions are the same ones (`buildQuestionSpecs()` in `classify.ts`), so the two are compared on equal terms. Jev stays the default.
+
+```bash
+python3 -m venv .venv-laya && .venv-laya/bin/pip install -r scripts/laya/requirements.txt   # PyTorch: several GB
+.venv-laya/bin/python scripts/laya/server.py        # http://127.0.0.1:8765, CPU, weights download on first use
+CLASSIFIER=laya npm run dev                         # LAYA_URL overrides the address
+npm run compare                                     # Jev vs Laya on data/sft/test.jsonl: action accuracy + latency
+```
+
+Laya takes about 0.2 s per question on CPU, so unlike Jev it does not get one request with every question. `src/lib/jev/laya.ts` asks the action first, then only the choice questions of the chosen action. `LAYA_NO_NONE=1` leaves the `none` option out of the questions. `npm run compare` needs `TYPESAFE_API_KEY` and the Laya server; `src/lib/jev/laya.integration.test.ts` only checks the wiring against a stand-in server.
+
 ## Dependency notes
 
 - TypeScript 7 (the native compiler) runs `npm run typecheck`. `typescript-eslint`, which `eslint-config-next` uses, doesn't support TS 7 yet, so `typescript` in `package.json` is aliased to Microsoft's `@typescript/typescript6` compatibility package for the tools that import it (ESLint, Next), as the TS 7 announcement recommends, and `@typescript/native` provides `tsc`. Once typescript-eslint supports TS 7, replace both with a plain `typescript@7`.
