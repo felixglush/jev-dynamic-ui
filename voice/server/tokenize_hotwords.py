@@ -21,4 +21,7 @@ def tokenize(lines: list[str], bpe: spm.SentencePieceProcessor) -> list[str]:
 if __name__ == "__main__":
     words, model_dir, out = sys.argv[1:4]
     bpe = spm.SentencePieceProcessor(model_file=str(Path(model_dir) / "bpe.model"))
+    vocab = Path(model_dir) / "bpe.vocab"  # the server also needs the vocabulary as text
+    if not vocab.exists():
+        vocab.write_text("".join(f"{bpe.id_to_piece(i)}\t{bpe.get_score(i)}\n" for i in range(bpe.get_piece_size())))
     Path(out).write_text("\n".join(tokenize(Path(words).read_text().splitlines(), bpe)) + "\n")
