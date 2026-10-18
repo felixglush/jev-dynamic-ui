@@ -38,14 +38,14 @@ Fourteen actions, one prebuilt form each. Defined in [`src/lib/jev/catalog.ts`](
 ## Why LFM2.5-350M
 
 1. The main reason: I wanted to fine-tune a model for a specialized task.
-2. It's a small model (about 400 MB) that performs well. Its architecture is tuned for edge deployments, so it is free to run locally. That matters because the model runs after each word typed.
-3. It's acceptably quick: 600 ms to 1 s per response (see [Latency](#latency)).
+2. It's a small model (about 400 MB) that performs well. Its architecture is tuned for edge deployments, so it is free to run locally. That matters because the model runs after each word.
+3. It's acceptably quick: ~300ms per response on my MacBook's CPU, <1s on a slower 4 core machine (see [Latency](#latency)).
 
 ## How it was built
 
-1. Defined the action space: the 14 actions and their fields in [`catalog.ts`](src/lib/jev/catalog.ts).
+1. Defined the action space: the 14 user actions and their fields in [`catalog.ts`](src/lib/jev/catalog.ts). This is inspired by typical functions in a banking app.
 2. Generated synthetic training data with Opus 5.5.
-3. Human-validated and filtered a subset of the data.
+3. Human-validated a subset of the data - enough to identify key problems and annotate fixes.
 4. Applied what that review taught to the rest of the data.
 5. Fine-tuned the student model (LFM2.5-350M) with supervised fine-tuning (SFT).
 
@@ -53,41 +53,45 @@ Details are in [`docs/sft-dataset.md`](docs/sft-dataset.md) and [`docs/sft-exper
 
 ## Final experiment result
 
-The extractor model is LFM2.5-350M fine-tuned with LoRA on 1,120 examples. Every training row is repeated three times in random key order so it doesn't depend on the order Ollama's JSON schema writes the fields in. Initial evals showed the model was substituting name for email for instance just because of the order of keys passed into Ollama.
+The extractor model is LFM2.5-350M fine-tuned with LoRA on 1,120 examples. Initial evals showed the model was substituting name for email for instance just because of the order of keys passed into Ollama, so every training row is repeated three times in random key order so it doesn't depend on the order Ollama's JSON schema writes the fields in.
+
+Percentages are just the portion of correctly produced JSON outputs.
 
 | Measure | Result |
 | --- | --- |
 | Stress set through the real extractor in Ollama (129 messages, Q8_0, schema on) | **125 / 129** |
 | Held-out validation, exact match, any key order (catalog / sorted / reversed) | 98.9 / 98.9 / 99.6 % |
 | Held-out test, same three orders | 96.9 / 96.7 / 97.4 % |
-| Baseline: base LFM2.5-350M (not fine-tuned), exact match, validation / test | 20.8 % / 24.2 % |
+| Baseline: base LFM2.5-350M, validation / test | 20.8 % / 24.2 % |
 
 Caveats: 
 - about 62 training rows were reviewed by me and the rest were approved/edited by Claude given my annotations.
 - the fine tuned model needs real production messages from users. Initial model trainings revealed the dataset was not sufficiently varied for all possible actions and ways of describing them. Additional examples were added to both the training set and validation/test to ensure the model is improving. The test set was never trained on, but it was scored while hill climbing the eval. This result is that compared to the base Liquid FM model, the fine-tuned model behaves better (e.g. doesn't hallucinate values into the structured output when no value is found in the query) but a fair evaluation requires real production data to create an entirely new, non-synthetic dataset.
 - full method is in [`docs/sft-experiments.md`](docs/sft-experiments.md).
 
-There is a small set of harder examples: 129 in data/extract-stress.txt. Contents: 24 groups, written by Claude. They cover typos (“sned 50 to sam”), accented names, odd amounts (“two grand”, “$1,234,567.89”), several numbers in one message, negation (“don’t send $50”), prompt injection, long polite messages, and other non-banking text.
+The stress test is a subset of harder examples. They cover typos (“sned 50 to sam”), accented names, odd amounts (“two grand”, “$1,234,567.89”), several numbers in one message, negation (“don’t send $50”), prompt injection, long polite messages, and other non-banking text.
 
 ## Latency
 
-Time per message, from `npm run latency` (60 messages spread over `data/sample-messages.txt`, one at a time, after 2 warm-up messages). "Overall" is what the chat does: Jev first, then the extractor on the action Jev picked.
+Time per message, from `npm run latency` (60 messages spread over `data/sample-messages.txt`, one at a time, after 2 warm-up messages).
 
 | Step | Messages | Median | 95th percentile | Mean |
 | --- | --- | --- | --- | --- |
 | Jev (TypeSafe API) | 60 | 0.10 s | 0.15 s | 0.11 s |
-| Fine-tuned extractor (Ollama) | 55 | 0.64 s | 0.97 s | 0.56 s |
+| **Fine-tuned LFM2.5-350M (local, cpu)** | 55 | 0.64 s | 0.97 s | 0.56 s |
 | Overall (Jev, then extractor) | 60 | 0.71 s | 1.09 s | 0.62 s |
 
-Measured on 2026-10-17 in a 4-core cloud container with no GPU, so the extractor runs on CPU and will differ on your machine. Jev is a network call, so it depends on your connection. The 5 messages Jev maps to no action skip the extractor. The very first extraction after Ollama starts is slower (about 4 s) while the model loads.
+Measured on a 4-core cloud container.
 
-The same run on a MacBook with an Apple M5 and 16 GB (local Ollama, same 60 messages; 55 went to the extractor):
+The same run on a MacBook with an M5 CPU:
 
 | Step | Median | 95th percentile | Mean |
 | --- | --- | --- | --- |
 | Jev (TypeSafe API) | 0.13 s | 0.22 s | 0.14 s |
-| Fine-tuned extractor (Ollama) | 0.11 s | 0.19 s | 0.11 s |
+| **Fine-tuned LFM2.5-350M (local, cpu)** | 0.11 s | 0.19 s | 0.11 s |
 | Overall (Jev, then extractor) | 0.24 s | 0.35 s | 0.24 s |
+
+Fast enough for a fluid typing experience.
 
 ## Run it
 
@@ -98,6 +102,6 @@ scripts/ollama/use-tuned.sh  # registers the fine-tuned extractor in Ollama (dow
 npm run dev                  # http://localhost:3000
 ```
 
-`use-tuned.sh` downloads the fine-tuned model (about 380 MB) from the public [Hugging Face repo](https://huggingface.co/felixglush156/LFM2.5-350M-banking-extractor-GGUF) and registers it in Ollama as `lfm25-350m-sft`, the extractor's default.
+`use-tuned.sh` downloads the fine-tuned model (about 380 MB) from the public [Hugging Face repo](https://huggingface.co/felixglush156/LFM2.5-350M-banking-extractor-GGUF) and registers it in Ollama as `lfm25-350m-sft`.
 
-Needs Node 22+ and [Ollama](https://ollama.com). Everything else (architecture, tests, annotation page, fine-tuning data, dependency notes) is in [`AGENTS.md`](AGENTS.md) and [`docs/`](docs).
+Needs Node 22+ and [Ollama](https://ollama.com).
