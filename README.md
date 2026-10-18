@@ -81,6 +81,14 @@ Time per message, from `npm run latency` (60 messages spread over `data/sample-m
 
 Measured on 2026-10-17 in a 4-core cloud container with no GPU, so the extractor runs on CPU and will differ on your machine. Jev is a network call, so it depends on your connection. The 5 messages Jev maps to no action skip the extractor. The very first extraction after Ollama starts is slower (about 4 s) while the model loads.
 
+The same run on a MacBook with an Apple M5 and 16 GB (local Ollama, same 60 messages; 55 went to the extractor):
+
+| Step | Median | 95th percentile | Mean |
+| --- | --- | --- | --- |
+| Jev (TypeSafe API) | 0.13 s | 0.22 s | 0.14 s |
+| Fine-tuned extractor (Ollama) | 0.11 s | 0.19 s | 0.11 s |
+| Overall (Jev, then extractor) | 0.24 s | 0.35 s | 0.24 s |
+
 ## Run it
 
 ```bash
