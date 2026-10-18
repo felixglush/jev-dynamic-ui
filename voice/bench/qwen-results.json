@@ -1,0 +1,29 @@
+{
+ "qwen3-asr-0.6b": {
+  "median_s": 1.808771387500002,
+  "max_s": 2.7993882879999887,
+  "wer": 0.25961538461538464,
+  "hyps": [
+   "Send fifty dollars to Sam for dinner last night.",
+   "Add my sister Priya at priya.k at example.com so I can transfer her.",
+   "Pay two hundred and fifty dollars toward my master card from checking.",
+   "Start an FHSA.",
+   "Pay my water bill forty eight dollars from savings next Friday.",
+   "Add my gym membership. Good Life Fitness account number two zero one nine four four five five.",
+   "Please block my debit card. I think it was stolen.",
+   "Request money from Jordan. K at example. Com. Two hundred dollars.",
+   "Turn on auto deposit for my phone number 4165550199 into checking.",
+   "Acme Corp charged me 11.99, but my plan is 9.99.",
+   "Send mom 200 bucks on Friday.",
+   "Transfer $500 to Sam.",
+   "E-transfer twenty dollars to Bob.",
+   "Dispute 1,299 dollars from Best Buy on March 4th.",
+   "I want to save two grand this month.",
+   "Pay the statement balance on my visa.",
+   "Open a new tax-free savings account.",
+   "Cancel the transfer I sent to Jordan.",
+   "Update my email address to alex@akmi.com.",
+   "How much is in my checking account?"
+  ]
+ }
+}
