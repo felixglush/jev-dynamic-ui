@@ -12,3 +12,14 @@ Run `action1` (base LFM2.5-350M, LoRA r16, lr 2e-4, 3 epochs, 1,240 train rows, 
 | test | 497 | 95.4% | 0 |
 
 Caveats: the messages are synthetic and AI-written, so this is likely easier than real chat. Some vague rows carry an action label for a message that does not name one (`lol`, `bonjour`), so a few of the misses are label noise. Jev was not run on the same messages, so this is not yet a comparison with Jev. Choice fields (account, card, frequency...) are not covered: there are no labels for them yet. Not wired into the app.
+
+## Comparison with Jev (same 497 test messages)
+
+`npx tsx --conditions react-server scripts/compare-action.mts` runs Jev's action question over `data/sft/action/test.jsonl` (about 500 requests, median 105 ms each here).
+
+| | Correct | Share |
+| --- | --- | --- |
+| Fine-tuned 350M (constrained) | 474 / 497 | 95.4% |
+| Jev | 470 / 497 | 94.6% |
+
+Both right 461, model only 13, Jev only 9, neither 14. The gap is within noise on a test set this size. Per action they are close; the largest difference is `pay_bill` (model 40/42, Jev 32/42). Jev misses are mostly "none" for junk messages (`wat`, `k`, `@@`) that the AI-written labels give an action; the model's own misses include real confusions (`get $60 from Pablo` read as send, `add my dentist to contacts` as add_payee) and typos (`pay my vissa 250`). Model latency was not measured in this run. Jev's answers here come from a one-question run per message (the app asks all questions at once).
