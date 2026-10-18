@@ -20,3 +20,16 @@ export function systemPromptFor(action: keyof typeof CATALOG): string {
     "Never invent names, emails, phone numbers or dates."
   );
 }
+
+/** Every answer the action step can give: the catalog's actions plus "none" for a message none of them fits. */
+export function actionNames(): string[] {
+  return [...Object.keys(CATALOG), "none"];
+}
+
+/** The system prompt of the action step (experiment: the extractor model picks the action instead of Jev). */
+export function actionPrompt(): string {
+  return (
+    `Pick the one banking action the customer's message asks for. Actions: ${actionNames().join(", ")}. ` +
+    "Answer none if the message asks for none of them."
+  );
+}

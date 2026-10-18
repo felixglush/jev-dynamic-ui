@@ -46,6 +46,13 @@ gguf_image = (
 # ---------------------------------------------------------------------------------------------
 
 AMOUNT_FIELDS = {"amount", "initial_deposit"}
+# The action-picking experiment (docs/sft-action.md): the answer is {"action": ...}, constrained to these. Keep in sync with
+# src/lib/jev/catalog.ts (scripts/sft-actions.mts refuses an action it doesn't know).
+ACTION_NAMES = [
+    "add_etransfer_contact", "send_etransfer", "pay_credit_card", "open_account", "transfer_between_accounts", "pay_bill",
+    "add_payee", "manage_card", "view_account", "request_etransfer", "cancel_etransfer", "setup_autodeposit",
+    "dispute_transaction", "update_contact_info", "none",
+]
 
 
 def normalize(field: str, value) -> str:
@@ -184,6 +191,8 @@ def ordered(names, key_order: str = "catalog") -> list[str]:
 def answer_schema(label: dict, key_order: str = "catalog") -> dict:
     """The JSON schema the extractor hands Ollama (schemaFor in ollama.ts): every field, amounts as numbers, keys in `key_order`."""
     properties = {name: {"type": "number" if name in AMOUNT_FIELDS else "string"} for name in ordered(label, key_order)}
+    if "action" in properties:
+        properties["action"] = {"type": "string", "enum": ACTION_NAMES}
     return {"type": "object", "properties": properties, "required": list(properties), "additionalProperties": False}
 
 
@@ -487,6 +496,7 @@ def main(
     patience: int = 100,
     keep_last: bool = False,
     order_copies: int = 1,
+    data_dir: str = "data/sft",
 ):
     """
     --run     folder in the Modal volume that the stage reads or writes (default latest, which every training
@@ -497,6 +507,7 @@ def main(
     --patience  stop early after this many evals (four per epoch) without a better val loss (default 100: effectively never for runs this short, but 100 non-improving evals do stop a long one)
     --keep-last  keep the final-epoch weights instead of the best-val-loss checkpoint (to test whether more training hurts)
     --order-copies  train on this many copies of every row, each with the answer keys in a different random order (default 1: catalog order)
+    --data-dir  folder holding train.jsonl, val.jsonl and test.jsonl (default data/sft; data/sft/action for the action experiment)
     --label   names the local result file training/out/v5-<label>.json (default: the run name)
     """
     if stage == "probe":
@@ -513,11 +524,11 @@ def main(
     if stage == "snapshot":
         print("\n".join(snapshot.remote("latest", run)))
         return
-    files = {split: Path(f"data/sft/{split}.jsonl").read_text() for split in ("train", "val", "test")}
+    files = {split: Path(f"{data_dir}/{split}.jsonl").read_text() for split in ("train", "val", "test")}
     empty = [split for split, text in files.items() if not text.strip()]
     if empty:
         raise SystemExit(
-            f"data/sft/{', '.join(empty)}.jsonl is empty. Approve rows on /annotate (Fine-tuning data), "
+            f"{data_dir}/{', '.join(empty)}.jsonl is empty. Approve rows on /annotate (Fine-tuning data), "
             "then run `npm run sft:build`."
         )
     files["train"] = select_train(files["train"], train_subset)

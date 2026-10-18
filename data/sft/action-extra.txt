@@ -1,0 +1,163 @@
+# Extra rows for the action-picking experiment (docs/sft-action.md).
+# manage_card, view_account and "none" have no free-text fields, so data/sft/examples.jsonl has no rows for them.
+# Format: "# <split> <action>" starts a section, then one message per line. Test rows for these three come from
+# data/sample-messages.txt instead, so nothing here may repeat a line of that file.
+# train manage_card
+lock my credit card
+freeze my debit card please
+can you lock my visa debit
+temporarily freeze my mastercard
+turn off my credit card for now
+I misplaced my debit card, lock it
+unlock my debit card
+unfreeze my credit card
+turn my credit card back on
+I found my card, unlock it
+please unlock my visa
+my debit card got stolen at the gym, I need a new one
+order me a new credit card, mine was stolen
+my debit card is cracked in half, send a replacement
+the chip on my credit card stopped working, I need another
+replace my lost credit card
+I lost my wallet, cancel and replace my debit card
+send me a new debit card, the old one is damaged
+my card was swallowed by the ATM, order a new one
+lock my debit card, I can't find it
+freeze my credit card, someone used it without me
+I need a new debit card
+reissue my credit card
+my credit card is bent and won't scan, get me a new one
+please replace my stolen debit card
+the magnetic strip on my debit card is worn, new card please
+lock the card ending in 4421
+can you freeze my cards while I'm travelling
+unfreeze my card I locked this morning
+my kid broke my debit card, replace it
+credit card lost on the train yesterday, replace it
+put a hold on my debit card
+reactivate my frozen credit card
+I want a replacement for my damaged credit card
+debit card stolen, lock it and send a new one
+disable my credit card, I think it's compromised
+enable my debit card again
+need a new card, the old one was stolen
+my card melted in the car, order a replacement debit card
+temporarily block my credit card
+# val manage_card
+freeze my card, I lost it somewhere
+unlock my visa debit
+send a replacement for my broken credit card
+my debit card was stolen, please replace it
+lock my mastercard right now
+turn my debit card back on
+get a new credit card, it's cracked
+stop my credit card, it got stolen
+unblock my credit card
+I need to replace my worn-out debit card
+# train view_account
+how much is in my chequing account
+what's the balance on my savings
+show me my tfsa balance
+what's in my rrsp right now
+check my fhsa
+how much do I owe on my credit card
+show my credit card balance
+what are my latest transactions on chequing
+list recent activity on my savings account
+what did I spend this week on my credit card
+show the last 10 transactions on my chequing
+balance of my savings please
+how much money is in my TFSA
+how much have I put in my first home savings account
+what's my rrsp worth
+show me what came out of my chequing yesterday
+recent purchases on my visa
+what's my available credit card balance
+pull up my savings activity
+can you check my chequing balance
+what's left in my chequing
+what's my savings at
+view transactions on my credit card
+let me see my fhsa balance
+did the deposit hit my savings yet
+show me everything that went through chequing this month
+how much is sitting in my tfsa
+check the balance on my credit card
+what's the latest on my savings account
+how much is in chequing
+show last week's spending on my credit card
+my savings balance?
+latest transactions please
+tell me what's in my rrsp
+look up my chequing activity
+what's my current credit card balance
+see my recent transactions on savings
+what do I have in my first home account
+transactions on my chequing account from the last few days
+how much cash is in my chequing account right now
+# val view_account
+what's my savings balance
+show recent transactions on my chequing
+check my credit card balance
+how much is in my rrsp
+show my tfsa activity
+what is in my fhsa
+how much do I have in chequing
+list my latest credit card purchases
+balance on savings?
+what came out of my chequing today
+# train none
+hi
+good morning
+thanks, that's all
+what are your hours on weekends
+how do I reset my online banking password
+what is a GIC
+explain how interest works on a savings account
+can I get a mortgage with a low credit score
+where is the nearest ATM
+how do I order cheques
+what's the exchange rate for US dollars
+tell me about your credit cards
+do you offer student accounts
+what's the daily limit on e-transfers
+is there a fee for overdraft
+how does autodeposit work
+what's your phone number
+can I speak to someone about a loan
+help
+who are you
+write me a poem
+what's two plus two
+what should I invest in
+how do I report fraud
+when is the next holiday
+how do I get a line of credit
+what is a credit score
+how long do cheques take to clear
+can you recommend a restaurant
+is the bank open on Monday
+what does APR mean
+I want to complain about the service
+how do I close my account
+can you explain what a RRSP is
+what does a chequing account cost per month
+do you work with small businesses
+sing me a song
+how do I get a tax receipt
+what's the difference between debit and credit
+I forgot my pin
+what's a good savings rate right now
+are you a robot
+cancel my subscription to the newsletter
+# val none
+hello there
+what is a TFSA
+where can I find my branch transit number
+can you tell me a joke about money
+how do I apply for a car loan
+what are the monthly fees
+how do I update my address with the government
+thanks a lot
+what's your name
+what time is it
