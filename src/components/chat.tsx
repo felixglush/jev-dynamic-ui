@@ -6,6 +6,7 @@ import { ArrowUp, Check, Loader2 } from "lucide-react";
 import { classifyMessage } from "@/app/actions";
 import { ActionHostContext, type ActionHost } from "@/components/forms/action-form";
 import { ActionPanel } from "@/components/forms/action-panel";
+import { MicButton } from "@/components/mic-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { LOW_CONFIDENCE, MAX_MESSAGE_LENGTH } from "@/lib/jev/catalog";
@@ -48,6 +49,7 @@ export function Chat() {
   const [outcome, setOutcome] = useState<ClassifyOutcome | null>(null);
   const [open, setOpen] = useState(false);
   const [done, setDone] = useState("");
+  const [voiceError, setVoiceError] = useState("");
   const [, startTransition] = useTransition();
 
   const composerRef = useRef<HTMLInputElement>(null);
@@ -190,7 +192,18 @@ export function Chat() {
     const message = text.trim();
     if (!message) return;
     setDone("");
+    setVoiceError("");
     ask(message, true);
+  }
+
+  // Spoken text is treated like a clicked example: it fills the bar and shows its form for review, but is not confirmed.
+  function onTranscript(text: string) {
+    if (composerRef.current) composerRef.current.value = text;
+    setDone("");
+    setVoiceError("");
+    clearTimeout(timer.current);
+    wantFocus.current = false;
+    ask(text, false);
   }
 
   return (
@@ -226,6 +239,7 @@ export function Chat() {
             onChange={(event) => onType(event.target.value, /^\s$/.test((event.nativeEvent as InputEvent).data ?? ""))}
             className="h-10 min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-muted-foreground"
           />
+          <MicButton onTranscript={onTranscript} onError={setVoiceError} />
           <Button type="submit" size="icon" aria-label="Send" className="size-10 rounded-full">
             <ArrowUp />
           </Button>
@@ -255,6 +269,7 @@ export function Chat() {
       {/* Always in the page (just empty at first) so screen readers announce the text when it appears.
           Fixed height so the page doesn't shift when the message appears. */}
       <p role="status" className="flex h-10 items-center justify-center text-center text-sm text-pretty text-muted-foreground">
+        {voiceError && <span className="text-destructive">{voiceError}</span>}
         {done && (
           <span key={done} className="animate-rise flex items-center gap-1.5">
             <Check className="size-4 text-success" aria-hidden />

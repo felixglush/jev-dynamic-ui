@@ -93,9 +93,13 @@ Every answer is saved as you go, in two places. The browser keeps it in localSto
 - `src/lib/annotate/` holds the plain functions: CSV reading and writing (`dataset.ts`, `csv.ts`) and the scoring (`summary.ts`). Values are compared loosely: `50` matches `50.00`, phone numbers by digits, names ignoring case.
 - `npm run annotate:preview` (after `npm run build`) bundles the same component into one HTML file with the predictions embedded, for sharing where the server can't run, such as a Claude Artifact.
 
-## Voice mode (in progress)
+## Voice mode (experimental)
 
-`src/lib/stt/` is the speech-to-text layer, built as a strategy plus a small factory. `SttProvider` (`types.ts`) is the one-method interface (`transcribe(audio) -> text`); `createStt()` in `index.ts` reads `STT_PROVIDER` and builds the matching class. The only provider so far, `OpenAiCompatibleStt`, speaks OpenAI's `/v1/audio/transcriptions`, so Whisper (faster-whisper-server, whisper.cpp) and Qwen3-ASR (vLLM) are a change of `STT_URL` and `STT_MODEL`. Not yet wired to a mic button or a server action, and not yet tried against a real Whisper server (the integration test uses a stand-in). Model timings are in `voice/bench/README.md`.
+The mic button in the chat bar records up to 20 s, sends it to a Server Action (`app/voice-actions.ts`), and the transcript fills the bar and opens the form for review, like a clicked example. It is never confirmed by voice. The text then goes through the same Jev and extractor flow as typing.
+
+Speech-to-text is a strategy plus a small factory in `src/lib/stt/`, split by responsibility: `types.ts` (the one-method `SttProvider` interface), `openai-compatible.ts` (the only provider so far), `index.ts` (`createStt()` reads `STT_PROVIDER`, `STT_URL`, `STT_MODEL` and builds the provider), `transcribe.ts` (`transcribeClip(clip, provider)`: validates the upload and hides engine errors; the provider is passed in, so it never knows which model it is using) and `limits.ts` (shared by browser and server). Browser side: `components/use-recorder.ts` only records, `components/mic-button.tsx` only talks to the server, and `chat.tsx` decides what the text does. To add an engine, write a class that implements `SttProvider` and add one line to the table in `index.ts`.
+
+`OpenAiCompatibleStt` speaks OpenAI's `/v1/audio/transcriptions`, so Whisper (faster-whisper-server, whisper.cpp) and Qwen3-ASR (vLLM) are a change of `STT_URL` and `STT_MODEL`. Tests use stand-ins (`e2e/fake-stt.mts`, Chromium's fake microphone), so they prove the wiring, not speech accuracy, and nothing has been tried against a real Whisper server yet. Model timings are in `voice/bench/README.md`.
 
 ## Dependency notes
 

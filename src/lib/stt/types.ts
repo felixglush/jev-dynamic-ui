@@ -8,3 +8,6 @@ export interface SttProvider {
   /** Turn one recorded clip into the text that was said. Throws if the engine can't be reached. */
   transcribe(audio: Blob): Promise<string>;
 }
+
+/** What the browser gets back: plain data, never an exception. */
+export type TranscribeOutcome = { ok: true; text: string } | { ok: false; error: string };

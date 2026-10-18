@@ -6,6 +6,7 @@ import { ANNOTATIONS_FILE, PREDICTIONS_LOG, SFT_REVIEW_FILE } from "./e2e/paths"
 const APP_PORT = Number(process.env.PW_APP_PORT ?? 3100);
 const FAKE_JEV_PORT = 8787;
 const FAKE_OLLAMA_PORT = 8788;
+const FAKE_STT_PORT = 8789;
 
 export default defineConfig({
   testDir: "e2e",
@@ -18,7 +19,11 @@ export default defineConfig({
     baseURL: `http://localhost:${APP_PORT}`,
     trace: "retain-on-failure",
     // Set PW_CHROMIUM_PATH to use an already-installed Chromium instead of Playwright's download.
-    launchOptions: process.env.PW_CHROMIUM_PATH ? { executablePath: process.env.PW_CHROMIUM_PATH } : {},
+    // The fake microphone lets the mic button record without a real device or a permission prompt.
+    launchOptions: {
+      args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"],
+      ...(process.env.PW_CHROMIUM_PATH ? { executablePath: process.env.PW_CHROMIUM_PATH } : {}),
+    },
   },
   webServer: [
     {
@@ -41,12 +46,22 @@ export default defineConfig({
       wait: { stdout: /fake Ollama listening/ },
     },
     {
+      // The stand-in for the speech-to-text server.
+      command: "node e2e/fake-stt.mts",
+      env: { FAKE_STT_PORT: String(FAKE_STT_PORT) },
+      url: `http://localhost:${FAKE_STT_PORT}`,
+      reuseExistingServer: true,
+      stdout: "pipe",
+      wait: { stdout: /fake STT listening/ },
+    },
+    {
       // The real app, built for production, pointed at the fake.
       command: `npm run build && npm run start -- -p ${APP_PORT}`,
       env: {
         TYPESAFE_API_KEY: "test-key",
         TYPESAFE_BASE_URL: `http://localhost:${FAKE_JEV_PORT}`,
         OLLAMA_URL: `http://127.0.0.1:${FAKE_OLLAMA_PORT}`,
+        STT_URL: `http://127.0.0.1:${FAKE_STT_PORT}`,
         ANNOTATIONS_FILE,
         PREDICTIONS_FILE: "e2e/fixtures/predictions.csv",
         PREDICTIONS_LOG_FILE: PREDICTIONS_LOG,
