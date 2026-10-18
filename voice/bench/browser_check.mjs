@@ -19,7 +19,10 @@ const bar = page.getByLabel("Message", { exact: true });
 let last = "";
 while (Date.now() - started < 6000) {
   const text = await bar.inputValue();
-  if (text !== last) console.log(`${String(Date.now() - started).padStart(5)} ms  ${text}`), (last = text);
+  if (text !== last) {
+    console.log(`${String(Date.now() - started).padStart(5)} ms  ${text}`);
+    last = text;
+  }
   await page.waitForTimeout(50);
 }
 await page.getByRole("button", { name: "Stop recording" }).click();
