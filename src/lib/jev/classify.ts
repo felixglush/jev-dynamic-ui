@@ -39,44 +39,48 @@ function getClient(): TypeSafeClient {
 const ACTION_NAMES = Object.keys(CATALOG) as ActionName[];
 const specsOf = (action: ActionName): Record<string, ParamSpec> => CATALOG[action].params;
 
-/** Only choice parameters are asked of Jev. Free-text values (names, amounts...) come from the extractor. */
-function paramQuestion(spec: ParamSpec): Question | null {
-  if (spec.type !== "choice") return null;
-  const options: Record<string, string | null> = { ...spec.options };
-  options[NONE] = "The query does not give this; none of these is the requested value.";
-  return choice(spec.question, options);
-}
+/** A choice question in a model-neutral shape: the text asked and each option with its description. */
+export type ChoiceSpec = { question: string; options: Record<string, string> };
 
-export function buildQuestions(): Questions {
-  const actionOptions: Record<string, string | null> = {};
+/**
+ * Every question asked of the classifier: the action, plus each CHOICE parameter of every action.
+ * Free-text values (names, amounts...) are not asked; the extractor fills them.
+ * Both classifiers (Jev and Laya) are built from these same specs so they are compared on equal terms.
+ */
+export function buildQuestionSpecs(): Record<string, ChoiceSpec> {
+  const actionOptions: Record<string, string> = {};
   for (const name of ACTION_NAMES) actionOptions[name] = CATALOG[name].description;
-  actionOptions[NONE] =
-    "None of these actions; the query asks for something else or no banking action.";
+  actionOptions[NONE] = "None of these actions; the query asks for something else or no banking action.";
 
-  const questions: Record<string, Question> = {
-    [ACTION_QUESTION]: choice("Which action in the banking app should handle `query`?", actionOptions),
+  const specs: Record<string, ChoiceSpec> = {
+    [ACTION_QUESTION]: { question: "Which action in the banking app should handle `query`?", options: actionOptions },
   };
   for (const name of ACTION_NAMES) {
     for (const [paramName, spec] of Object.entries(specsOf(name))) {
-      const question = paramQuestion(spec);
-      if (question) questions[`${name}.${paramName}`] = question;
+      if (spec.type !== "choice") continue;
+      specs[`${name}.${paramName}`] = {
+        question: spec.question,
+        options: { ...spec.options, [NONE]: "The query does not give this; none of these is the requested value." },
+      };
     }
   }
+  return specs;
+}
+
+export function buildQuestions(): Questions {
+  const questions: Record<string, Question> = {};
+  for (const [key, spec] of Object.entries(buildQuestionSpecs())) questions[key] = choice(spec.question, spec.options);
   return questions;
 }
 
-type Answers = Record<string, ResultFor<Question>>;
+/** One answered choice question, whichever model answered it. */
+export type ChoiceAnswer = { choice: string; confidence: number };
+export type ChoiceAnswers = Record<string, ChoiceAnswer>;
 
-/** Answers are a union of choice/noul/score/box shapes; this narrows one to a choice. */
-function choiceAnswer(answers: Answers, key: string): ChoiceResponse | undefined {
-  const answer = answers[key];
-  return answer?.type === "choice" ? answer : undefined;
-}
+export type Classifier = (query: string) => Promise<ChoiceAnswers>;
 
-export async function classify(
-  query: string,
-  client: TypeSafeClient = getClient(),
-): Promise<ClassifyResult> {
+/** Jev (TypeSafe API): one request carrying every question. */
+export async function askJev(query: string, client: TypeSafeClient = getClient()): Promise<ChoiceAnswers> {
   const { answers } = await client.systemOne({
     // State is what Jev reads; the questions refer to it by field name (`query`).
     state: {
@@ -85,9 +89,27 @@ export async function classify(
     },
     questions: buildQuestions(),
   });
+  const out: ChoiceAnswers = {};
+  for (const [key, answer] of Object.entries(answers as Record<string, ResultFor<Question>>)) {
+    if (answer?.type === "choice") out[key] = { choice: (answer as ChoiceResponse).choice, confidence: answer.confidence };
+  }
+  return out;
+}
 
-  const picked = choiceAnswer(answers, ACTION_QUESTION);
-  if (!picked) throw new Error("Jev returned no answer for the action question");
+/**
+ * Which model picks the action and the choices: `jev` (default) or `laya`. Set CLASSIFIER in the environment.
+ * Laya needs its local server (scripts/laya/server.py); the import is lazy so Jev users never load it.
+ */
+async function ask(query: string): Promise<ChoiceAnswers> {
+  if (process.env.CLASSIFIER === "laya") return (await import("./laya")).askLaya(query);
+  return askJev(query);
+}
+
+export async function classify(query: string, askFn: Classifier | TypeSafeClient = ask): Promise<ClassifyResult> {
+  const answers = typeof askFn === "function" ? await askFn(query) : await askJev(query, askFn);
+
+  const picked = answers[ACTION_QUESTION];
+  if (!picked) throw new Error("The classifier returned no answer for the action question");
   if (picked.choice === NONE) return { action: null, confidence: picked.confidence };
 
   const action = picked.choice as ActionName;
@@ -96,7 +118,7 @@ export async function classify(
 
   for (const [paramName, spec] of Object.entries(specsOf(action))) {
     // Free-text parameters were not asked; the extractor fills them in (extract/apply.ts).
-    const answer = spec.type === "choice" ? choiceAnswer(answers, `${action}.${paramName}`) : undefined;
+    const answer = spec.type === "choice" ? answers[`${action}.${paramName}`] : undefined;
     if (!answer || answer.choice === NONE) {
       params[paramName] = { value: null, confidence: answer?.confidence ?? null };
       if ("required" in spec && spec.required) missing.push(paramName);
