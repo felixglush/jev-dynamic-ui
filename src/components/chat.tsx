@@ -196,7 +196,8 @@ export function Chat() {
     ask(message, true);
   }
 
-  // Spoken text is treated like a clicked example: it fills the bar and shows its form for review, but is not confirmed.
+  // Spoken text is treated like a clicked example: it fills the bar and shows its form for review, but is not
+  // confirmed. It arrives several times while speaking; ask() already ignores answers about older text.
   function onTranscript(text: string) {
     if (composerRef.current) composerRef.current.value = text;
     setDone("");
