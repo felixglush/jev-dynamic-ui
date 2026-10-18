@@ -19,3 +19,23 @@ What the transcripts show:
 Caveats: one synthetic voice, 20 clips, no noise, no accents. Real microphone audio will be worse. Qwen3-ASR ran unoptimized on CPU (no quantization or llama.cpp route is documented), so its time is an upper bound.
 
 Run: `python run_whisper.py clips.txt WAV16_DIR tiny.en base.en small.en` and `python run_qwen.py clips.txt WAV16_DIR` (see the imports for packages).
+
+## Streaming spike: sherpa-onnx (CPU)
+
+`run_sherpa.py` feeds each clip to [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)'s streaming Zipformer (`sherpa-onnx-streaming-zipformer-en-2023-06-26`, int8, 4 threads) in 100 ms chunks, the way a live microphone would, and times it. Same 20 clips and 4-core CPU as above.
+
+| Setup | Wait after you stop | First text appears | Compute vs audio length | Word error rate* |
+| --- | --- | --- | --- | --- |
+| Clip starts at once (0 s lead-in) | 76 ms median / 131 ms max | 0.8 s into the audio | 0.14x | 26.9% |
+| 0.5 s of silence before speech, 1 s after | 118 ms median / 159 ms max | 1.2 s into the audio | 0.14x | 19.2% |
+
+*Against the spoken-form script, as above. Compare Whisper small.en's 1.4 s wait after the clip ends, and re-reading the whole clip each second.
+
+What it shows:
+- Speed is far better than re-running Whisper: text arrives while you talk and the final text is ready about 0.1 s after you stop.
+- It lost the first word when the clip started at once ("Send" dropped in 3 clips). A real mic that is open before you speak, or a short lead-in, avoids most of that, so the app should start the stream a moment before speech.
+- It is weaker on names and emails than Whisper ("PREA", "ACHMEADCOMBE" for "Priya", "acme dot com") and on rare words ("FHSA" came out as "THORTON F H ESSAY").
+- The output is UPPERCASE with numbers spelled out and emails as "at"/"dot" words, so it needs a normalising step before the extractor (the extractor is already trained on worded amounts like "two grand").
+- Same caveats as above: 20 clips, one synthetic voice, no noise.
+
+Run: `python run_sherpa.py clips.txt WAV16_DIR MODEL_DIR [LEAD_S] [TAIL_S]` (model from the sherpa-onnx `asr-models` release, ~310 MB download).
