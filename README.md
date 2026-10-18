@@ -55,7 +55,7 @@ Details are in [`docs/sft-dataset.md`](docs/sft-dataset.md) and [`docs/sft-exper
 
 The extractor model is LFM2.5-350M fine-tuned with LoRA on 1,120 examples. Initial evals showed the model was substituting name for email for instance just because of the order of keys passed into Ollama, so every training row is repeated three times in random key order so it doesn't depend on the order Ollama's JSON schema writes the fields in.
 
-Percentages are just the portion of correctly produced JSON outputs.
+Percentages are the share of messages where the model’s JSON output matched the labelled answer exactly: every field, with no extra or missing fields (key order ignored).
 
 | Measure | Result |
 | --- | --- |
