@@ -9,6 +9,7 @@ const say = (page: Page, body: { texts?: string[]; fail?: boolean }) => page.req
 async function speak(page: Page) {
   await page.getByRole("button", { name: "Record a message" }).click();
   await expect(page.getByRole("button", { name: "Stop recording" })).toBeVisible();
+  await page.waitForTimeout(400); // a recording stopped before the microphone delivers anything is empty
   await page.getByRole("button", { name: "Stop recording" }).click();
 }
 
