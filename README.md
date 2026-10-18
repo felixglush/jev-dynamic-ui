@@ -35,6 +35,22 @@ Fourteen actions, one prebuilt form each. Defined in [`src/lib/jev/catalog.ts`](
 | **Jev** ([TypeSafe AI](https://typesafe.ai) as action decision model, called via API) | Reads the whole message. Picks the action, and picks the answer for each choice field (account, payment option, frequency, card action...) from the catalog's fixed options. | Never writes text; picks action type or multiple choice options. |
 | **Fine-tuned extractor** ([LFM2.5-350M](https://docs.liquid.ai/lfm/models/lfm25-350m)) | Copies the free-text values (names, emails, phones, amounts, dates, account numbers) out of the message, or leaves them blank. | Writes text; doesn't pick the action or the choices. |
 
+## Why LFM2.5-350M
+
+1. The main reason: I wanted to fine-tune a model for a specialized task.
+2. It's a small model (about 400 MB) that performs well. Its architecture is tuned for edge deployments, so it is free to run locally. That matters because the model runs after each word typed.
+3. It's acceptably quick: 600 ms to 1 s per response (see [Latency](#latency)).
+
+## How it was built
+
+1. Defined the action space: the 14 actions and their fields in [`catalog.ts`](src/lib/jev/catalog.ts).
+2. Generated synthetic training data with Opus 5.5.
+3. Human-validated and filtered a subset of the data.
+4. Applied what that review taught to the rest of the data.
+5. Fine-tuned the student model (LFM2.5-350M) with supervised fine-tuning (SFT).
+
+Details are in [`docs/sft-dataset.md`](docs/sft-dataset.md) and [`docs/sft-experiments.md`](docs/sft-experiments.md).
+
 ## Final experiment result
 
 The extractor model is LFM2.5-350M fine-tuned with LoRA on 1,120 examples. Every training row is repeated three times in random key order so it doesn't depend on the order Ollama's JSON schema writes the fields in. Initial evals showed the model was substituting name for email for instance just because of the order of keys passed into Ollama.
