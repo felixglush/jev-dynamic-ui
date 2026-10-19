@@ -24,6 +24,8 @@ type RecorderCallbacks = {
 export function useRecorder(callbacksIn: RecorderCallbacks) {
   const [state, setState] = useState<RecorderState>("idle");
   const recorder = useRef<MediaRecorder | null>(null);
+  // Set the moment start() is called, before the microphone permission answers, so a second click can't open a second stream.
+  const starting = useRef(false);
   const stopTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   // Always call the newest callbacks, even from a recording started before the last render.
   const callbacks = useRef(callbacksIn);
@@ -37,7 +39,8 @@ export function useRecorder(callbacksIn: RecorderCallbacks) {
   }, []);
 
   const start = useCallback(async () => {
-    if (recorder.current) return;
+    if (recorder.current || starting.current) return;
+    starting.current = true;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const media = new MediaRecorder(stream);
@@ -59,6 +62,8 @@ export function useRecorder(callbacksIn: RecorderCallbacks) {
       stopTimer.current = setTimeout(stop, MAX_RECORDING_MS);
     } catch {
       callbacks.current.onError("I couldn't use the microphone. Allow microphone access, or type your request.");
+    } finally {
+      starting.current = false;
     }
   }, [stop]);
 

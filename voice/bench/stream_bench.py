@@ -32,8 +32,10 @@ async def run_clip(path):
 
         listener = asyncio.create_task(listen())
         for i in range(0, len(samples), FRAME):
-            await ws.send(samples[i : i + FRAME].tobytes())
-            await asyncio.sleep(FRAME / 16000)  # real-time pace
+            frame = samples[i : i + FRAME]
+            # A microphone hands over a frame only once it has been spoken: wait for the frame's capture deadline.
+            await asyncio.sleep(max(0.0, t0 + (i + len(frame)) / 16000 - time.perf_counter()))
+            await ws.send(frame.tobytes())
         sent_all = time.perf_counter()
         await ws.send(json.dumps({"type": "stop"}))
         final = await listener

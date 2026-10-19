@@ -32,7 +32,7 @@ export function useStreamingSpeech(createTranscriber: () => StreamingTranscriber
 
   const end = useCallback(() => {
     clearTimeout(stopTimer.current);
-    session.current?.capture?.stop();
+    void session.current?.capture?.stop();
     session.current?.transcriber.close();
     session.current = null;
     setState("idle");
@@ -42,10 +42,12 @@ export function useStreamingSpeech(createTranscriber: () => StreamingTranscriber
     const current = session.current;
     if (!current) return;
     clearTimeout(stopTimer.current);
-    current.capture?.stop();
+    const capture = current.capture;
     current.capture = null;
-    current.transcriber.stop(); // the final text arrives through onFinal, which ends the session
     setState("finishing");
+    // Let the microphone hand over its last audio first, so the final word isn't cut off. The final text then
+    // arrives through onFinal, which ends the session.
+    void (capture?.stop() ?? Promise.resolve()).then(() => current.transcriber.stop());
   }, []);
 
   const start = useCallback(async () => {
@@ -78,7 +80,7 @@ export function useStreamingSpeech(createTranscriber: () => StreamingTranscriber
       latest.current.handlers.onError(MIC_ERROR);
       return;
     }
-    if (session.current !== current) return current.capture.stop(); // ended while the microphone was opening
+    if (session.current !== current) return void current.capture.stop(); // ended while the microphone was opening
     setState("recording");
     stopTimer.current = setTimeout(stop, MAX_RECORDING_MS);
   }, [end, stop]);
