@@ -31,16 +31,16 @@ New engine: `LiquidAI/LFM2.5-Audio-1.5B` Q8_0 GGUF (1.2 GB, plus 0.3 GB audio en
 | Engine | WER (written) | Entities found | Clips fully right | Time per clip (median / max) |
 | --- | --- | --- | --- | --- |
 | faster-whisper tiny.en (int8) | 21.2% | 66.7% (28/42) | 10/20 | 0.38 s / 0.53 s |
-| faster-whisper base.en (int8) | 14.6% | 78.6% (33/42) | 13/20 | 0.55 s / 0.68 s |
+| faster-whisper base.en (int8) | 14.6% | 81.0% (34/42) | 13/20 | 0.55 s / 0.68 s |
 | faster-whisper small.en (int8) | 14.6% | 83.3% (35/42) | 13/20 | 1.37 s / 1.65 s |
-| Qwen3-ASR-0.6B (transformers, fp32) | 18.5% | 76.2% (32/42) | 13/20 | 1.81 s / 2.80 s |
-| LFM2.5-Audio-1.5B (Q8_0, llama.cpp) | 17.2% | 73.8% (31/42) | 12/20 | 1.08 s / 1.99 s |
+| Qwen3-ASR-0.6B (transformers, fp32) | 18.5% | 78.6% (33/42) | 13/20 | 1.81 s / 2.80 s |
+| LFM2.5-Audio-1.5B (Q8_0, llama.cpp) | 17.2% | 76.2% (32/42) | 12/20 | 1.08 s / 1.99 s |
 | Zipformer streaming, hotwords (sherpa-onnx) | 34.4% | 61.9% (26/42) | 7/20 | 0.18 s / 0.38 s after stop |
 
 Qwen3-ASR against LFM2.5-Audio, the comparison that started this log:
-- **Accuracy is a tie within noise** (76.2% against 73.8% of values, one value apart in 42; WER 18.5% against 17.2%).
+- **Accuracy is a tie within noise** (78.6% against 76.2% of values, one value apart in 42; WER 18.5% against 17.2%).
 - **LFM2.5-Audio is faster**: 1.08 s median against 1.81 s, even though it has 1.5B parameters against 0.6B. Text starts appearing after about 0.73 s, because the server streams its output.
-- **Different mistakes.** LFM got "FHSA" right (Qwen did too; the streaming Zipformer did not), writes digits and punctuation, and kept "Best Buy" and "Acme Corp". It dropped the end of "request money from jordan.k@example.com two hundred dollars" (stopped after "Jordan"), wrote "1199" and "999" for 11.99 and 9.99, and wrote "4165550199" for a phone number. Qwen spelled email addresses wrongly ("alex@akmi.com") but did not drop words.
+- **Different mistakes.** LFM got "FHSA" right (Qwen did too; the streaming Zipformer did not), writes digits and punctuation, and kept "Best Buy" and "Acme Corp". It dropped the end of "request money from jordan.k@example.com two hundred dollars" (stopped after "Jordan"), wrote "1199" and "999" for 11.99 and 9.99. Phone numbers written without spaces or hyphens count as found (compared by digits). Qwen spelled email addresses wrongly ("alex@akmi.com") but did not drop words.
 - **Neither streams its input.** Both need the whole clip, so text can't appear while the customer speaks the way it does with the Zipformer. They fit as a second pass after the customer stops.
 - **Whisper small.en still has the best values** (83.3%) at a similar speed to Qwen.
 

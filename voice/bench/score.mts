@@ -50,6 +50,14 @@ function wordErrors(ref: string[], hyp: string[]): number {
   return row[hyp.length]!;
 }
 
+/** Digits written with or without spaces and hyphens ("416 5550199", "416-555-0199") are the same number. */
+const squeeze = (text: string) => text.replace(/(?<=\d) (?=\d)/g, "");
+const isNumber = (words: string) => /^[\d ]{7,}$/.test(words);
+function found(text: string, alt: string): boolean {
+  const words = norm(alt).join(" ");
+  return isNumber(words) ? squeeze(text).includes(` ${squeeze(words)} `) : text.includes(` ${words} `);
+}
+
 const pct = (x: number) => `${(100 * x).toFixed(1)}%`;
 
 const rows: string[] = [];
@@ -59,26 +67,26 @@ for (const file of process.argv.slice(2).filter((arg) => !arg.startsWith("--")))
   const data = JSON.parse(readFileSync(file, "utf8")) as Record<string, Run> | Run;
   const runs: [string, Run][] = "hyps" in data ? [[basename(file, ".json"), data]] : Object.entries(data);
   for (const [name, run] of runs) {
-    let errors = 0, words = 0, found = 0, total = 0, exact = 0;
+    let errors = 0, words = 0, hitCount = 0, total = 0, exact = 0;
     clips.forEach((clip, i) => {
       const hyp = norm(normalizeSpoken(run.hyps[i] ?? ""));
       const ref = norm(clip.written);
       errors += wordErrors(ref, hyp);
       words += ref.length;
       const text = ` ${hyp.join(" ")} `;
-      const hits = clip.entities.filter((alternatives) => alternatives.some((alt) => text.includes(` ${norm(alt).join(" ")} `))).length;
+      const hits = clip.entities.filter((alternatives) => alternatives.some((alt) => found(text, alt))).length;
       if (showMisses && hits < clip.entities.length) {
-        const missing = clip.entities.filter((alternatives) => !alternatives.some((alt) => text.includes(` ${norm(alt).join(" ")} `)));
+        const missing = clip.entities.filter((alternatives) => !alternatives.some((alt) => found(text, alt)));
         misses.push(`${name} #${clip.id}: missing ${missing.map((a) => a[0]).join(", ")} in "${hyp.join(" ")}"`);
       }
-      found += hits;
+      hitCount += hits;
       total += clip.entities.length;
       if (hits === clip.entities.length) exact++;
     });
     const med = run.median_s ?? run.after_stop_median_s;
     const max = run.max_s ?? run.after_stop_max_s;
     const time = med === undefined ? "n/a" : `${med.toFixed(2)} s / ${max?.toFixed(2)} s`;
-    rows.push(`| ${name} | ${pct(errors / words)} | ${pct(found / total)} (${found}/${total}) | ${exact}/${clips.length} | ${time} |`);
+    rows.push(`| ${name} | ${pct(errors / words)} | ${pct(hitCount / total)} (${hitCount}/${total}) | ${exact}/${clips.length} | ${time} |`);
   }
 }
 console.log("| Engine | WER (written) | Entities found | Clips fully right | Time per clip (median / max) |");
