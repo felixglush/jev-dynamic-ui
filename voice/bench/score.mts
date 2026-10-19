@@ -50,7 +50,6 @@ function wordErrors(ref: string[], hyp: string[]): number {
   return row[hyp.length]!;
 }
 
-const median = (values: number[]) => [...values].sort((a, b) => a - b)[Math.floor((values.length - 1) / 2)]!;
 const pct = (x: number) => `${(100 * x).toFixed(1)}%`;
 
 const rows: string[] = [];
