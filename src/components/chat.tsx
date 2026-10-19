@@ -73,6 +73,8 @@ export function Chat() {
   // other and the form would catch up late. While speaking only one question is out at a time, and only the newest
   // text waits behind it.
   const speakingBusy = useRef(false);
+  // Turned off when the final text arrives, so an answer still on its way for that same text is shown as it is.
+  const settling = useRef(true);
   const speakingNext = useRef<string | null>(null);
 
   // `speaking` marks an answer for a partial transcript: it goes through settle() before it is shown.
@@ -124,7 +126,7 @@ export function Chat() {
       }
       if (answer.ok) {
         const raw = answer.result;
-        if (speaking) answer = { ok: true, result: settle(shownResult.current, lastResult.current, raw) };
+        if (speaking && settling.current) answer = { ok: true, result: settle(shownResult.current, lastResult.current, raw) };
         lastResult.current = raw;
         shownResult.current = answer.ok ? answer.result : null;
       }
@@ -245,9 +247,17 @@ export function Chat() {
     setVoiceError("");
     clearTimeout(timer.current);
     wantFocus.current = false;
+    settling.current = !final;
     if (final) {
-      shownResult.current = lastResult.current = null; // the final answer is shown as it is
       speakingNext.current = null;
+      // The last partial was already asked about and may be on screen with held values: show its raw answer now.
+      const raw = lastResult.current;
+      if (raw && !speakingBusy.current && text === lastText.current) {
+        shownText.current = text;
+        setOutcome({ ok: true, result: raw });
+        setOpen(true);
+      }
+      shownResult.current = lastResult.current = null;
     }
     ask(text, false, !final);
   }

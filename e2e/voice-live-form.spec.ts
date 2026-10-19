@@ -51,3 +51,16 @@ test("a second engine that is down leaves the streamed text in place", async ({ 
   await expect(page.getByRole("status")).not.toContainText("speech-to-text");
   await expect(page.getByLabel("Amount (CAD)")).toHaveValue("50.00");
 });
+
+test("the final text shows the latest answer even when it matches the last partial", async ({ page }) => {
+  await batch(page, { texts: [] });
+  // The amount is first heard as 50, then as 500. The form holds 50 until a second answer agrees; stopping with the
+  // same text must not leave the old value behind.
+  await say(page, { texts: ["SEND FIFTY DOLLARS TO SAM", "SEND FIVE HUNDRED DOLLARS TO SAM", "SEND FIVE HUNDRED DOLLARS TO SAM"] });
+  await page.getByRole("button", { name: "Record a message" }).click();
+  await expect(page.getByLabel("Amount (CAD)")).toHaveValue("50.00");
+
+  await page.getByRole("button", { name: "Stop recording" }).click();
+  await expect(bar(page)).toHaveValue("send 500 dollars to sam");
+  await expect(page.getByLabel("Amount (CAD)")).toHaveValue("500.00");
+});
