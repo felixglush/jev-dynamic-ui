@@ -135,7 +135,7 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--threads", type=int, default=4, help="CPU threads for the model")
     parser.add_argument("--workers", type=int, default=2, help="connections decoded at the same time")
-    parser.add_argument("--hotwords-file", type=Path, help="tokenized words to favour (see tokenize_hotwords.py)")
+    parser.add_argument("--hotwords-file", type=Path, help="words to favour, prepared with prepare_hotwords.py")
     parser.add_argument("--hotwords-score", type=float, default=1.5, help="how strongly to favour them")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
