@@ -19,6 +19,11 @@ const ORDINAL_UNITS: Record<string, number> = {
   twentieth: 20, thirtieth: 30,
 };
 
+// "may" and "march" are also ordinary words ("i may second guess"), so they only count as a month after a word that
+// introduces a date, or at the start of the text.
+const AMBIGUOUS_MONTHS = new Set(["may", "march"]);
+const DATE_LEAD_INS = new Set(["on", "by", "before", "after", "from", "until", "till", "since", "of", "for", "in", "next", "last", "this", "to"]);
+
 const MONEY_WORDS = new Set(["dollar", "dollars", "buck", "bucks", "grand", "k", "cad", "cents"]);
 
 const unitValue = (word: string) => UNITS.indexOf(word);
@@ -39,6 +44,10 @@ export function normalizeSpoken(text: string): string {
 
 const word = (token: string | undefined) => (token ?? "").toLowerCase().replace(/[^a-z0-9']/g, "");
 
+const LOCAL_PART = /^[a-z0-9][a-z0-9._+-]*$/;
+/** A token as the start or middle of an email name: lowercased, outer punctuation trimmed, inner . _ + - kept. */
+const localPart = (token: string | undefined) => (token ?? "").toLowerCase().replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, "");
+
 /** "priya dot k at example dot com" -> "priya.k@example.com" */
 function joinEmails(tokens: string[]): string[] {
   const out = [...tokens];
@@ -52,14 +61,15 @@ function joinEmails(tokens: string[]): string[] {
       end += 2;
     }
     if (domain.length < 2 || !TLDS.has(domain.at(-1)!)) continue;
-    // The name: the word before "at", plus more words joined by dot / underscore / dash.
+    // The name: the word before "at", plus more words joined by dot / underscore / dash. An engine may already have
+    // written some punctuation ("alex.smith"), which stays.
     let start = at - 1;
-    const local = [word(out[start])];
-    while (start >= 2 && ["dot", "underscore", "dash", "hyphen"].includes(word(out[start - 1])) && /^[a-z0-9]+$/.test(word(out[start - 2]))) {
-      local.unshift(word(out[start - 2]), { dot: ".", underscore: "_", dash: "-", hyphen: "-" }[word(out[start - 1])]!);
+    const local = [localPart(out[start])];
+    while (start >= 2 && ["dot", "underscore", "dash", "hyphen"].includes(word(out[start - 1])) && LOCAL_PART.test(localPart(out[start - 2]))) {
+      local.unshift(localPart(out[start - 2]), { dot: ".", underscore: "_", dash: "-", hyphen: "-" }[word(out[start - 1])]!);
       start -= 2;
     }
-    if (!/^[a-z0-9]+$/.test(local.at(-1)!)) continue;
+    if (!LOCAL_PART.test(local.at(-1)!)) continue;
     out.splice(start, end - start + 1, `${local.join("")}@${domain.join(".")}`);
     at = start;
   }
@@ -92,7 +102,8 @@ function convertDates(tokens: string[]): string[] {
   const out: string[] = [];
   for (let i = 0; i < tokens.length; i++) {
     const ordinal = readOrdinal(tokens, i);
-    const afterMonth = out.length > 0 && MONTHS.includes(word(out.at(-1)));
+    const month = word(out.at(-1));
+    const afterMonth = out.length > 0 && MONTHS.includes(month) && (!AMBIGUOUS_MONTHS.has(month) || out.length === 1 || DATE_LEAD_INS.has(word(out.at(-2))));
     const beforeMonth = ordinal && word(tokens[i + ordinal.length]) === "of" && MONTHS.includes(word(tokens[i + ordinal.length + 1]));
     if (ordinal && (afterMonth || beforeMonth)) {
       out.push(`${ordinal.value}${suffix(ordinal.value)}`);
@@ -122,6 +133,14 @@ function convertNumbers(tokens: string[]): string[] {
     if (!number) {
       out.push(tokens[i]!);
       i++;
+      continue;
+    }
+    // A year after a date: "march 4th twenty twenty six" -> "march 4th 2026" (not the price 20.26).
+    const next0 = readNumber(tokens, i + number.length);
+    const previous = out.at(-1) ?? "";
+    if (next0 && (number.value === 19 || number.value === 20) && next0.value >= 10 && next0.value <= 99 && (MONTHS.includes(word(previous)) || /^\d+(st|nd|rd|th)$/.test(previous))) {
+      out.push(`${number.value}${String(next0.value).padStart(2, "0")}`);
+      i += number.length + next0.length;
       continue;
     }
     // Prices said as dollars and cents without the words: "eleven ninety nine" (11.99), "nine fifty" (9.50).
@@ -169,7 +188,7 @@ function readNumber(tokens: string[], i: number): { value: number; length: numbe
     } else if (unit >= 1 && (groupStart || state === "tens")) {
       group += unit;
       state = "unit";
-    } else if (w === "hundred" && state === "unit" && group >= 1 && group <= 9) {
+    } else if (w === "hundred" && (state === "unit" || state === "tens") && group >= 1 && group <= 99) {
       group *= 100;
       state = "hundred";
     } else if ((w === "thousand" || w === "million") && (state === "unit" || state === "tens" || state === "hundred")) {

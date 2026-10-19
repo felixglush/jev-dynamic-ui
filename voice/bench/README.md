@@ -44,12 +44,12 @@ Run: `python run_sherpa.py clips.txt WAV16_DIR MODEL_DIR [LEAD_S] [TAIL_S]` (mod
 
 `voice/server/sherpa_server.py` serves the same Zipformer over the WebSocket protocol in `src/lib/stt/stream/protocol.ts`. Setup: `pip install -r voice/server/requirements.txt`, `voice/server/download-model.sh`, then `python voice/server/sherpa_server.py --model-dir voice/models/sherpa-onnx-streaming-zipformer-en-2023-06-26`. The server puts 0.5 s of silence in front of the audio (the engine drops the first word otherwise) and 1 s after it when you stop.
 
-`stream_bench.py` plays each clip into it at real-time pace, in 100 ms frames, like a live mic. Same 20 clips, same 4-core CPU:
+`stream_bench.py` plays each clip into it at real-time pace, in 100 ms frames, each sent only once it would have been spoken (a first version sent frames early and understated the times), like a live mic. Same 20 clips, same 4-core CPU:
 
 | Measure | Result |
 | --- | --- |
-| First text after speech starts | 0.63 s median |
-| Final text after the customer stops | 99 ms median / 171 ms max |
+| First text after speech starts | 0.74 s median |
+| Final text after the customer stops | 144 ms median / 246 ms max |
 | Word error rate* | 18.8% |
 
 *Against the spoken-form script as before: spelled-out numbers count as correct, UPPERCASE is ignored.

@@ -72,4 +72,23 @@ describe("normalizeSpoken", () => {
       "acmee corp charged be 11.99 but my plan is 9.99",
     );
   });
+
+  it("reads hundreds above nine and years after a date", () => {
+    expect(normalizeSpoken("pay eleven hundred dollars")).toBe("pay 1100 dollars");
+    expect(normalizeSpoken("send twenty five hundred dollars")).toBe("send 2500 dollars");
+    expect(normalizeSpoken("dispute it on march fourth twenty twenty six")).toBe("dispute it on march 4th 2026");
+    expect(normalizeSpoken("it was nineteen ninety nine dollars")).toBe("it was 19.99 dollars"); // no date, so a price
+  });
+
+  it("keeps punctuation an engine already put in an email name", () => {
+    expect(normalizeSpoken("ALEX.SMITH at example dot com")).toBe("alex.smith@example.com");
+    expect(normalizeSpoken("jo_smith-2 at example dot com")).toBe("jo_smith-2@example.com");
+  });
+
+  it("does not read the verb 'may' or the month 'march' in ordinary speech as a date", () => {
+    expect(normalizeSpoken("i may second guess it")).toBe("i may second guess it");
+    expect(normalizeSpoken("we march first thing")).toBe("we march first thing");
+    expect(normalizeSpoken("pay it on may second")).toBe("pay it on may 2nd");
+    expect(normalizeSpoken("may second")).toBe("may 2nd");
+  });
 });
