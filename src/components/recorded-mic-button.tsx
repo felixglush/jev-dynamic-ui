@@ -7,8 +7,11 @@ import { useRecorder } from "@/components/use-recorder";
 import { MicView } from "@/components/mic-view";
 
 export type MicProps = {
-  /** The text so far (`final` false, while still recording) or the finished text (`final` true). */
-  onTranscript: (text: string, final: boolean) => void;
+  /**
+   * The text so far (`final` false, while still recording) or the finished text (`final` true). `replaces` is set
+   * when a second engine re-heard a recording: it is the final text this one corrects.
+   */
+  onTranscript: (text: string, final: boolean, replaces?: string) => void;
   onError: (message: string) => void;
 };
 

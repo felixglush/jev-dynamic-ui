@@ -5,6 +5,7 @@ import { ANNOTATIONS_FILE, PREDICTIONS_LOG, SFT_REVIEW_FILE } from "./e2e/paths"
 // Something else may hold 3100 on a dev machine; PW_APP_PORT picks another.
 const APP_PORT = Number(process.env.PW_APP_PORT ?? 3100);
 const STREAMING_APP_PORT = APP_PORT + 1;
+const LIVE_FORM_APP_PORT = APP_PORT + 2;
 const FAKE_JEV_PORT = 8787;
 const FAKE_OLLAMA_PORT = 8788;
 const FAKE_STT_PORT = 8789;
@@ -17,10 +18,12 @@ export default defineConfig({
   timeout: 60_000,
   // The specs that review the fine-tuning file all write the same temp copy, so they must not overlap.
   workers: 1,
-  // The streaming-voice spec runs against the second copy of the app; everything else against the first.
+  // The streaming-voice spec runs against the second copy of the app, the live-form spec against the third;
+  // everything else against the first.
   projects: [
-    { name: "app", testIgnore: /voice-stream\.spec/, use: { baseURL: `http://localhost:${APP_PORT}` } },
+    { name: "app", testIgnore: /voice-(stream|live-form)\.spec/, use: { baseURL: `http://localhost:${APP_PORT}` } },
     { name: "streaming", testMatch: /voice-stream\.spec/, use: { baseURL: `http://localhost:${STREAMING_APP_PORT}` } },
+    { name: "live-form", testMatch: /voice-live-form\.spec/, use: { baseURL: `http://localhost:${LIVE_FORM_APP_PORT}` } },
   ],
   use: {
     trace: "retain-on-failure",
@@ -70,8 +73,8 @@ export default defineConfig({
       wait: { stdout: /fake STT stream listening/ },
     },
     {
-      // The real app, built for production once and run twice (see e2e/start-apps.mts), pointed at the fakes.
-      command: `node e2e/start-apps.mts ${APP_PORT} ${STREAMING_APP_PORT} ws://127.0.0.1:${FAKE_STT_STREAM_PORT}`,
+      // The real app, built for production once and run three times (see e2e/start-apps.mts), pointed at the fakes.
+      command: `node e2e/start-apps.mts ${APP_PORT} ${STREAMING_APP_PORT} ws://127.0.0.1:${FAKE_STT_STREAM_PORT} ${LIVE_FORM_APP_PORT}`,
       env: {
         TYPESAFE_API_KEY: "test-key",
         TYPESAFE_BASE_URL: `http://localhost:${FAKE_JEV_PORT}`,

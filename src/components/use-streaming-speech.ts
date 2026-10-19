@@ -5,12 +5,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { startPcmCapture, type PcmCapture } from "@/lib/stt/stream/capture";
 import { WebSocketTranscriber, type StreamingTranscriber } from "@/lib/stt/stream/transcriber";
 import { MAX_RECORDING_MS } from "@/lib/stt/limits";
+import { encodeWav } from "@/lib/stt/stream/wav";
 
 export type StreamingSpeechState = "idle" | "connecting" | "recording" | "finishing";
 
 type Handlers = {
   onPartial: (text: string) => void;
-  onFinal: (text: string) => void;
+  /** `clip` is everything that was recorded, for a second opinion from another engine. */
+  onFinal: (text: string, clip: Blob) => void;
   onError: (message: string) => void;
 };
 
@@ -22,7 +24,7 @@ const MIC_ERROR = "I couldn't use the microphone. Allow microphone access, or ty
  */
 export function useStreamingSpeech(createTranscriber: () => StreamingTranscriber, handlers: Handlers) {
   const [state, setState] = useState<StreamingSpeechState>("idle");
-  const session = useRef<{ transcriber: StreamingTranscriber; capture: PcmCapture | null } | null>(null);
+  const session = useRef<{ transcriber: StreamingTranscriber; capture: PcmCapture | null; frames: Int16Array[] } | null>(null);
   const stopTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   // Always call the newest handlers and factory, even from a session started before the last render.
   const latest = useRef({ createTranscriber, handlers });
@@ -53,7 +55,7 @@ export function useStreamingSpeech(createTranscriber: () => StreamingTranscriber
   const start = useCallback(async () => {
     if (session.current) return;
     const transcriber = latest.current.createTranscriber();
-    const current = { transcriber, capture: null as PcmCapture | null };
+    const current = { transcriber, capture: null as PcmCapture | null, frames: [] as Int16Array[] };
     session.current = current;
     setState("connecting");
     try {
@@ -61,8 +63,9 @@ export function useStreamingSpeech(createTranscriber: () => StreamingTranscriber
         onPartial: (text) => latest.current.handlers.onPartial(text),
         onEndpoint: stop, // the server heard the customer finish: same as pressing stop
         onFinal: (text) => {
+          const clip = encodeWav(current.frames);
           end();
-          latest.current.handlers.onFinal(text);
+          latest.current.handlers.onFinal(text, clip);
         },
         onError: (message) => {
           end();
@@ -75,7 +78,10 @@ export function useStreamingSpeech(createTranscriber: () => StreamingTranscriber
       return;
     }
     try {
-      current.capture = await startPcmCapture((pcm) => transcriber.send(pcm));
+      current.capture = await startPcmCapture((pcm) => {
+        current.frames.push(pcm);
+        transcriber.send(pcm);
+      });
     } catch {
       end();
       latest.current.handlers.onError(MIC_ERROR);

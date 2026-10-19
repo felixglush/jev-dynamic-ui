@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { ArrowUp, Check, Loader2 } from "lucide-react";
 
 import { classifyMessage } from "@/app/actions";
+import { getSpeechConfig, type SpeechConfig } from "@/app/voice-actions";
 import { ActionHostContext, type ActionHost } from "@/components/forms/action-form";
 import { ActionPanel } from "@/components/forms/action-panel";
 import { MicButton } from "@/components/mic-button";
@@ -11,7 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { LOW_CONFIDENCE, MAX_MESSAGE_LENGTH } from "@/lib/jev/catalog";
 import { summarize } from "@/lib/summarize";
-import type { ClassifyOutcome } from "@/lib/jev/types";
+import type { ClassifyOutcome, ClassifyResult } from "@/lib/jev/types";
+import { settle } from "@/lib/voice/settle";
 
 // One message from each action group in data/sample-messages.txt, picked to show something
 // a form fills in on its own (a worded amount, a schedule, a biller account number...).
@@ -50,6 +52,7 @@ export function Chat() {
   const [open, setOpen] = useState(false);
   const [done, setDone] = useState("");
   const [voiceError, setVoiceError] = useState("");
+  const [speech, setSpeech] = useState<SpeechConfig>();
   const [, startTransition] = useTransition();
 
   const composerRef = useRef<HTMLInputElement>(null);
@@ -63,8 +66,12 @@ export function Chat() {
   const shownText = useRef("");
   // Set when the customer pressed Return: once the answer is in, the card's form is confirmed.
   const wantFocus = useRef(false);
+  // While speech is coming in, what the form shows and the last raw answer, so settle() can hold back values that keep changing.
+  const shownResult = useRef<ClassifyResult | null>(null);
+  const lastResult = useRef<ClassifyResult | null>(null);
 
-  function ask(text: string, explicit: boolean) {
+  // `speaking` marks an answer for a partial transcript: it goes through settle() before it is shown.
+  function ask(text: string, explicit: boolean, speaking = false) {
     const unchanged = text === lastText.current;
     if (unchanged && !explicit) return;
     if (explicit) {
@@ -99,6 +106,12 @@ export function Chat() {
         setOpen(false);
         return;
       }
+      if (answer.ok) {
+        const raw = answer.result;
+        if (speaking) answer = { ok: true, result: settle(shownResult.current, lastResult.current, raw) };
+        lastResult.current = raw;
+        shownResult.current = answer.ok ? answer.result : null;
+      }
       shownText.current = text;
       setOutcome(answer);
       setOpen(true);
@@ -110,6 +123,7 @@ export function Chat() {
     latestId.current++; // anything still in flight is now ignored
     lastText.current = "";
     wantFocus.current = false;
+    shownResult.current = lastResult.current = null;
     setOpen(false);
     if (composerRef.current) {
       composerRef.current.value = "";
@@ -124,6 +138,7 @@ export function Chat() {
     lastText.current = "";
     // A Return pressed for the older text no longer applies to this text.
     wantFocus.current = false;
+    shownResult.current = lastResult.current = null;
     const text = value.trim();
     if (!text) {
       if (open) dismiss();
@@ -165,6 +180,10 @@ export function Chat() {
     return () => clearTimeout(t);
   }, [open, outcome]);
 
+  useEffect(() => {
+    getSpeechConfig().then(setSpeech, () => setSpeech({ streamUrl: null, liveText: true, refine: false }));
+  }, []);
+
   // Stop a pending debounce if the page goes away.
   useEffect(() => () => clearTimeout(timer.current), []);
 
@@ -196,15 +215,20 @@ export function Chat() {
     ask(message, true);
   }
 
-  // Spoken text is treated like a clicked example: it fills the bar and shows its form for review, but is not
-  // confirmed. It arrives several times while speaking; ask() already ignores answers about older text.
-  function onTranscript(text: string) {
-    if (composerRef.current) composerRef.current.value = text;
+  // Spoken text is treated like a clicked example: it shows its form for review, but is not confirmed. It arrives
+  // several times while speaking; ask() already ignores answers about older text. Until the final text, the form
+  // updates through settle(); with STT_LIVE_TEXT=off the bar stays empty until then, and only the form moves.
+  // A correction (`replaces`) comes from a second engine: it only applies if the bar still holds the text it corrects.
+  function onTranscript(text: string, final: boolean, replaces?: string) {
+    const bar = composerRef.current;
+    if (replaces !== undefined && bar?.value !== replaces) return;
+    if (bar && (final || speech?.liveText !== false)) bar.value = text;
     setDone("");
     setVoiceError("");
     clearTimeout(timer.current);
     wantFocus.current = false;
-    ask(text, false);
+    if (final) shownResult.current = lastResult.current = null; // the final answer is shown as it is
+    ask(text, false, !final);
   }
 
   return (
@@ -240,7 +264,7 @@ export function Chat() {
             onChange={(event) => onType(event.target.value, /^\s$/.test((event.nativeEvent as InputEvent).data ?? ""))}
             className="h-10 min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-muted-foreground"
           />
-          <MicButton onTranscript={onTranscript} onError={setVoiceError} />
+          <MicButton speech={speech} onTranscript={onTranscript} onError={setVoiceError} />
           <Button type="submit" size="icon" aria-label="Send" className="size-10 rounded-full">
             <ArrowUp />
           </Button>
