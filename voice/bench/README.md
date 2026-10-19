@@ -44,12 +44,12 @@ Run: `python run_sherpa.py clips.txt WAV16_DIR MODEL_DIR [LEAD_S] [TAIL_S]` (mod
 
 `voice/server/sherpa_server.py` serves the same Zipformer over the WebSocket protocol in `src/lib/stt/stream/protocol.ts`. Setup: `pip install -r voice/server/requirements.txt`, `voice/server/download-model.sh`, then `python voice/server/sherpa_server.py --model-dir voice/models/sherpa-onnx-streaming-zipformer-en-2023-06-26`. The server puts 0.5 s of silence in front of the audio (the engine drops the first word otherwise) and 1 s after it when you stop.
 
-`stream_bench.py` plays each clip into it at real-time pace, in 100 ms frames, like a live mic. Same 20 clips, same 4-core CPU:
+`stream_bench.py` plays each clip into it at real-time pace, in 100 ms frames, each sent only once it would have been spoken (a first version sent frames early and understated the times), like a live mic. Same 20 clips, same 4-core CPU:
 
 | Measure | Result |
 | --- | --- |
-| First text after speech starts | 0.63 s median |
-| Final text after the customer stops | 99 ms median / 171 ms max |
+| First text after speech starts | 0.74 s median |
+| Final text after the customer stops | 144 ms median / 246 ms max |
 | Word error rate* | 18.8% |
 
 *Against the spoken-form script as before: spelled-out numbers count as correct, UPPERCASE is ignored.
@@ -58,4 +58,4 @@ Run: `python run_sherpa.py clips.txt WAV16_DIR MODEL_DIR [LEAD_S] [TAIL_S]` (mod
 
 After the clean-up step (`src/lib/stt/normalize.ts`) the same real-speech check shows `send 50 dollars to sam for dinner last night` in the bar and the form open with To = sam and Amount = 50.00. Names stay lowercase because the streaming model writes only capitals.
 
-**Hotwords.** `voice/server/hotwords.txt` lists words to favour (FHSA, TFSA, chequing, Acme Corp, the sample names); `voice/server/tokenize_hotwords.py WORDS MODEL_DIR OUT` splits them into the model's BPE pieces, and the server takes `--hotwords-file OUT [--hotwords-score 1.5]` (this switches it to `modified_beam_search`, and needs a `bpe.vocab` in the model dir, which `tokenize_hotwords.py` writes if missing). Measured on the same 20 clips: WER 18.8% -> 18.3%, final text 107 ms median after stop (was 99-123 ms), and a score of 4 gave the same WER. So hotwords barely help here: the remaining errors are the engine mishearing the sound ("PREA" for Priya, "OTTO DEPOSIT"), which boosting can't fix. Real gains for names and accents need either a better model or fine-tuning.
+**Hotwords.** `voice/server/hotwords.txt` lists words to favour (FHSA, TFSA, chequing, Acme Corp, the sample names). `voice/server/prepare_hotwords.py WORDS MODEL_DIR OUT` cleans the list (capitals, no comments) and writes `bpe.vocab` into the model dir; the server takes `--hotwords-file OUT [--hotwords-score 1.5]` and splits the phrases into the model's pieces itself (this switches it to `modified_beam_search`). Measured on the same 20 clips: WER 18.8% -> 17.3%, "E TRANSFER" and "ACME CORP" now come out right, but the final text takes longer after you stop (179 ms median / 339 ms max, against 144 / 246 ms), because beam search does more work. The remaining errors are mostly the engine mishearing the sound ("PREA" for Priya, "OTTO DEPOSIT"), which boosting can't fix. A first version pre-split the phrases into pieces and the engine split them again, which is why its gain looked smaller (18.3%). Real gains for names and accents need a better model or fine-tuning.

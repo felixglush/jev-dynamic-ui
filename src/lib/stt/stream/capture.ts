@@ -4,7 +4,11 @@ import { SAMPLE_RATE } from "./protocol";
 /** Public URL of the AudioWorklet in /public that hands raw microphone audio to the page. */
 const WORKLET_URL = "/pcm-worklet.js";
 
-export type PcmCapture = { stop: () => void };
+/** `stop()` resolves once the last buffered audio (up to ~130 ms) has been handed to `onFrame`, so no word is cut off. */
+export type PcmCapture = { stop: () => Promise<void> };
+
+/** How long stop() waits for the worklet to hand over its last audio before giving up. */
+const FLUSH_TIMEOUT_MS = 500;
 
 /**
  * Open the microphone and call `onFrame` with 16-bit 16 kHz mono PCM, about every 50 to 130 ms, until `stop()`.
@@ -19,14 +23,21 @@ export async function startPcmCapture(onFrame: (pcm: Int16Array) => void): Promi
     const source = context.createMediaStreamSource(stream);
     const worklet = new AudioWorkletNode(context, "pcm-capture");
     const resampler = new PcmResampler(context.sampleRate, SAMPLE_RATE);
-    worklet.port.onmessage = (event: MessageEvent<Float32Array>) => {
+    let flushed: (() => void) | null = null;
+    worklet.port.onmessage = (event: MessageEvent<Float32Array | "flushed">) => {
+      if (event.data === "flushed") return flushed?.();
       const pcm = resampler.push(event.data);
       if (pcm.length > 0) onFrame(pcm);
     };
     source.connect(worklet); // not connected to the speakers: nothing to hear while recording
     await context.resume();
     return {
-      stop() {
+      async stop() {
+        await new Promise<void>((resolve) => {
+          flushed = resolve;
+          setTimeout(resolve, FLUSH_TIMEOUT_MS);
+          worklet.port.postMessage("flush");
+        });
         worklet.port.onmessage = null;
         source.disconnect();
         stream.getTracks().forEach((track) => track.stop()); // turns the browser's "recording" indicator off
