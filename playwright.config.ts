@@ -4,8 +4,11 @@ import { ANNOTATIONS_FILE, PREDICTIONS_LOG, SFT_REVIEW_FILE } from "./e2e/paths"
 
 // Something else may hold 3100 on a dev machine; PW_APP_PORT picks another.
 const APP_PORT = Number(process.env.PW_APP_PORT ?? 3100);
+const STREAMING_APP_PORT = APP_PORT + 1;
 const FAKE_JEV_PORT = 8787;
 const FAKE_OLLAMA_PORT = 8788;
+const FAKE_STT_PORT = 8789;
+const FAKE_STT_STREAM_PORT = 8790;
 
 export default defineConfig({
   testDir: "e2e",
@@ -14,11 +17,19 @@ export default defineConfig({
   timeout: 60_000,
   // The specs that review the fine-tuning file all write the same temp copy, so they must not overlap.
   workers: 1,
+  // The streaming-voice spec runs against the second copy of the app; everything else against the first.
+  projects: [
+    { name: "app", testIgnore: /voice-stream\.spec/, use: { baseURL: `http://localhost:${APP_PORT}` } },
+    { name: "streaming", testMatch: /voice-stream\.spec/, use: { baseURL: `http://localhost:${STREAMING_APP_PORT}` } },
+  ],
   use: {
-    baseURL: `http://localhost:${APP_PORT}`,
     trace: "retain-on-failure",
     // Set PW_CHROMIUM_PATH to use an already-installed Chromium instead of Playwright's download.
-    launchOptions: process.env.PW_CHROMIUM_PATH ? { executablePath: process.env.PW_CHROMIUM_PATH } : {},
+    // The fake microphone lets the mic button record without a real device or a permission prompt.
+    launchOptions: {
+      args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"],
+      ...(process.env.PW_CHROMIUM_PATH ? { executablePath: process.env.PW_CHROMIUM_PATH } : {}),
+    },
   },
   webServer: [
     {
@@ -41,12 +52,31 @@ export default defineConfig({
       wait: { stdout: /fake Ollama listening/ },
     },
     {
-      // The real app, built for production, pointed at the fake.
-      command: `npm run build && npm run start -- -p ${APP_PORT}`,
+      // The stand-in for the speech-to-text server.
+      command: "node e2e/fake-stt.mts",
+      env: { FAKE_STT_PORT: String(FAKE_STT_PORT) },
+      url: `http://localhost:${FAKE_STT_PORT}`,
+      reuseExistingServer: true,
+      stdout: "pipe",
+      wait: { stdout: /fake STT listening/ },
+    },
+    {
+      // The stand-in for the streaming speech-to-text server.
+      command: "node e2e/fake-stt-stream.mts",
+      env: { FAKE_STT_STREAM_PORT: String(FAKE_STT_STREAM_PORT) },
+      url: `http://localhost:${FAKE_STT_STREAM_PORT}/__ready`,
+      reuseExistingServer: true,
+      stdout: "pipe",
+      wait: { stdout: /fake STT stream listening/ },
+    },
+    {
+      // The real app, built for production once and run twice (see e2e/start-apps.mts), pointed at the fakes.
+      command: `node e2e/start-apps.mts ${APP_PORT} ${STREAMING_APP_PORT} ws://127.0.0.1:${FAKE_STT_STREAM_PORT}`,
       env: {
         TYPESAFE_API_KEY: "test-key",
         TYPESAFE_BASE_URL: `http://localhost:${FAKE_JEV_PORT}`,
         OLLAMA_URL: `http://127.0.0.1:${FAKE_OLLAMA_PORT}`,
+        STT_URL: `http://127.0.0.1:${FAKE_STT_PORT}`,
         ANNOTATIONS_FILE,
         PREDICTIONS_FILE: "e2e/fixtures/predictions.csv",
         PREDICTIONS_LOG_FILE: PREDICTIONS_LOG,
@@ -55,7 +85,7 @@ export default defineConfig({
       url: `http://localhost:${APP_PORT}`,
       // Never reuse: a server started elsewhere wouldn't have ANNOTATIONS_FILE set and would write to data/.
       reuseExistingServer: false,
-      timeout: 240_000,
+      timeout: 360_000,
     },
   ],
 });

@@ -1,0 +1,17 @@
+# Words the customer is likely to say that the engine often gets wrong. One phrase per line, optional ":score"
+# after it to boost that phrase more or less than the default. Lines starting with # are ignored.
+FHSA
+TFSA
+RRSP
+E TRANSFER
+CHEQUING
+ACME CORP
+GOOD LIFE FITNESS
+AUTO DEPOSIT
+HYDRO ONE
+ROGERS
+MASTERCARD
+PRIYA
+JORDAN
+SAM
+KEVIN

@@ -1,0 +1,83 @@
+{
+ "tiny.en": {
+  "median_s": 0.37808274999997593,
+  "max_s": 0.5280708779999941,
+  "wer": 0.38461538461538464,
+  "hyps": [
+   "$50 to Sam for dinner last night.",
+   "Add my sister Priya at Priya.k at example.com so I can eat transfer her.",
+   "Pay $250 toward my Mastercard from checking.",
+   "Start an FHSA.",
+   "Pay my water bill $48 from savings next Friday.",
+   "Add my gym membership Good Life Fitness account number 20194555",
+   "Please block my debit card I think it was stolen.",
+   "Request money from Jordan.k at example.com to $100.",
+   "Turn on auto deposit for my phone number 416550019 into checking.",
+   "Acme Corp charged 3-eleven 99 but my plan is 9-99",
+   "Send Mom to 100 bucks on Friday.",
+   "Transfer $500 to Sam.",
+   "E-transfer $20 to Bob.",
+   "dispute $1,299 from Best Buy on March 4.",
+   "I want to save 2 grand this month.",
+   "Pay the statement, balance on my visa.",
+   "Open a new tax free savings account.",
+   "cancel the transfer I sent to Jordan.",
+   "Update my email address to Alex at Acme.com.",
+   "How much is in my checking account?"
+  ]
+ },
+ "base.en": {
+  "median_s": 0.5523063269999966,
+  "max_s": 0.684436680999994,
+  "wer": 0.3942307692307692,
+  "hyps": [
+   "Send $50 to Sam for dinner last night.",
+   "Add my sister Priya at Priya.k at Example.com so I can eat transfer her.",
+   "Pay $250 toward my MasterCard from checking.",
+   "Start an FHSA.",
+   "Pay my water bill $48 from savings next Friday.",
+   "Add my gym membership Good Life Fitness Account Number 20194455",
+   "If these block my debit card I think it was stolen.",
+   "Request money from Jordan.k at example.com $200",
+   "Turn on auto deposit for my phone number 416-5550199 into checking.",
+   "Acme Corp charged to 11.99 but my plan is 9.99",
+   "Send mom 200 bucks on Friday.",
+   "transfer $500 to Sam.",
+   "E-transfer $20 to Bob.",
+   "dispute $1,299 from Best Buy on March 4th.",
+   "I want to save 2 grand this month.",
+   "Pay the statement balance on my visa.",
+   "Open a new tax-free savings account.",
+   "Cancel the transfer I sent to Jordan.",
+   "Update my email address to Alex at accme.com.",
+   "How much is in my checking account?"
+  ]
+ },
+ "small.en": {
+  "median_s": 1.3711777229999882,
+  "max_s": 1.6536313759999928,
+  "wer": 0.3894230769230769,
+  "hyps": [
+   "Send $50 to Sam for dinner last night.",
+   "Add my sister Priya at priya.k at example.com so I can e-transfer her.",
+   "Pay $250 to word my MasterCard from checking.",
+   "Start an FHSA.",
+   "Pay my water bill $48 from savings next Friday.",
+   "Add my gym membership Good Life Fitness account number 20194455",
+   "If he's block my debit card I think it was stolen.",
+   "Request money from Jordan.K at example.com $200.",
+   "Turn on auto deposit for my phone number 416-555-0199 into checking.",
+   "Acme Corp charged me $11.99 but my plan is $9.99.",
+   "Send mom 200 bucks on Friday.",
+   "Transfer $500 to SAM.",
+   "E-Transfer $20 to Bob.",
+   "dispute $1,299 from Best Buy on March 4.",
+   "I want to save 2 grand this month.",
+   "Pay the statement balance on my visa.",
+   "Open a new tax-free savings account.",
+   "Cancel the transfer I sent to Jordan.",
+   "update my email address to alex at acme.com",
+   "How much is in my checking account?"
+  ]
+ }
+}

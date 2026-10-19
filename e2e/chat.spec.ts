@@ -20,6 +20,9 @@ const composer = (page: Page) => page.getByLabel("Message", { exact: true });
 
 test.beforeEach(async ({ page }) => {
   await page.goto("/");
+  // The mic button asks the server for its speech settings when the page loads (a POST); let that finish so tests
+  // that count requests only see what they cause.
+  await expect(page.getByRole("button", { name: "Record a message" })).toBeEnabled();
 });
 
 test("renders the chat shell from the server, before any message", async ({ request }) => {

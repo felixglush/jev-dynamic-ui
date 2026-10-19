@@ -25,3 +25,6 @@ extractions.csv
 training/out/
 __pycache__/
 .pytest_cache/
+
+# Downloaded speech models (voice/server/download-model.sh)
+/voice/models/
