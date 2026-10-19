@@ -18,7 +18,6 @@ async def run_clip(path):
         await ws.send(json.dumps({"type": "start", "sampleRate": 16000}))
         t0 = time.perf_counter()
         first = None
-        partials = []
 
         async def listen():
             nonlocal first
@@ -26,7 +25,6 @@ async def run_clip(path):
                 data = json.loads(message)
                 if data["type"] == "partial":
                     first = first if first is not None else time.perf_counter() - t0
-                    partials.append((time.perf_counter() - t0, data["text"]))
                 elif data["type"] == "final":
                     return data["text"]
 
