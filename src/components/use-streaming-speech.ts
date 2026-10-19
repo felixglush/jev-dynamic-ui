@@ -11,8 +11,8 @@ export type StreamingSpeechState = "idle" | "connecting" | "recording" | "finish
 
 type Handlers = {
   onPartial: (text: string) => void;
-  /** `clip` is everything that was recorded, for a second opinion from another engine. */
-  onFinal: (text: string, clip: Blob) => void;
+  /** `clip` is everything that was recorded, for a second opinion from another engine; null unless `keepClip` is set. */
+  onFinal: (text: string, clip: Blob | null) => void;
   onError: (message: string) => void;
 };
 
@@ -22,7 +22,7 @@ const MIC_ERROR = "I couldn't use the microphone. Allow microphone access, or ty
  * Live speech to text: opens the microphone and a streaming transcription session and joins them. It knows
  * nothing about what the text is for. `createTranscriber` says which engine to talk to.
  */
-export function useStreamingSpeech(createTranscriber: () => StreamingTranscriber, handlers: Handlers) {
+export function useStreamingSpeech(createTranscriber: () => StreamingTranscriber, handlers: Handlers, keepClip = false) {
   const [state, setState] = useState<StreamingSpeechState>("idle");
   const session = useRef<{ transcriber: StreamingTranscriber; capture: PcmCapture | null; frames: Int16Array[] } | null>(null);
   const stopTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -63,7 +63,7 @@ export function useStreamingSpeech(createTranscriber: () => StreamingTranscriber
         onPartial: (text) => latest.current.handlers.onPartial(text),
         onEndpoint: stop, // the server heard the customer finish: same as pressing stop
         onFinal: (text) => {
-          const clip = encodeWav(current.frames);
+          const clip = keepClip ? encodeWav(current.frames) : null;
           end();
           latest.current.handlers.onFinal(text, clip);
         },
@@ -79,7 +79,7 @@ export function useStreamingSpeech(createTranscriber: () => StreamingTranscriber
     }
     try {
       current.capture = await startPcmCapture((pcm) => {
-        current.frames.push(pcm);
+        if (keepClip) current.frames.push(pcm);
         transcriber.send(pcm);
       });
     } catch {
@@ -90,7 +90,7 @@ export function useStreamingSpeech(createTranscriber: () => StreamingTranscriber
     if (session.current !== current) return void current.capture.stop(); // ended while the microphone was opening
     setState("recording");
     stopTimer.current = setTimeout(stop, MAX_RECORDING_MS);
-  }, [end, stop]);
+  }, [end, stop, keepClip]);
 
   // Leaving the page mid-recording must release the microphone and the connection.
   useEffect(() => end, [end]);

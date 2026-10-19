@@ -38,6 +38,13 @@ describe("settle", () => {
     expect(values(twice)).toEqual({ recipient: "sam", amount: "15" });
   });
 
+  it("never clears a filled field because two answers in a row leave it out", () => {
+    const shown = send("sam", "50");
+    const once = settle(shown, shown, send("sam", null));
+    const twice = settle(once, send("sam", null), send("sam", null));
+    expect(values(twice).amount).toBe("50");
+  });
+
   it("does not report a held field as missing", () => {
     const shown = send("sam", "50");
     const result = settle(shown, shown, send("sam", null));

@@ -34,10 +34,10 @@ export function StreamingMicButton({ url, refine, onTranscript, onError }: MicPr
     onFinal: (text, clip) => {
       const streamed = normalizeSpoken(text);
       onTranscript(streamed, true);
-      if (refine && streamed) void correct(streamed, clip);
+      if (clip && streamed) void correct(streamed, clip);
     },
     onError,
-  });
+  }, refine);
 
   return (
     <MicView
