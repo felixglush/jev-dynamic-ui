@@ -25,6 +25,7 @@ LEAD_SILENCE_S = 0.5
 # How long a pause ends the customer's turn: after they said something, and when they said nothing at all.
 ENDPOINT_SILENCE_S = 1.0
 ENDPOINT_EMPTY_S = 4.0
+# The longest one turn may run with no pause. The browser stops at 20 s on its own; this covers other clients.
 MAX_UTTERANCE_S = 30.0
 # The chunk-16 model from the sherpa-onnx release; the int8 files are the quantized ones.
 MODEL_SUFFIX = "chunk-16-left-128.int8.onnx"
@@ -51,8 +52,7 @@ def load_recognizer(
         decoder=str(model_dir / f"decoder-epoch-99-avg-1-{MODEL_SUFFIX}"),
         joiner=str(model_dir / f"joiner-epoch-99-avg-1-{MODEL_SUFFIX}"),
         num_threads=threads,
-        # Silence after speech that means the customer is done (any text), or a long pause with no text at all.
-        enable_endpoint_detection=True,
+                enable_endpoint_detection=True,
         rule1_min_trailing_silence=ENDPOINT_EMPTY_S,
         rule2_min_trailing_silence=ENDPOINT_SILENCE_S,
         rule3_min_utterance_length=MAX_UTTERANCE_S,
