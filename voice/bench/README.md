@@ -59,3 +59,14 @@ Run: `python run_sherpa.py clips.txt WAV16_DIR MODEL_DIR [LEAD_S] [TAIL_S]` (mod
 After the clean-up step (`src/lib/stt/normalize.ts`) the same real-speech check shows `send 50 dollars to sam for dinner last night` in the bar and the form open with To = sam and Amount = 50.00. Names stay lowercase because the streaming model writes only capitals.
 
 **Hotwords.** `voice/server/hotwords.txt` lists words to favour (FHSA, TFSA, chequing, Acme Corp, the sample names). `voice/server/prepare_hotwords.py WORDS MODEL_DIR OUT` cleans the list (capitals, no comments) and writes `bpe.vocab` into the model dir; the server takes `--hotwords-file OUT [--hotwords-score 1.5]` and splits the phrases into the model's pieces itself (this switches it to `modified_beam_search`). Measured on the same 20 clips: WER 18.8% -> 17.3%, "E TRANSFER" and "ACME CORP" now come out right, but the final text takes longer after you stop (179 ms median / 339 ms max, against 144 / 246 ms), because beam search does more work. The remaining errors are mostly the engine mishearing the sound ("PREA" for Priya, "OTTO DEPOSIT"), which boosting can't fix. A first version pre-split the phrases into pieces and the engine split them again, which is why its gain looked smaller (18.3%). Real gains for names and accents need a better model or fine-tuning.
+
+## Time to first action (`live_form_check.mjs`)
+
+The same chain with real Jev and the real extractor behind it (4-core CPU, sherpa Zipformer, `STT_LIVE_TEXT=off`): the clip says "send fifty dollars to sam for dinner last night" (2.7 s long). Milliseconds after pressing Record, over 4 runs:
+
+| | Form opens (Send an e-Transfer) | Amount filled | Recipient filled | Final text in the bar |
+| --- | --- | --- | --- | --- |
+| Before: a question for every partial queued up (Server Actions run one at a time) | about 6,500 ms, after the final text | | | about 4,500 ms |
+| After: one question in flight, only the newest text waits | 1,740 to 2,710 ms | 2,640 to 4,250 ms | 3,440 to 4,250 ms | 4,460 to 4,800 ms |
+
+The first form lands roughly 1 s after the customer says "send fifty". The first run is slowest (cold model). One clip, one synthetic voice, no noise.

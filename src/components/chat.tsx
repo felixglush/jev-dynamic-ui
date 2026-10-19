@@ -69,11 +69,20 @@ export function Chat() {
   // While speech is coming in, what the form shows and the last raw answer, so settle() can hold back values that keep changing.
   const shownResult = useRef<ClassifyResult | null>(null);
   const lastResult = useRef<ClassifyResult | null>(null);
+  // Server Actions run one after another, so a question for every partial transcript would queue up behind each
+  // other and the form would catch up late. While speaking only one question is out at a time, and only the newest
+  // text waits behind it.
+  const speakingBusy = useRef(false);
+  const speakingNext = useRef<string | null>(null);
 
   // `speaking` marks an answer for a partial transcript: it goes through settle() before it is shown.
   function ask(text: string, explicit: boolean, speaking = false) {
     const unchanged = text === lastText.current;
     if (unchanged && !explicit) return;
+    if (speaking && speakingBusy.current) {
+      speakingNext.current = text;
+      return;
+    }
     if (explicit) {
       wantFocus.current = true;
       setOpen(true);
@@ -87,6 +96,7 @@ export function Chat() {
     }
     const id = ++latestId.current;
     lastText.current = text;
+    if (speaking) speakingBusy.current = true;
 
     // The server action runs on the server; we just await its (plain data) answer.
     startTransition(async () => {
@@ -95,6 +105,12 @@ export function Chat() {
         answer = await classifyMessage(text, explicit);
       } catch {
         answer = NETWORK_ERROR;
+      }
+      if (speaking) {
+        speakingBusy.current = false;
+        const next = speakingNext.current;
+        speakingNext.current = null;
+        if (next !== null && latestId.current === id) queueMicrotask(() => ask(next, false, true));
       }
       if (latestId.current !== id) return;
       const isAction = answer.ok && answer.result.action !== null;
@@ -124,6 +140,7 @@ export function Chat() {
     lastText.current = "";
     wantFocus.current = false;
     shownResult.current = lastResult.current = null;
+    speakingNext.current = null;
     setOpen(false);
     if (composerRef.current) {
       composerRef.current.value = "";
@@ -139,6 +156,7 @@ export function Chat() {
     // A Return pressed for the older text no longer applies to this text.
     wantFocus.current = false;
     shownResult.current = lastResult.current = null;
+    speakingNext.current = null;
     const text = value.trim();
     if (!text) {
       if (open) dismiss();
@@ -227,7 +245,10 @@ export function Chat() {
     setVoiceError("");
     clearTimeout(timer.current);
     wantFocus.current = false;
-    if (final) shownResult.current = lastResult.current = null; // the final answer is shown as it is
+    if (final) {
+      shownResult.current = lastResult.current = null; // the final answer is shown as it is
+      speakingNext.current = null;
+    }
     ask(text, false, !final);
   }
 
