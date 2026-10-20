@@ -111,23 +111,30 @@ Needs Node 22+ and [Ollama](https://ollama.com).
 The mic button streams your voice to a local speech server, and the form opens and fills in while you are still talking. It needs Python 3 and a 4-core CPU or better (no GPU); the first start downloads the speech models (about 310 MB, and 460 MB for the optional Whisper second pass).
 
 ```bash
-# 1. Python packages for both servers
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r voice/server/requirements.txt -r voice/server/requirements-whisper.txt
+# 1. Python packages for both servers (uses uv: https://docs.astral.sh/uv)
+uv venv && source .venv/bin/activate
+uv pip install -r voice/server/requirements.txt -r voice/server/requirements-whisper.txt
 
 # 2. Live speech server (streaming Zipformer, port 8765)
 voice/server/download-model.sh
 python voice/server/sherpa_server.py --model-dir voice/models/sherpa-onnx-streaming-zipformer-en-2023-06-26
 
-# 3. Second pass (optional but much more accurate; Whisper small.en, port 8000), in another terminal
+# 3. Second pass (optional but much more accurate; Whisper small.en by default, port 8000), in another terminal
 python voice/server/whisper_server.py            # add --port 8001 if something else uses 8000
+```
+
+The second pass serves several models and the chat bar has a **Speech model** dropdown to switch between them without restarting anything: Whisper tiny, base, small, medium; Distil-Whisper small and medium; Qwen3-ASR 0.6B; LFM2.5-Audio. A model downloads and loads the first time you pick it (so that first recording is slower), and the server keeps the last two in memory. Qwen3-ASR and LFM2.5-Audio need a little more setup, and a model that can't run here is left out of the dropdown:
+
+```bash
+uv pip install -r voice/server/requirements-qwen.txt         # Qwen3-ASR (pulls in PyTorch, about 1 GB)
+LFM_AUDIO_URL=http://127.0.0.1:8791 python voice/server/whisper_server.py   # LFM2.5-Audio: point it at a running llama-liquid-audio-server (see voice/bench/run_lfm_audio.py)
 ```
 
 Then add these to `.env.local` and restart `npm run dev`:
 
 ```
 STT_STREAM_URL=ws://127.0.0.1:8765   # turns on streaming
-STT_REFINE=on                        # when you stop, Whisper re-hears the recording and corrects the form
+STT_REFINE=on                        # when you stop, the chosen model re-hears the recording and corrects the form (or pick "Live only" in the dropdown to skip it)
 STT_URL=http://127.0.0.1:8000        # where the Whisper server is (match --port)
 STT_LIVE_TEXT=off                    # optional: keep the message bar empty while you speak; the form still moves
 ```

@@ -9,5 +9,11 @@ export interface SttProvider {
   transcribe(audio: Blob): Promise<string>;
 }
 
+/** A speech model the batch engine can run, as the app's dropdown shows it. */
+export type SttModel = { id: string; label: string };
+
+/** The models on offer and which one the server uses when none is named. Empty when the server doesn't list any. */
+export type SttModels = { default: string | null; models: SttModel[] };
+
 /** What the browser gets back: plain data, never an exception. */
 export type TranscribeOutcome = { ok: true; text: string } | { ok: false; error: string };

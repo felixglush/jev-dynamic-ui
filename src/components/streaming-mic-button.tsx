@@ -14,10 +14,11 @@ import { normalizeSpoken } from "@/lib/stt/normalize";
  * With `refine`, the finished recording is also sent to the batch engine (STT_URL), which is slower but more
  * accurate; if it hears something different, its text is passed on as a correction of the streamed one.
  */
-export function StreamingMicButton({ url, refine, onTranscript, onError }: MicProps & { url: string; refine: boolean }) {
+export function StreamingMicButton({ url, refine, model, onTranscript, onError }: MicProps & { url: string; refine: boolean }) {
   async function correct(streamed: string, clip: Blob) {
     const body = new FormData();
     body.set("audio", clip);
+    if (model) body.set("model", model);
     try {
       const outcome = await transcribeAudio(body);
       // A second engine that fails or hears nothing is not worth a message: the streamed text already stands.
