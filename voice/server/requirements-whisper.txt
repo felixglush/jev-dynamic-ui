@@ -1,0 +1,8 @@
+faster-whisper
+# faster-whisper decodes audio files with PyAV and passes it an option that PyAV 17 and newer no longer accept
+av>=14,<17
+fastapi
+uvicorn
+python-multipart
+# only for the tests (fastapi's TestClient)
+httpx

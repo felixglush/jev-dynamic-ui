@@ -105,3 +105,31 @@ npm run dev                  # http://localhost:3000
 `use-tuned.sh` downloads the fine-tuned model (about 380 MB) from the public [Hugging Face repo](https://huggingface.co/felixglush156/LFM2.5-350M-banking-extractor-GGUF) and registers it in Ollama as `lfm25-350m-sft`.
 
 Needs Node 22+ and [Ollama](https://ollama.com).
+
+### Run voice mode (experimental)
+
+The mic button streams your voice to a local speech server, and the form opens and fills in while you are still talking. It needs Python 3 and a 4-core CPU or better (no GPU); the first start downloads the speech models (about 310 MB, and 460 MB for the optional Whisper second pass).
+
+```bash
+# 1. Python packages for both servers
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r voice/server/requirements.txt -r voice/server/requirements-whisper.txt
+
+# 2. Live speech server (streaming Zipformer, port 8765)
+voice/server/download-model.sh
+python voice/server/sherpa_server.py --model-dir voice/models/sherpa-onnx-streaming-zipformer-en-2023-06-26
+
+# 3. Second pass (optional but much more accurate; Whisper small.en, port 8000), in another terminal
+python voice/server/whisper_server.py            # add --port 8001 if something else uses 8000
+```
+
+Then add these to `.env.local` and restart `npm run dev`:
+
+```
+STT_STREAM_URL=ws://127.0.0.1:8765   # turns on streaming
+STT_REFINE=on                        # when you stop, Whisper re-hears the recording and corrects the form
+STT_URL=http://127.0.0.1:8000        # where the Whisper server is (match --port)
+STT_LIVE_TEXT=off                    # optional: keep the message bar empty while you speak; the form still moves
+```
+
+Allow the microphone in the browser (`localhost` is allowed), press the mic and say "send fifty dollars to Sam for dinner". The e-Transfer form should open before you finish the sentence. Without `STT_REFINE=on` only the streaming server is used, which is faster to start but makes more mistakes on real voices. Optional hotwords for the streaming server, and how it all fits together, are in [AGENTS.md](AGENTS.md#voice-mode-experimental).
