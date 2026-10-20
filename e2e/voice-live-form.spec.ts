@@ -64,3 +64,26 @@ test("the final text shows the latest answer even when it matches the last parti
   await expect(bar(page)).toHaveValue("send 500 dollars to sam");
   await expect(page.getByLabel("Amount (CAD)")).toHaveValue("500.00");
 });
+
+test("choosing Live only turns the second pass off without a restart", async ({ page }) => {
+  await batch(page, { texts: ["Send $75 to Sam for dinner"] });
+  await say(page, { texts: ["SEND FIFTY", "SEND FIFTY DOLLARS TO SAM", "SEND FIFTY DOLLARS TO SAM FOR DINNER"] });
+  await page.getByLabel("Speech model").selectOption({ label: "Live only" });
+  await page.getByRole("button", { name: "Record a message" }).click();
+  await expect(page.getByLabel("Amount (CAD)")).toHaveValue("50.00");
+  await page.getByRole("button", { name: "Stop recording" }).click();
+
+  await expect(bar(page)).toHaveValue("send 50 dollars to sam for dinner");
+  await page.waitForTimeout(500); // long enough for a second pass to have answered, had there been one
+  await expect(bar(page)).toHaveValue("send 50 dollars to sam for dinner");
+  expect((await (await page.request.get(`${FAKE_STT}/__seen`)).json()).models).toEqual([]);
+
+  // Picking a model turns it back on, and that model is the one asked.
+  await say(page, { texts: ["SEND FIFTY", "SEND FIFTY DOLLARS TO SAM", "SEND FIFTY DOLLARS TO SAM FOR DINNER"] });
+  await page.getByLabel("Speech model").selectOption({ label: "Accurate model" });
+  await page.getByRole("button", { name: "Record a message" }).click();
+  await expect(page.getByLabel("Amount (CAD)")).toHaveValue("50.00");
+  await page.getByRole("button", { name: "Stop recording" }).click();
+  await expect(bar(page)).toHaveValue("Send $75 to Sam for dinner");
+  expect((await (await page.request.get(`${FAKE_STT}/__seen`)).json()).models).toEqual(["accurate"]);
+});

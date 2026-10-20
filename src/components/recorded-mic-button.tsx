@@ -13,6 +13,8 @@ export type MicProps = {
    */
   onTranscript: (text: string, final: boolean, replaces?: string) => void;
   onError: (message: string) => void;
+  /** The speech model the customer picked, or undefined for the server's default. */
+  model?: string;
 };
 
 /**
@@ -22,13 +24,14 @@ export type MicProps = {
  * Only one partial request is out at a time, and only the newest audio waits behind it, so a slow engine falls
  * behind gracefully instead of queueing up. Once stop is pressed the final transcription replaces every partial.
  */
-export function RecordedMicButton({ onTranscript, onError }: MicProps) {
+export function RecordedMicButton({ onTranscript, onError, model }: MicProps) {
   const [transcribing, setTranscribing] = useState(false);
   const partial = useRef({ busy: false, waiting: null as Blob | null, stopped: false });
 
   async function transcribe(clip: Blob): Promise<string | null> {
     const body = new FormData();
     body.set("audio", clip);
+    if (model) body.set("model", model);
     try {
       const outcome = await transcribeAudio(body);
       if (outcome.ok) return outcome.text;

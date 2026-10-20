@@ -65,7 +65,7 @@ const showMisses = process.argv.includes("--misses");
 const misses: string[] = [];
 for (const file of process.argv.slice(2).filter((arg) => !arg.startsWith("--"))) {
   const data = JSON.parse(readFileSync(file, "utf8")) as Record<string, Run> | Run;
-  const runs: [string, Run][] = "hyps" in data ? [[basename(file, ".json"), data]] : Object.entries(data);
+  const runs: [string, Run][] = "hyps" in data ? [[basename(file, ".json"), data as Run]] : Object.entries(data as Record<string, Run>);
   for (const [name, run] of runs) {
     let errors = 0, words = 0, hitCount = 0, total = 0, exact = 0;
     clips.forEach((clip, i) => {
