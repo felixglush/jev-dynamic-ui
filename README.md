@@ -138,6 +138,20 @@ uv pip install -r voice/server/requirements-qwen.txt         # Qwen3-ASR (the qw
 LFM_AUDIO_URL=http://127.0.0.1:8791 python voice/server/whisper_server.py   # LFM2.5-Audio: point it at a running llama-liquid-audio-server (see voice/bench/run_lfm_audio.py)
 ```
 
+Sizes, measured on a 4-core CPU after transcribing one clip (the download is the model files in Hugging Face's cache; memory is the server process's peak). The server keeps `--keep-loaded` models in memory at once (2 by default), so budget for the two biggest you switch between, or lower it to 1 on a small machine.
+
+| Model | Download | Memory when loaded |
+| --- | --- | --- |
+| Live speech server (streaming Zipformer, always on) | about 310 MB | not measured |
+| `whisper-tiny.en` | 75 MB | 293 MB |
+| `whisper-base.en` | 141 MB | 374 MB |
+| `whisper-small.en` (default) | 464 MB | 787 MB |
+| `distil-small.en` | 321 MB | 617 MB |
+| `whisper-medium.en` | about 1.5 GB (not measured) | not measured |
+| `distil-medium.en` | about 0.8 GB (not measured) | not measured |
+| `qwen3-asr-0.6b` | 1.8 GB, plus about 1 GB of PyTorch | **6.0 GB** (it runs in 32-bit floats on PyTorch) |
+| `lfm2.5-audio` | 1.8 GB (model 1.25 GB, audio encoder 293 MB, vocoder 206 MB, tokenizer 77 MB) | 1.9 GB, in the separate `llama-liquid-audio-server` |
+
 Then add these to `.env.local` and restart `npm run dev`:
 
 ```
