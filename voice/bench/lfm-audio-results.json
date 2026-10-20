@@ -1,0 +1,29 @@
+{
+ "lfm2.5-audio-1.5b-q8_0": {
+  "median_s": 1.083742827500032,
+  "max_s": 1.9938663479999832,
+  "first_token_median_s": 0.728253220000056,
+  "hyps": [
+   "Send $50 to Sam for dinner last night.",
+   "Add my sister Priya at Priya.k at example.com so I can e-transfer her.",
+   "Pay $250 to ward my MasterCard from checking.",
+   "Start an FHSA.",
+   "Pay my water bill $48 from savings next Friday.",
+   "Add my gym membership good life fitness account number 20194455.",
+   "Please block my debit card. I think it was stolen.",
+   "Request money from Jordan.",
+   "Turn on auto-deposit for my phone number 4165550199 into checking.",
+   "Acme Corp charged to be 1199 but my plan is 999.",
+   "Send Mom two hundred bucks on Friday.",
+   "Transfer $500 to Sam.",
+   "E transfer twenty dollars to Bob.",
+   "Dispute $1,299 from Best Buy on March 4.",
+   "I want to save two grand this month.",
+   "Pay the statement balance on my visa.",
+   "Open a new tax-free savings account.",
+   "Cancel the transfer I sent to Jordan.",
+   "Update my email address to alex at acme.com.",
+   "How much is in my checking account?"
+  ]
+ }
+}

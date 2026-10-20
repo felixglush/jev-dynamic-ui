@@ -1,11 +1,12 @@
 """Times a streaming speech server the way a live microphone would: each clip is sent in 100 ms frames at real-time
 pace, and we note when the first text comes back and how long the final text takes after the last frame.
-usage: stream_bench.py CLIPS_TXT WAV16_DIR [WS_URL]   (default ws://127.0.0.1:8765)"""
+usage: stream_bench.py CLIPS_TXT WAV16_DIR [WS_URL] [OUT_JSON]   (defaults ws://127.0.0.1:8765, stream-results.json)"""
 import asyncio, glob, json, re, statistics, sys, time
 import jiwer, numpy as np, soundfile as sf, websockets
 
 clips, wavdir = sys.argv[1:3]
 url = sys.argv[3] if len(sys.argv) > 3 else "ws://127.0.0.1:8765"
+out_path = sys.argv[4] if len(sys.argv) > 4 else "stream-results.json"
 refs = [l.strip() for l in open(clips) if l.strip()]
 wavs = sorted(glob.glob(f"{wavdir}/*.wav"))
 norm = lambda s: re.sub(r"[^a-z0-9 ]", "", s.lower().replace("-", " ")).strip()
@@ -52,7 +53,7 @@ async def main():
            "first_text_median_s": statistics.median(firsts), "wer": wer, "hyps": hyps}
     print(f"{url}: first text {out['first_text_median_s']:.2f}s after speech starts; "
           f"final text {out['after_stop_median_s']*1000:.0f} ms median / {out['after_stop_max_s']*1000:.0f} ms max after stop; WER {wer:.1%}")
-    json.dump(out, open("stream-results.json", "w"), indent=1)
+    json.dump(out, open(out_path, "w"), indent=1)
 
 
 asyncio.run(main())

@@ -107,6 +107,8 @@ Speech-to-text is a strategy plus a small factory in `src/lib/stt/`, split by re
 
 **Text clean-up.** Streaming engines write capitals and words for everything, so `StreamingMicButton` runs the text through `normalizeSpoken` (`src/lib/stt/normalize.ts`, pure and English only) before it reaches Jev and the extractor: spelled-out amounts become digits ("two hundred and fifty" -> 250, "eleven ninety nine" -> 11.99), digit-by-digit runs become account or phone numbers, "alex at acme dot com" becomes an email, and ordinals next to a month become dates ("march fourth" -> "march 4th"). It leaves ambiguous words alone ("one of my accounts", "my first account"). A capitals-only engine gives no clue what is a name, so names come out lowercase.
 
+**Benchmark log.** `docs/voice-benchmarks.md` is the running log of speech-to-text runs (Whisper, Qwen3-ASR, LFM2.5-Audio, the streaming Zipformer), all scored the same way by `node voice/bench/score.mts`: add an entry whenever an engine, setting or clip set changes.
+
 `OpenAiCompatibleStt` speaks OpenAI's `/v1/audio/transcriptions`, so Whisper (faster-whisper-server, whisper.cpp) and Qwen3-ASR (vLLM) are a change of `STT_URL` and `STT_MODEL`. Tests use stand-ins (`e2e/fake-stt.mts`, Chromium's fake microphone), so they prove the wiring, not speech accuracy, and nothing has been tried against a real Whisper server yet. Model timings are in `voice/bench/README.md`.
 
 ## Dependency notes

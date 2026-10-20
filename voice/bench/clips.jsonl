@@ -1,0 +1,20 @@
+{"id": 1, "spoken": "send fifty dollars to sam for dinner last night", "written": "send $50 to sam for dinner last night", "entities": [["50"], ["sam"]]}
+{"id": 2, "spoken": "add my sister priya at priya dot k at example dot com so i can e-transfer her", "written": "add my sister priya at priya.k@example.com so i can e-transfer her", "entities": [["priya.k@example.com"], ["e transfer"]]}
+{"id": 3, "spoken": "pay two hundred and fifty dollars toward my mastercard from chequing", "written": "pay $250 toward my mastercard from chequing", "entities": [["250"], ["mastercard"], ["chequing"]]}
+{"id": 4, "spoken": "start an F H S A", "written": "start an fhsa", "entities": [["fhsa"]]}
+{"id": 5, "spoken": "pay my water bill forty eight dollars from savings next friday", "written": "pay my water bill $48 from savings next friday", "entities": [["48"], ["friday"]]}
+{"id": 6, "spoken": "add my gym membership good life fitness account number two zero one nine four four five five", "written": "add my gym membership good life fitness account number 20194455", "entities": [["good life fitness"], ["20194455"]]}
+{"id": 7, "spoken": "please block my debit card i think it was stolen", "written": "please block my debit card i think it was stolen", "entities": [["block"], ["debit"], ["stolen"]]}
+{"id": 8, "spoken": "request money from jordan dot k at example dot com two hundred dollars", "written": "request money from jordan.k@example.com $200", "entities": [["jordan.k@example.com"], ["200"]]}
+{"id": 9, "spoken": "turn on autodeposit for my phone number four one six five five five zero one nine nine into chequing", "written": "turn on autodeposit for my phone number 416-555-0199 into chequing", "entities": [["autodeposit", "auto deposit"], ["416 555 0199"], ["chequing"]]}
+{"id": 10, "spoken": "acme corp charged me eleven ninety nine but my plan is nine ninety nine", "written": "acme corp charged me 11.99 but my plan is 9.99", "entities": [["acme corp"], ["11.99"], ["9.99"]]}
+{"id": 11, "spoken": "send mom two hundred bucks on friday", "written": "send mom $200 on friday", "entities": [["mom"], ["200"], ["friday"]]}
+{"id": 12, "spoken": "transfer five hundred dollars to sam", "written": "transfer $500 to sam", "entities": [["500"], ["sam"]]}
+{"id": 13, "spoken": "e-transfer twenty dollars to bob", "written": "e-transfer $20 to bob", "entities": [["e transfer"], ["20"], ["bob"]]}
+{"id": 14, "spoken": "dispute one thousand two hundred ninety nine dollars from best buy on march fourth", "written": "dispute $1299 from best buy on march 4th", "entities": [["1299"], ["best buy"], ["march 4th", "march 4"]]}
+{"id": 15, "spoken": "i want to save two grand this month", "written": "i want to save 2 grand this month", "entities": [["2 grand", "2000"]]}
+{"id": 16, "spoken": "pay the statement balance on my visa", "written": "pay the statement balance on my visa", "entities": [["statement balance"], ["visa"]]}
+{"id": 17, "spoken": "open a new tax free savings account", "written": "open a new tax free savings account", "entities": [["tax free savings"]]}
+{"id": 18, "spoken": "cancel the e-transfer i sent to jordan", "written": "cancel the e-transfer i sent to jordan", "entities": [["e transfer"], ["jordan"]]}
+{"id": 19, "spoken": "update my email address to alex at acme dot com", "written": "update my email address to alex@acme.com", "entities": [["alex@acme.com"]]}
+{"id": 20, "spoken": "how much is in my chequing account", "written": "how much is in my chequing account", "entities": [["chequing"]]}
