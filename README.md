@@ -106,6 +106,14 @@ npm run dev                  # http://localhost:3000
 
 Needs Node 22+ and [Ollama](https://ollama.com).
 
+Settings, all in `.env.local` (see `.env.example`); only the API key is required:
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| `TYPESAFE_API_KEY` | none | Your TypeSafe key for Jev. Server-side only, never prefixed `NEXT_PUBLIC_`. |
+| `OLLAMA_URL` | `http://127.0.0.1:11434` | Where Ollama runs. |
+| `OLLAMA_MODEL` | `lfm25-350m-sft` | The extractor model in Ollama. Only use a model trained with shuffled key order (see [Final experiment result](#final-experiment-result)). |
+
 ### Run voice mode (experimental)
 
 The mic button streams your voice to a local speech server, and the form opens and fills in while you are still talking. It needs Python 3 and a 4-core CPU or better (no GPU); the first start downloads the speech models (about 310 MB, and 460 MB for the optional Whisper second pass).
@@ -126,7 +134,7 @@ python voice/server/whisper_server.py            # add --port 8001 if something 
 The second pass serves several models and the chat bar has a **Speech model** dropdown to switch between them without restarting anything: Whisper tiny, base, small, medium; Distil-Whisper small and medium; Qwen3-ASR 0.6B; LFM2.5-Audio. A model downloads and loads the first time you pick it (so that first recording is slower), and the server keeps the last two in memory. Qwen3-ASR and LFM2.5-Audio need a little more setup, and a model that can't run here is left out of the dropdown:
 
 ```bash
-uv pip install -r voice/server/requirements-qwen.txt         # Qwen3-ASR (pulls in PyTorch, about 1 GB)
+uv pip install -r voice/server/requirements-qwen.txt         # Qwen3-ASR (the qwen-asr package runs it on PyTorch, about 1 GB)
 LFM_AUDIO_URL=http://127.0.0.1:8791 python voice/server/whisper_server.py   # LFM2.5-Audio: point it at a running llama-liquid-audio-server (see voice/bench/run_lfm_audio.py)
 ```
 
@@ -138,5 +146,31 @@ STT_REFINE=on                        # when you stop, the chosen model re-hears 
 STT_URL=http://127.0.0.1:8000        # where the Whisper server is (match --port)
 STT_LIVE_TEXT=off                    # optional: keep the message bar empty while you speak; the form still moves
 ```
+
+All voice settings. The app reads the first group from `.env.local`; the servers take the second and third as command-line options.
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| `STT_STREAM_URL` | none | The live speech server's address. Unset means the mic records first, then transcribes. |
+| `STT_REFINE` | off | `on` starts the dropdown on a Whisper-style model instead of **Live only**. |
+| `STT_LIVE_TEXT` | on | `off` keeps the message bar empty while you speak. |
+| `STT_URL` | `http://127.0.0.1:8000` | The second-pass server, and where the dropdown's model list comes from. |
+| `STT_MODEL` | `Systran/faster-whisper-small.en` | The model asked for when the dropdown isn't shown (a server that lists none). |
+| `STT_PROVIDER` | `openai-compatible` | The client for the second pass. Only one exists so far. |
+
+| `whisper_server.py` option | Default | What it does |
+| --- | --- | --- |
+| `--model` or `WHISPER_MODEL` | `whisper-small.en` | The model used when a request names none. One of `whisper-tiny.en`, `whisper-base.en`, `whisper-small.en`, `whisper-medium.en`, `distil-small.en`, `distil-medium.en`, `qwen3-asr-0.6b`, `lfm2.5-audio`. |
+| `--keep-loaded` | 2 | How many models stay in memory; the least recently used is dropped. |
+| `--threads` | 4 | CPU threads per model. |
+| `--host`, `--port` | `127.0.0.1`, 8000 | Where it listens. |
+| `LFM_AUDIO_URL` | none | The `llama-liquid-audio-server` that LFM2.5-Audio runs on. Without it that model is hidden. |
+
+| `sherpa_server.py` option | Default | What it does |
+| --- | --- | --- |
+| `--model-dir` | required | The streaming Zipformer model folder. |
+| `--host`, `--port` | `127.0.0.1`, 8765 | Where it listens. |
+| `--threads`, `--workers` | 4, 2 | CPU threads per model, and how many connections decode at once. |
+| `--hotwords-file`, `--hotwords-score` | none, 1.5 | Words to favour (prepare them with `voice/server/prepare_hotwords.py`) and how strongly. |
 
 Allow the microphone in the browser (`localhost` is allowed), press the mic and say "send fifty dollars to Sam for dinner". The e-Transfer form should open before you finish the sentence. Without `STT_REFINE=on` only the streaming server is used, which is faster to start but makes more mistakes on real voices. Optional hotwords for the streaming server, and how it all fits together, are in [AGENTS.md](AGENTS.md#voice-mode-experimental).
