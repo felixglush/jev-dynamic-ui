@@ -1,9 +1,9 @@
 /**
- * Builds the app once and runs it three times, on three ports, differing only in the speech settings: the first has
- * no streaming server (the mic button records, then transcribes), the second has STT_STREAM_URL (the mic button
- * streams), the third streams too but keeps the text out of the bar while speaking and has the batch engine
- * re-hear the recording at the end (STT_LIVE_TEXT=off, STT_REFINE=on). Playwright starts this as one web server and
- * stops it by signal, which stops all of them.
+ * Builds the app once and runs it three times, on three ports, differing in their settings: the first has no
+ * streaming server (the mic button records, then transcribes), the second has STT_STREAM_URL (the mic button streams)
+ * and AGENT_ENABLED=true (the /agent page), the third streams too but keeps the text out of the bar while speaking
+ * and has the batch engine re-hear the recording at the end (STT_LIVE_TEXT=off, STT_REFINE=on). Playwright starts
+ * this as one web server and stops it by signal, which stops all of them.
  *   node e2e/start-apps.mts <port> <streaming port> <streaming server url> <live form port>
  */
 import { spawn, spawnSync } from "node:child_process";
@@ -17,7 +17,7 @@ const start = (appPort: string, env: Record<string, string>) =>
   spawn("npm", ["run", "start", "--", "-p", appPort], { stdio: "inherit", env: { ...process.env, ...env } });
 const apps = [
   start(port!, {}),
-  start(streamingPort!, { STT_STREAM_URL: streamUrl! }),
+  start(streamingPort!, { STT_STREAM_URL: streamUrl!, AGENT_ENABLED: "true" }),
   start(liveFormPort!, { STT_STREAM_URL: streamUrl!, STT_LIVE_TEXT: "off", STT_REFINE: "on" }),
 ];
 
