@@ -1,17 +1,19 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { ArrowUp, Check, Loader2 } from "lucide-react";
 
 import { classifyMessage } from "@/app/actions";
-import { getSpeechConfig, type SpeechConfig } from "@/app/voice-actions";
+import { getSpeechConfig, getSttModels, type SpeechConfig } from "@/app/voice-actions";
 import { ActionHostContext, type ActionHost } from "@/components/forms/action-form";
 import { ActionPanel } from "@/components/forms/action-panel";
 import { MicButton } from "@/components/mic-button";
+import { LIVE_ONLY, SpeechModelPicker } from "@/components/speech-model-picker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { LOW_CONFIDENCE, MAX_MESSAGE_LENGTH } from "@/lib/jev/catalog";
 import { summarize } from "@/lib/summarize";
+import type { SttModels } from "@/lib/stt/types";
 import type { ClassifyOutcome, ClassifyResult } from "@/lib/jev/types";
 import { settle } from "@/lib/voice/settle";
 
@@ -53,6 +55,9 @@ export function Chat() {
   const [done, setDone] = useState("");
   const [voiceError, setVoiceError] = useState("");
   const [speech, setSpeech] = useState<SpeechConfig>();
+  // The speech models the server offers, and the one picked (LIVE_ONLY: no second pass, streaming only).
+  const [sttModels, setSttModels] = useState<SttModels>({ default: null, models: [] });
+  const [sttChoice, setSttChoice] = useState<string>();
   const [, startTransition] = useTransition();
 
   const composerRef = useRef<HTMLInputElement>(null);
@@ -202,7 +207,34 @@ export function Chat() {
 
   useEffect(() => {
     getSpeechConfig().then(setSpeech, () => setSpeech({ streamUrl: null, liveText: true, refine: false }));
+    getSttModels().then(setSttModels, () => {});
   }, []);
+
+  // What the dropdown starts on: the last pick if the server still offers it, else what the settings say.
+  const pickedModel = useMemo(() => {
+    if (!speech) return undefined;
+    const streaming = speech.streamUrl !== null;
+    const offered = (id: string | null | undefined) => !!id && (sttModels.models.some((m) => m.id === id) || (streaming && id === LIVE_ONLY));
+    if (offered(sttChoice)) return sttChoice;
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem("stt-model");
+    } catch {
+      // Storage can be blocked; the pick then just isn't remembered.
+    }
+    if (offered(saved)) return saved!;
+    return streaming && !speech.refine ? LIVE_ONLY : (sttModels.default ?? undefined);
+  }, [speech, sttModels, sttChoice]);
+  const liveOnly = pickedModel === LIVE_ONLY;
+
+  function chooseModel(id: string) {
+    setSttChoice(id);
+    try {
+      localStorage.setItem("stt-model", id);
+    } catch {
+      // Not remembered, still used.
+    }
+  }
 
   // Stop a pending debounce if the page goes away.
   useEffect(() => () => clearTimeout(timer.current), []);
@@ -295,7 +327,20 @@ export function Chat() {
             onChange={(event) => onType(event.target.value, /^\s$/.test((event.nativeEvent as InputEvent).data ?? ""))}
             className="h-10 min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-muted-foreground"
           />
-          <MicButton speech={speech} onTranscript={onTranscript} onError={setVoiceError} />
+          {speech && (speech.streamUrl || sttModels.models.length > 1) && (
+            <SpeechModelPicker
+              models={sttModels.models}
+              liveOption={speech.streamUrl !== null}
+              value={pickedModel}
+              onChange={chooseModel}
+            />
+          )}
+          <MicButton
+            speech={speech && { ...speech, refine: speech.streamUrl ? !liveOnly && (speech.refine || pickedModel !== undefined) : false }}
+            model={liveOnly ? undefined : pickedModel}
+            onTranscript={onTranscript}
+            onError={setVoiceError}
+          />
           <Button type="submit" size="icon" aria-label="Send" className="size-10 rounded-full">
             <ArrowUp />
           </Button>

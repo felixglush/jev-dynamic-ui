@@ -53,3 +53,19 @@ test("the text and the form appear while still speaking, then the final text rep
   await expect(page.getByLabel("Message", { exact: true })).toHaveValue("Send $75 to Sam for dinner last night");
   await expect(page.getByLabel("Amount (CAD)")).toHaveValue("75.00");
 });
+
+test("the speech model dropdown lists what the server can run and the pick goes with the recording", async ({ page }) => {
+  await say(page, { texts: ["Send $50 to Sam for dinner last night"] });
+  const picker = page.getByLabel("Speech model");
+  await expect(picker.getByRole("option")).toHaveText(["Fast model", "Accurate model"]); // the unavailable one is left out
+  await expect(picker).toHaveValue("fast");
+
+  await picker.selectOption({ label: "Accurate model" });
+  await speak(page);
+  await expect(page.getByLabel("Message", { exact: true })).toHaveValue("Send $50 to Sam for dinner last night");
+  expect((await (await page.request.get(`${FAKE_STT}/__seen`)).json()).models.at(-1)).toBe("accurate");
+
+  // The pick is remembered.
+  await page.reload();
+  await expect(page.getByLabel("Speech model")).toHaveValue("accurate");
+});

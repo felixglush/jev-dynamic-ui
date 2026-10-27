@@ -1,0 +1,2 @@
+# Only for the Qwen3-ASR model in whisper_server.py (it pulls in PyTorch, which is large). Install after requirements-whisper.txt.
+qwen-asr

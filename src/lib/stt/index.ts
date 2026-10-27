@@ -16,7 +16,9 @@ const PROVIDERS: Record<string, (env: SttEnv) => SttProvider> = {
     new OpenAiCompatibleStt(env.STT_URL ?? "http://127.0.0.1:8000", env.STT_MODEL ?? "Systran/faster-whisper-small.en"),
 };
 
-export function createStt(env: SttEnv = process.env): SttProvider {
+/** `model`, when given, overrides STT_MODEL: the customer picked it in the chat's dropdown. */
+export function createStt(env: SttEnv = process.env, model?: string): SttProvider {
+  if (model) env = { ...env, STT_MODEL: model };
   const kind = env.STT_PROVIDER ?? "openai-compatible";
   const build = PROVIDERS[kind];
   if (!build) throw new Error(`Unknown STT_PROVIDER "${kind}". Known: ${Object.keys(PROVIDERS).join(", ")}`);

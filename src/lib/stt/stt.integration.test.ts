@@ -7,6 +7,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createStt } from "./index";
+import { listSttModels } from "./models";
 
 let server: Server;
 let url: string;
@@ -56,6 +57,13 @@ describe("createStt", () => {
     expect(requests[0]!.body).toContain("Qwen/Qwen3-ASR-0.6B");
   });
 
+  it("lets the customer's pick override the configured model", async () => {
+    const stt = createStt({ STT_URL: url, STT_MODEL: "small.en" }, "distil-small.en");
+    await stt.transcribe(clip);
+    expect(stt.name).toBe("openai-compatible:distil-small.en");
+    expect(requests[0]!.body).toMatch(/name="model"\r\n\r\ndistil-small\.en\r\n/);
+  });
+
   it("rejects an unknown provider with the known names", () => {
     expect(() => createStt({ STT_PROVIDER: "nope" })).toThrow(/Unknown STT_PROVIDER "nope".*openai-compatible/);
   });
@@ -66,5 +74,24 @@ describe("createStt", () => {
     await expect(stt.transcribe(clip)).rejects.toThrow(/500/);
     reply = { status: 200, json: { nothing: true } };
     await expect(stt.transcribe(clip)).rejects.toThrow(/no text/);
+  });
+});
+
+describe("listSttModels", () => {
+  it("reads the server's models, leaving out the ones that can't run, and its default", async () => {
+    reply = {
+      status: 200,
+      json: { default: "b", data: [{ id: "a", label: "Model A" }, { id: "b" }, { id: "c", label: "C", available: false }, { nope: 1 }] },
+    };
+    expect(await listSttModels({ STT_URL: url })).toEqual({ default: "b", models: [{ id: "a", label: "Model A" }, { id: "b", label: "b" }] });
+    expect(requests[0]!.path).toBe("/v1/models");
+  });
+
+  it("gives an empty list, not an error, when the server is down or says something else", async () => {
+    reply = { status: 500, json: {} };
+    expect((await listSttModels({ STT_URL: url })).models).toEqual([]);
+    reply = { status: 200, json: { data: "nothing" } };
+    expect((await listSttModels({ STT_URL: url })).models).toEqual([]);
+    expect((await listSttModels({ STT_URL: "http://127.0.0.1:1" })).models).toEqual([]);
   });
 });
