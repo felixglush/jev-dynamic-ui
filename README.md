@@ -47,7 +47,7 @@ Fourteen actions, one prebuilt form each. Defined in [`src/lib/jev/catalog.ts`](
 2. Generated synthetic training data with Opus 5.5.
 3. Human-validated a subset of the data - enough to identify key problems and annotate fixes.
 
-   ![The /annotate page on a fine-tuning example: the extractor's output, Correct / Fix it buttons, and the expected answer to edit](docs/annotate-example.png)
+   ![The /annotate page on one message: Jev picked the action and the account, the fine-tuned model read the recipient and amount, and the expected answer is editable](docs/annotate-example.png)
 
 4. Applied what that review taught to the rest of the data.
 5. Fine-tuned the student model (LFM2.5-350M) with supervised fine-tuning (SFT).
