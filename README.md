@@ -46,6 +46,9 @@ Fourteen actions, one prebuilt form each. Defined in [`src/lib/jev/catalog.ts`](
 1. Defined the action space: the 14 user actions and their fields in [`catalog.ts`](src/lib/jev/catalog.ts). This is inspired by typical functions in a banking app.
 2. Generated synthetic training data with Opus 5.5.
 3. Human-validated a subset of the data - enough to identify key problems and annotate fixes.
+
+   ![The /annotate page on one message: Jev picked the action and the account, the fine-tuned model read the recipient and amount, and the expected answer is editable](docs/annotate-example.png)
+
 4. Applied what that review taught to the rest of the data.
 5. Fine-tuned the student model (LFM2.5-350M) with supervised fine-tuning (SFT).
 
