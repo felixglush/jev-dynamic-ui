@@ -4,7 +4,7 @@ import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
-from modal_train import breakdowns, normalize, parse_answer, pass_rates, record_passes, report_patterns, score, select_train  # noqa: E402
+from modal_train import breakdowns, normalize, precision_recall, parse_answer, pass_rates, record_passes, report_patterns, score, select_train  # noqa: E402
 
 LABEL = {"recipient": "Sam", "recipient_email": "", "amount": 50, "date": ""}
 
@@ -109,3 +109,16 @@ def test_evaluate_never_returns_test_failures():
         modal_train.generate_replies = original
     assert "examples" in result["val"] and "examples" not in result["test"]
     assert result["test"]["patterns"]["a"]["records"] == 1
+
+
+def test_precision_and_recall_count_a_wrong_value_against_both():
+    # stated: recipient Sam, amount 50. The model fills a blank email, gets the amount wrong and finds Sam.
+    result = score([row(json.dumps({"recipient": "Sam", "recipient_email": "sam@example.com", "amount": 60, "date": ""}))])
+    assert result["recall"] == 0.5  # 1 of 2 stated values right
+    assert result["precision"] == 1 / 3  # 3 values filled in, 1 right
+    assert result["fields"]["send_etransfer.amount"]["precision"] == 0
+    assert result["fields"]["send_etransfer.date"]["precision"] is None  # nothing stated, nothing filled
+
+
+def test_blanking_everything_has_no_precision_penalty_but_zero_recall():
+    assert precision_recall(dict(stated=4, missed=4, wrong=0, fabricated=0)) == {"precision": None, "recall": 0.0}

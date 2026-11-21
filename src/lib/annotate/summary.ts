@@ -56,6 +56,13 @@ export type Summary = {
   values: Tally;
   /** Action accuracy grouped by the expected action. */
   byExpectedAction: Array<{ action: string } & Tally>;
+  /**
+   * Per action, over reviewed rows. Recall: of the messages that should get this action, how many did.
+   * Precision: of the messages Jev sent to this action, how many belonged there. Includes "none".
+   */
+  perAction: Array<{ action: string; expected: number; predicted: number; correct: number; precision: number | null; recall: number | null }>;
+  /** Wrong-action pairs, most common first: what Jev picked instead of what was expected. */
+  confusions: Array<{ expected: string; predicted: string; count: number }>;
   /** Action accuracy split at the low-confidence threshold: is Jev's confidence telling the truth? */
   byConfidence: Array<{ label: string } & Tally>;
   /** Rows counted as right where the reviewer only reformatted a value or added a note. */
@@ -71,11 +78,20 @@ export function summarize({ predictions, annotations }: Dataset): Summary {
     exact: { total: 0, correct: 0 },
     values: { total: 0, correct: 0 },
     byExpectedAction: [],
+    perAction: [],
+    confusions: [],
     byConfidence: [],
     fixed: 0,
     mistakes: [],
   };
   const byAction = new Map<string, Tally>();
+  const perAction = new Map<string, { expected: number; predicted: number; correct: number }>();
+  const confusions = new Map<string, { expected: string; predicted: string; count: number }>();
+  const countFor = (action: string) => {
+    const entry = perAction.get(action) ?? { expected: 0, predicted: 0, correct: 0 };
+    perAction.set(action, entry);
+    return entry;
+  };
   const high = { label: `Confidence ≥ ${LOW_CONFIDENCE}`, total: 0, correct: 0 };
   const low = { label: `Confidence < ${LOW_CONFIDENCE}`, total: 0, correct: 0 };
 
@@ -100,6 +116,16 @@ export function summarize({ predictions, annotations }: Dataset): Summary {
       }
     }
 
+    countFor(annotation.expectedAction).expected++;
+    countFor(prediction.predictedAction).predicted++;
+    if (actionCorrect) countFor(annotation.expectedAction).correct++;
+    else {
+      const key = `${annotation.expectedAction}\u0000${prediction.predictedAction}`;
+      const pair = confusions.get(key) ?? { expected: annotation.expectedAction, predicted: prediction.predictedAction, count: 0 };
+      pair.count++;
+      confusions.set(key, pair);
+    }
+
     const tally = byAction.get(annotation.expectedAction) ?? { total: 0, correct: 0 };
     tally.total++;
     if (actionCorrect) tally.correct++;
@@ -111,6 +137,10 @@ export function summarize({ predictions, annotations }: Dataset): Summary {
   }
 
   summary.byExpectedAction = [...byAction].map(([action, tally]) => ({ action, ...tally }));
+  summary.perAction = [...perAction]
+    .map(([action, c]) => ({ action, ...c, precision: c.predicted ? c.correct / c.predicted : null, recall: c.expected ? c.correct / c.expected : null }))
+    .sort((a, b) => b.expected - a.expected || a.action.localeCompare(b.action));
+  summary.confusions = [...confusions.values()].sort((a, b) => b.count - a.count);
   summary.byConfidence = [high, low];
   return summary;
 }

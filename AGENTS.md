@@ -59,6 +59,7 @@ scripts/ollama/use-tuned.sh                 # downloads the fine-tuned Q8_0 GGUF
 scripts/ollama/setup.sh                     # alternative: the untuned base LFM2.5-230M as `lfm25-230m` (much less accurate)
 npm run extract:eval                        # data/sample-messages.txt -> extractions.csv, one row per field
 npm run latency                             # times Jev, the extractor and both together (needs TYPESAFE_API_KEY); prints the README's latency table
+npm run action:eval -- [file] [limit]         # scores Jev's action pick on a labeled sft file (default data/sft/test.jsonl): accuracy, precision and recall per action, mix-ups (needs TYPESAFE_API_KEY)
 ```
 
 The setup script downloads from huggingface.co directly because `ollama run hf.co/...` needs the `hf.co` host. Ollama's installer needs `zstd`. `OLLAMA_URL` and `OLLAMA_MODEL` override the defaults.
