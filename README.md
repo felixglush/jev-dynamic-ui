@@ -4,9 +4,15 @@ A chat UI that picks a prebuilt banking form and fills it in from what the custo
 
 ## Demo
 
-<a href="docs/jev-explainer.mp4"><img src="docs/images/jev-explainer-poster.png" alt="Explainer video: Jev picks the form, the fine-tuned model fills in the free-text fields" width="100%"></a>
+**The app:** typing a request opens the matching form, pre-filled ([video](docs/app-demo.mp4)).
 
-Click to play the video ([docs/jev-explainer.mp4](docs/jev-explainer.mp4)). The write-up, with the results, is in [docs/](docs/index.html).
+<a href="docs/app-demo.mp4"><img src="docs/images/app-demo-poster.png" alt="App demo: typing a request opens the matching form, pre-filled" width="100%"></a>
+
+**How it works:** Jev picks the form, the fine-tuned model fills in the free-text fields ([video](docs/jev-explainer.mp4)).
+
+<a href="docs/jev-explainer.mp4"><img src="docs/images/jev-explainer.gif" alt="Explainer: Jev picks the form, the fine-tuned model fills in the free-text fields" width="100%"></a>
+
+The write-up, with the results, is in [docs/](docs/index.html).
 
 ## Actions
 
