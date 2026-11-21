@@ -247,7 +247,7 @@ def evaluate(model, tokenizer, files: dict[str, str], other_orders: bool = False
         rows = generate_replies(model, tokenizer, load_records(files[split]))
         result[split] = score(rows)
         result[split].update(breakdowns(rows))
-        # Val is the dev set: keep its misses so they can be read. Test is sealed (docs/sft-experiments.md,
+        # Val is the dev set: keep its misses so they can be read. Test is sealed (notes/sft-experiments.md,
         # "Fair evaluation v2"): only counts leave this function, never the messages or which rows failed.
         if split == "val":
             result[split]["examples"] = [r for r in rows if not record_passes(r)][:40]

@@ -4,7 +4,7 @@ Paste everything below the line into a new chat in this repo.
 
 ---
 
-You are continuing work on the SFT dataset for the field extractor in this repo (`/Users/felixg/dev/jev-dynamic-ui`, branch `claude/sft-dataset-gbz8y4`). Read `AGENTS.md`, `docs/sft-dataset.md` and `docs/sft-experiments.md` first. The experiment log is the record of what has been tried; **every result and decision from this task goes into it** (see "Logging" below).
+You are continuing work on the SFT dataset for the field extractor in this repo (`/Users/felixg/dev/jev-dynamic-ui`, branch `claude/sft-dataset-gbz8y4`). Read `AGENTS.md`, `notes/sft-dataset.md` and `notes/sft-experiments.md` first. The experiment log is the record of what has been tried; **every result and decision from this task goes into it** (see "Logging" below).
 
 ## Where things stand
 
@@ -34,7 +34,7 @@ Evaluation is not fair yet:
    - lowercase names, and a name written next to an email (`put dave at dave99@gmail.com`)
    - `today`/`tonight` kept as the date
    - cancel rows where only an email is given (recipient stays blank)
-   Follow the labeling rules in `docs/sft-dataset.md` section 2.
+   Follow the labeling rules in `notes/sft-dataset.md` section 2.
 5. **Version the sets.** Record which version each row belongs to (`v1` = current files, `v2` = after this change) so scores are only compared within a version. The build should still write `val.jsonl` and `test.jsonl` for the current version; keep the v1 files under `data/sft/v1/` for reference.
 6. **Per-pattern report.** Extend `training/modal_train.py` to report pass rate per `meta.pattern` (and the overall numbers), keeping `training/test_scoring.py` passing and adding tests for the new scoring code (`python3 -m pytest training` needs `uv run --with pytest`).
 7. **Re-score on v2** the base model, Run 2's saved weights (add a score-only stage that loads a saved model from the volume), and a retrain of Run 1's recipe (the 449 train rows without `trainOnly`, same settings, seed 0). Compare only within v2.
@@ -50,7 +50,7 @@ Evaluation is not fair yet:
 
 ## Logging (required)
 
-Update `docs/sft-experiments.md` as you go, not at the end:
+Update `notes/sft-experiments.md` as you go, not at the end:
 
 - A "Fair evaluation v2" section with the decision (val dev, test sealed, versions), what changed in the data and code, how many new rows per pattern and split, and the commit hashes.
 - A result table for each model re-scored on v2 (base, Run 1 recipe, Run 2, Run 3), overall and per pattern, with the caveats above.

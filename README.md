@@ -4,9 +4,9 @@ A chat UI that picks a prebuilt banking form and fills it in from what the custo
 
 ## Demo
 
-<a href="docs/demo.mp4"><img src="docs/demo.gif" alt="Demo: typing a request opens the matching form, pre-filled" width="100%"></a>
+<a href="docs/jev-explainer.mp4"><img src="docs/images/jev-explainer-poster.png" alt="Explainer video: Jev picks the form, the fine-tuned model fills in the free-text fields" width="100%"></a>
 
-Click for the full-quality video ([docs/demo.mp4](docs/demo.mp4)).
+Click to play the video ([docs/jev-explainer.mp4](docs/jev-explainer.mp4)). The write-up, with the results, is in [docs/](docs/index.html).
 
 ## Actions
 
@@ -47,12 +47,12 @@ Fourteen actions, one prebuilt form each. Defined in [`src/lib/jev/catalog.ts`](
 2. Generated synthetic training data with Opus 5.5.
 3. Human-validated a subset of the data - enough to identify key problems and annotate fixes.
 
-   ![The /annotate page on one message: Jev picked the action and the account, the fine-tuned model read the recipient and amount, and the expected answer is editable](docs/annotate-example.png)
+   ![The /annotate page on one message: Jev picked the action and the account, the fine-tuned model read the recipient and amount, and the expected answer is editable](docs/images/annotate-example.png)
 
 4. Applied what that review taught to the rest of the data.
 5. Fine-tuned the student model (LFM2.5-350M) with supervised fine-tuning (SFT).
 
-Details are in [`docs/sft-dataset.md`](docs/sft-dataset.md) and [`docs/sft-experiments.md`](docs/sft-experiments.md).
+Details are in [`notes/sft-dataset.md`](notes/sft-dataset.md) and [`notes/sft-experiments.md`](notes/sft-experiments.md).
 
 ## Final experiment result
 
@@ -70,7 +70,7 @@ Percentages are the share of messages where the model’s JSON output matched th
 Caveats: 
 - about 62 training rows were reviewed by me and the rest were approved/edited by Claude given my annotations.
 - the fine tuned model needs real production messages from users. Initial model trainings revealed the dataset was not sufficiently varied for all possible actions and ways of describing them. Additional examples were added to both the training set and validation/test to ensure the model is improving. The test set was never trained on, but it was scored while hill climbing the eval. This result is that compared to the base Liquid FM model, the fine-tuned model behaves better (e.g. doesn't hallucinate values into the structured output when no value is found in the query) but a fair evaluation requires real production data to create an entirely new, non-synthetic dataset.
-- full method is in [`docs/sft-experiments.md`](docs/sft-experiments.md).
+- full method is in [`notes/sft-experiments.md`](notes/sft-experiments.md).
 
 The stress test is a subset of harder examples. They cover typos (“sned 50 to sam”), accented names, odd amounts (“two grand”, “$1,234,567.89”), several numbers in one message, negation (“don’t send $50”), prompt injection, long polite messages, and other non-banking text.
 

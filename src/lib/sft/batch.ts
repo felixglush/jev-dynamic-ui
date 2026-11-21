@@ -1,7 +1,7 @@
 /**
  * Read a batch of labeled messages (the text format `npm run sft:add` takes) into typed examples and
  * check their structure. Whether a value is really in the message is a labeling rule
- * (docs/sft-dataset.md), checked by the person who reviews the rows on /annotate.
+ * (notes/sft-dataset.md), checked by the person who reviews the rows on /annotate.
  *
  * File format, one example per line:  `message => field=value; field=value`
  * Only the fields the message states are listed. Everything else is blank in the training target.

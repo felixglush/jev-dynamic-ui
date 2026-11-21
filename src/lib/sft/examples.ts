@@ -18,7 +18,7 @@
  *   kind      what kind of example it is (typo, accented-name, worded-number...; see kinds.ts). Editable in
  *             review and independent of `pattern`, which stays frozen for evaluation
  *   version   which evaluation set the row was added for: "v1" (the default when absent), "v2", "v3", "v4" or "v5".
- *             Scores are only compared within one version (docs/sft-experiments.md, "Fair evaluation v2")
+ *             Scores are only compared within one version (notes/sft-experiments.md, "Fair evaluation v2")
  *   retired   the first version that no longer contains the row (a bad example); older versions keep it
  *
  * Labels were written by Claude, so nothing counts until a person approves it on /annotate, which edits
