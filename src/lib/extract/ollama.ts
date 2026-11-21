@@ -67,6 +67,8 @@ export function schemaFor(action: keyof typeof CATALOG) {
 export async function extractFields(
   action: keyof typeof CATALOG,
   message: string,
+  /** Aborts the request (the customer typed something newer), which frees Ollama for the next one. */
+  signal?: AbortSignal,
 ): Promise<Record<string, ExtractedField>> {
   const params = freeTextParams(action);
   if (params.length === 0) return {};
@@ -80,7 +82,7 @@ export async function extractFields(
   const response = await fetch(`${OLLAMA_URL}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(TIMEOUT_MS)]) : AbortSignal.timeout(TIMEOUT_MS),
     body: JSON.stringify({
       model: OLLAMA_MODEL,
       stream: false,

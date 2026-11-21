@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { ArrowUp, Check, Loader2 } from "lucide-react";
 
-import { classifyMessage } from "@/app/actions";
 import { getSpeechConfig, getSttModels, type SpeechConfig } from "@/app/voice-actions";
 import { ActionHostContext, type ActionHost } from "@/components/forms/action-form";
 import { ActionPanel } from "@/components/forms/action-panel";
@@ -45,6 +44,17 @@ const CLOSE_MS = 280;
 const CONFIRM_MS = 150;
 
 // Shown when the request itself fails (offline, server restarted), as opposed to Jev failing.
+/** Asks the server for a prediction. A plain fetch, so a newer question can abort it. */
+async function classifyMessage(message: string, sent: boolean, guess?: string, signal?: AbortSignal): Promise<ClassifyOutcome> {
+  const response = await fetch("/api/classify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message, sent, guess }),
+    signal,
+  });
+  return (await response.json()) as ClassifyOutcome;
+}
+
 const NETWORK_ERROR: ClassifyOutcome = {
   ok: false,
   error: "Couldn’t reach the server. Check your connection and try again.",
@@ -69,6 +79,10 @@ export function Chat() {
   // Each question to Jev gets a number. Only the newest one's answer is used, so a slow reply to
   // something typed earlier can never overwrite the card for what is typed now.
   const latestId = useRef(0);
+  // The request for the newest text. Typing or dismissing aborts it, so the server stops work on text nobody will see.
+  const inflight = useRef<AbortController | null>(null);
+  // The action the card shows now; sent along as a guess so the extractor can start before Jev has answered.
+  const shownAction = useRef<string | undefined>(undefined);
   const lastText = useRef("");
   // The text the card's current form was made from, so a form for older text is never taken for this text's.
   const shownText = useRef("");
@@ -107,12 +121,18 @@ export function Chat() {
     const id = ++latestId.current;
     lastText.current = text;
     if (speaking) speakingBusy.current = true;
+    // Speech keeps one question out at a time; typing cancels the older question for a newer one.
+    const controller = speaking ? undefined : new AbortController();
+    if (controller) {
+      inflight.current?.abort();
+      inflight.current = controller;
+    }
 
     // The server action runs on the server; we just await its (plain data) answer.
     startTransition(async () => {
       let answer: ClassifyOutcome;
       try {
-        answer = await classifyMessage(text, explicit);
+        answer = await classifyMessage(text, explicit, shownAction.current, controller?.signal);
       } catch {
         answer = NETWORK_ERROR;
       }
@@ -139,6 +159,7 @@ export function Chat() {
         shownResult.current = answer.ok ? answer.result : null;
       }
       shownText.current = text;
+      shownAction.current = answer.ok ? (answer.result.action ?? undefined) : undefined;
       setOutcome(answer);
       setOpen(true);
     });
@@ -147,6 +168,8 @@ export function Chat() {
   function dismiss() {
     clearTimeout(timer.current);
     latestId.current++; // anything still in flight is now ignored
+    inflight.current?.abort();
+    shownAction.current = undefined;
     lastText.current = "";
     wantFocus.current = false;
     shownResult.current = lastResult.current = null;
@@ -162,6 +185,7 @@ export function Chat() {
     clearTimeout(timer.current);
     // Whatever is still in flight was asked about older text, so its answer must not be shown.
     latestId.current++;
+    inflight.current?.abort();
     lastText.current = "";
     // A Return pressed for the older text no longer applies to this text.
     wantFocus.current = false;

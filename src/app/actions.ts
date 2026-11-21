@@ -1,45 +1,13 @@
 "use server";
 
-import { TypeSafeError } from "@typesafe-ai/sdk";
-
-import { MAX_MESSAGE_LENGTH } from "@/lib/jev/catalog";
-import { ExtractorDownError, withExtractedFields } from "@/lib/extract/apply";
-import { logPrediction } from "@/lib/annotate/log";
-import { classify } from "@/lib/jev/classify";
+import { predictMessage } from "@/lib/jev/predict";
 import type { ClassifyOutcome } from "@/lib/jev/types";
 
 /**
- * Server Action: runs on the server when the chat form is submitted, so the API key never leaves it.
- *
- * Server Actions are public POST endpoints, so treat the argument as untrusted input and validate it
- * even though our own form is the only caller we expect. `sent` is true when the customer pressed Return. Add authentication here before deploying.
+ * Server Action kept for callers that don't need to cancel: runs a prediction on the server so the API key never
+ * leaves it. The chat itself uses the abortable route in app/api/classify/route.ts. Server Actions are public POST
+ * endpoints, so the argument is untrusted. Add authentication here before deploying.
  */
 export async function classifyMessage(message: string, sent = false): Promise<ClassifyOutcome> {
-  if (typeof message !== "string") return { ok: false, error: "Message must be text." };
-  const trimmed = message.trim();
-  if (!trimmed) return { ok: false, error: "Type a message first." };
-  if (trimmed.length > MAX_MESSAGE_LENGTH) {
-    return { ok: false, error: `Messages are limited to ${MAX_MESSAGE_LENGTH} characters.` };
-  }
-
-  try {
-    const result = await classify(trimmed);
-    // The local fine-tuned model fills the free-text fields; without it the system is down (no regex fallback).
-    const extraction = await withExtractedFields(result, trimmed);
-    // Log Jev's own answer and the extractor's, side by side, so each field's source is on record.
-    // Only a message the customer sent (Return) is logged; the live guesses made while typing are not.
-    if (sent) await logPrediction(trimmed, result, extraction.extracted);
-    return { ok: true, result: extraction.result };
-  } catch (error) {
-    // Log the detail on the server; send the browser only a generic message.
-    console.error("classifyMessage failed:", error);
-    const missingKey = error instanceof TypeSafeError && /API key/i.test(error.message);
-    if (error instanceof ExtractorDownError) return { ok: false, error: "The extractor (Ollama) isn't reachable, so the assistant is down. Start Ollama and try again." };
-    return {
-      ok: false,
-      error: missingKey
-        ? "The server has no TypeSafe API key configured. Set TYPESAFE_API_KEY in .env.local."
-        : "Something went wrong classifying that message. Please try again.",
-    };
-  }
+  return predictMessage(message, { sent });
 }
