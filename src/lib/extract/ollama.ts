@@ -16,6 +16,22 @@ export { freeTextParams, systemPromptFor };
 const OLLAMA_URL = process.env.OLLAMA_URL ?? "http://127.0.0.1:11434";
 export const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "lfm25-350m-sft";
 const TIMEOUT_MS = 60_000;
+// -1 keeps the model in memory for good; Ollama's default unloads it after 5 idle minutes, and the next message then waits for a reload.
+const KEEP_ALIVE = -1;
+
+/** Load the model into memory ahead of the first message (an empty request loads it without generating). Never throws. */
+export async function preloadExtractor(): Promise<void> {
+  try {
+    await fetch(`${OLLAMA_URL}/api/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+      body: JSON.stringify({ model: OLLAMA_MODEL, keep_alive: KEEP_ALIVE }),
+    });
+  } catch (error) {
+    console.error("extractor preload failed (Ollama down?):", error);
+  }
+}
 
 export type ExtractStatus =
   | "kept" // the model gave a value
@@ -67,6 +83,7 @@ export async function extractFields(
     body: JSON.stringify({
       model: OLLAMA_MODEL,
       stream: false,
+      keep_alive: KEEP_ALIVE,
       format: schemaFor(action),
       options: { temperature: 0 },
       messages: [
