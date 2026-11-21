@@ -152,14 +152,14 @@
     if (!a) { el.innerHTML = ""; return; }
     const fields = Object.entries(fieldsNow()).filter(([k]) => k.startsWith(a + ".")).map(([k, c]) => [k.slice(a.length + 1), c]);
     const free = fields.length
-      ? `<table><thead><tr><th>Field</th><th class="num">Stated</th><th class="num">Precision</th><th class="num">Recall</th><th class="num">Made up</th><th class="num">Missed</th><th class="num">Wrong</th></tr></thead><tbody>` +
+      ? `<div class="scroll"><table><thead><tr><th>Field</th><th class="num">Stated</th><th class="num">Precision</th><th class="num">Recall</th><th class="num">Made up</th><th class="num">Missed</th><th class="num">Wrong</th></tr></thead><tbody>` +
         fields.map(([name, c]) => {
           const r = pr(c);
           return `<tr class="${c.stated < 10 ? "low" : ""}"><td><code>${esc(name)}</code></td><td class="num">${c.stated} of ${c.stated + c.blank}</td>
             <td class="num" title="${r.right} of ${r.filled} filled values are right">${pct(r.precision)}${meter(r.precision)}</td>
             <td class="num" title="${r.right} of ${c.stated} stated values found">${pct(r.recall)}${meter(r.recall)}</td>
             <td class="num">${c.fabricated}</td><td class="num">${c.missed}</td><td class="num">${c.wrong}</td></tr>`;
-        }).join("") + `</tbody></table>`
+        }).join("") + `</tbody></table></div>`
       : `<p class="note">No free-text fields: every field of this form is a choice picked by Jev.</p>`;
 
     const pairs = DATA.actionPairs.filter((p) => p.picked !== null);
