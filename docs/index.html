@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Talk to UI components in under 200ms</title>
+<meta name="description" content="A chat UI that picks a prebuilt banking form and fills it in from what the customer types, using Jev and a small fine-tuned model.">
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1a1a1a; --muted: #666; --line: #e3e3e3; --card: #f7f7f8; --accent: #3b5bdb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #15171a; --fg: #ececec; --muted: #9aa0a6; --line: #2c2f34; --card: #1d2024; --accent: #8ca2ff; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.65 system-ui, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 80px; }
+  h1 { font-size: 30px; line-height: 1.2; margin: 0 0 8px; }
+  h2 { font-size: 23px; margin: 44px 0 8px; }
+  h3 { font-size: 19px; margin: 32px 0 6px; }
+  a { color: var(--accent); }
+  p, li { margin: 0 0 14px; }
+  ul, ol { padding-left: 24px; margin: 0 0 14px; }
+  .sub { color: var(--muted); margin-bottom: 24px; }
+  video, img { max-width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); display: block; margin: 16px 0; }
+  .scroll { overflow-x: auto; margin: 0 0 18px; }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 6px 10px; border-top: 1px solid var(--line); vertical-align: top; }
+  thead th { border-top: 0; color: var(--muted); font-weight: 500; }
+  td.n, th.n { text-align: right; white-space: nowrap; }
+  code { font: 14px ui-monospace, monospace; background: var(--card); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; overflow-x: auto; font-size: 13px; line-height: 1.5; }
+  pre code { background: none; padding: 0; }
+  .callout { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; margin: 20px 0; }
+</style>
+</head>
+<body>
+<main>
+<h1>Talk to UI components in under 200ms</h1>
+<p class="sub">A chat UI that picks a prebuilt banking form and fills it in from what the customer types. <a href="https://github.com/felixglush/jev-dynamic-ui">Code on GitHub</a> · <a href="results/">Explore the results</a></p>
+
+<h2>Defaulting to Chatbots</h2>
+<p>It’s so easy, it should feel wrong. Offload the interaction to a simple chatbot box. Let users type questions and get text responses back from the AI. I think this is a trap for certain workflows. The user ends up without the normal guidance offered by traditional user interfaces and feels lost. For exploratory tasks where the entire point is creating or figuring out their workflow, or when the user doesn’t want to think through the task end-to-end, this is fine. But when the user knows what to do and the task is narrow, this chatbot design pattern is friction.</p>
+<p>There is a proliferation of many apps that have chat as their main component. Some apps even drop building their own user interfaces and adopt native messaging apps, like <a href="https://instinct.com/">Instinct</a>. One of the topics I like to think about is the role of traditional user interfaces in the age of the chatbot.</p>
+
+<h2>Rethinking Interaction</h2>
+<p>This article explores an alternative: what if the right UI materialized in front of the user when they type (or speak) their intent? Linear does this through keyboard shortcuts. Making new user stories, assigning them to people, setting estimates, and putting stories into the right sprint is just a few keyboard taps.</p>
+<p>Inspired by these ideas, this article takes this approach: for tasks that have well-known existing patterns of interaction, a chat interface that can surface the right UI to guide the user through their task, solves the issue of remembering and navigating a multi-screen, multi-dropdown user interface. Executed well, the experience can be fluid.</p>
+<p><b>Principle 1:</b> when selecting a design approach, think about how it makes the user feel. Can they efficiently get the right context and complete their task with minimal friction?</p>
+
+<h2>The Setup</h2>
+<p>Given where I work, banking is top of mind. This is how I think banking apps could look like: a chat UI that picks a prebuilt form and fills it in from what the client types.</p>
+<video controls preload="metadata" poster="images/app-demo-poster.png" src="app-demo.mp4"></video>
+<video controls preload="metadata" poster="images/jev-explainer-poster.png" src="jev-explainer.mp4"></video>
+
+<h3>Define the action space</h3>
+<p>Extract what you typically find in a banking app into intent-based actions. The last two columns denote which parts of the action form are filled out by which model. Jev is good at picking out the right option from a set of options, but can’t generate text so freeform entities can’t easily be picked out and filled out, unless you tokenize the input and apply Jev to each &lt;token, form field&gt; pair. This smells awkward and certain cases where an entity spans multiple tokens might break this. Meanwhile, billion and trillion parameter language models are perceptibly slow and expensive for single phrase data extraction. I had previously read about <a href="https://www.liquid.ai/blog/lfm2-5-350m-no-size-left-behind">Liquid Foundation Models</a> and how easy they are to tune for narrow domain specific tasks, like data extraction. They are very fast and well-suited for edge deployments. More on this later.</p>
+<div class="scroll"><table>
+<thead><tr><th>Action</th><th>What it does</th><th>Free-text fields (small fine-tuned model)</th><th>Choice fields (Jev)</th></tr></thead>
+<tbody>
+<tr><td><code>add_etransfer_contact</code></td><td>Save a new e-Transfer recipient</td><td>name, email, phone</td><td></td></tr>
+<tr><td><code>send_etransfer</code></td><td>Send an e-Transfer, now or scheduled</td><td>recipient*, recipient_email*, amount, date</td><td>from_account, frequency</td></tr>
+<tr><td><code>request_etransfer</code></td><td>Ask someone to send you money</td><td>from_person, from_email, amount</td><td></td></tr>
+<tr><td><code>cancel_etransfer</code></td><td>Cancel an unaccepted e-Transfer</td><td>recipient*, amount</td><td></td></tr>
+<tr><td><code>setup_autodeposit</code></td><td>Turn on Autodeposit</td><td>email, phone</td><td>deposit_account</td></tr>
+<tr><td><code>pay_credit_card</code></td><td>Pay a credit card</td><td>amount</td><td>payment_option, from_account</td></tr>
+<tr><td><code>pay_bill</code></td><td>Pay a biller, now or scheduled</td><td>payee*, amount, date</td><td>from_account, frequency</td></tr>
+<tr><td><code>add_payee</code></td><td>Add a biller</td><td>biller, account_number</td><td></td></tr>
+<tr><td><code>transfer_between_accounts</code></td><td>Move money between your own accounts</td><td>amount, date</td><td>from_account, to_account, frequency</td></tr>
+<tr><td><code>open_account</code></td><td>Open a new account</td><td>initial_deposit</td><td>account_type, from_account</td></tr>
+<tr><td><code>manage_card</code></td><td>Lock, unlock or replace a card</td><td></td><td>card_action, card, reason</td></tr>
+<tr><td><code>view_account</code></td><td>Show a balance or transactions</td><td></td><td>account, view</td></tr>
+<tr><td><code>update_contact_info</code></td><td>Change phone, email or address</td><td>new_email, new_phone</td><td>contact_type</td></tr>
+</tbody></table></div>
+
+<h3>Generate training data with a strong model</h3>
+<p>I used Opus 5.5 to generate 1,853 command phrases for this action space to mimic people using the app. This dataset let me run the simplest step of model post-training: using a closed-weight model’s outputs to run supervised fine tuning on a smaller open-weight student model. Supervised fine tuning is when a student model learns to mimic a larger model’s output, such as how it translates English into a constrained JSON object per action form. Example:</p>
+<pre><code>{
+  "messages": [
+    {"role": "system",    "content": "Extract these fields from the user's banking message: recipient, recipient_email, amount, date. Only copy information. Never invent names, emails, phone numbers or dates."},
+    {"role": "user",      "content": "transfer $300 to priya.k@example.com"},
+    {"role": "assistant", "content": "{\"recipient\":\"\",\"recipient_email\":\"priya.k@example.com\",\"amount\":300,\"date\":\"\"}"}
+  ],
+  "meta": {
+    "id": "smp-006",
+    "action": "send_etransfer",
+    "vague": false,
+    "present": ["recipient_email", "amount"]
+  }
+}</code></pre>
+<p>The data was split into train, validation, and test sets. The baseline untrained Liquid FM 350m parameter model correctly filled out the JSON ~20% of the time. The main failure mode was hallucinating a value for a field when none was stated.</p>
+
+<h3>Vibe code an annotation app and label the data</h3>
+<p>Generating UIs is easy now and my use case is pretty simple. I just want to see the English command, the model output colour coded to which model generated the specific field, and the expected answers. So I got Claude to generate an annotation app for me over the 1,853 examples it just made. It closely matches the UI of the actual application, which makes this process reflective of what the user would experience.</p>
+<p>I then spent 30 minutes going through 62 cases — just enough to identify key problems and decide what the answer should have been. This process is called “open-coding”, a technique from qualitative research methods. It involves writing short descriptive labels about the model outputs to let labels inductively emerge from the data. This effort also generated 62 golden answers. I let Claude categorize the notes into a set of labels (“axial-coding”) and then freely review and modify the rest of the dataset’s golden answers conditioned on my labelling feedback. In a real project, I would give axial-coding more review time.</p>
+<img src="images/annotation-app.png" alt="The annotation app: a message, the model's output colour coded by which model produced each field, and the expected answer" width="1100" height="1222">
+<p>Some examples of errors:</p>
+<ul>
+<li>Issues with spelled out dollar amounts (as would happen in future audio transcription), dates that don’t refer to the date on the form, names incorrectly pulled from emails (“abbey.jo@gmail.com”), names used for email field instead of name, incapable of handling edits (“$50, no wait make it $60”).</li>
+<li><b>Fabrication:</b> the base LFM model filled 89% of fields that should have been blank. After the first LoRA run, that fell to 0.8% (val) and 1.6% (test), and correct matches rose from 23.5% to 95.9%.</li>
+<li><b>Train-serving skew:</b> The model learned to write its answers in the same order as the fields on the form, but the serving tool forced an alphabetical order, so the model started inventing values for fields it hadn't yet read during generation. I fixed this by training on answers with randomly shuffled field order, a kind of data augmentation.</li>
+</ul>
+
+<h2>Results</h2>
+<p>The share of whole forms where every field is right. One wrong field fails the whole form.</p>
+<div class="scroll"><table>
+<thead><tr><th>Model</th><th class="n">Validation</th><th class="n">Test</th></tr></thead>
+<tbody>
+<tr><td>Untuned LFM2.5-350M</td><td class="n">20.8%</td><td class="n">24.2%</td></tr>
+<tr><td>SFT LFM2.5-350M</td><td class="n">98.9%</td><td class="n">96.9%</td></tr>
+</tbody></table></div>
+
+<h3>Per-field precision and recall</h3>
+<p>I also scored each form field on its own.</p>
+<p><b>Precision</b>: when the model fills a field in, how often is the value right?</p>
+<p><b>Recall</b>: when the <i>user message</i> states a value, how often does the model find it?</p>
+<p>A wrong value counts against both, and fields that are correctly left blank are not counted.</p>
+<div class="scroll"><table>
+<thead><tr><th>Model</th><th class="n">Precision (val)</th><th class="n">Recall (val)</th><th class="n">Precision (test)</th><th class="n">Recall (test)</th></tr></thead>
+<tbody>
+<tr><td>Untuned LFM2.5-350M</td><td class="n">46.2%</td><td class="n">88.7%</td><td class="n">49.5%</td><td class="n">88.5%</td></tr>
+<tr><td>SFT LFM2.5-350M</td><td class="n">99.4%</td><td class="n">99.2%</td><td class="n">98.7%</td><td class="n">98.0%</td></tr>
+</tbody></table></div>
+<p>The untuned model finds most values but fills in nearly everything, so only about half of what it writes is right. Tuning fixed that without losing recall. On the test set the fine-tuned model fabricated 2 values, missed 7 and got 6 wrong, across 642 stated values. The weakest fields were <code>open_account.initial_deposit</code> (83% precision) and <code>dispute_transaction.date</code> (83% recall, only 6 cases).</p>
+<p><a href="results/">Explore the per-field and per-action results interactively.</a></p>
+
+<h3>Picking the action</h3>
+<p>Jev’s choice of action on the 459 test messages: 431 correct (93.9%). Most actions were found 93 to 100% of the time. The weak one is <code>pay_bill</code> (76% recall): 6 of its 42 messages went to <code>send_etransfer</code> and 4 to “none”.</p>
+<p>For each action, <b>recall</b> is how many of its messages Jev sent to it, and <b>precision</b> is how many of the messages Jev sent to it really belonged there.</p>
+<div class="scroll"><table>
+<thead><tr><th>Action</th><th class="n">Test messages</th><th class="n">Precision</th><th class="n">Recall</th></tr></thead>
+<tbody>
+<tr><td><code>send_etransfer</code></td><td class="n">107</td><td class="n"><b>93.6%</b></td><td class="n">95.3%</td></tr>
+<tr><td><code>request_etransfer</code></td><td class="n">46</td><td class="n">100%</td><td class="n">95.7%</td></tr>
+<tr><td><code>add_etransfer_contact</code></td><td class="n">44</td><td class="n">100%</td><td class="n">95.5%</td></tr>
+<tr><td><code>pay_bill</code></td><td class="n">42</td><td class="n">100%</td><td class="n"><b>76.2%</b></td></tr>
+<tr><td><code>dispute_transaction</code></td><td class="n">36</td><td class="n">100%</td><td class="n">97.2%</td></tr>
+<tr><td><code>transfer_between_accounts</code></td><td class="n">35</td><td class="n">100%</td><td class="n">97.1%</td></tr>
+<tr><td><code>cancel_etransfer</code></td><td class="n">32</td><td class="n"><b>93.8%</b></td><td class="n">93.8%</td></tr>
+<tr><td><code>open_account</code></td><td class="n">29</td><td class="n">100%</td><td class="n">100%</td></tr>
+<tr><td><code>pay_credit_card</code></td><td class="n">29</td><td class="n">100%</td><td class="n">93.1%</td></tr>
+<tr><td><code>setup_autodeposit</code></td><td class="n">23</td><td class="n">100%</td><td class="n">95.7%</td></tr>
+<tr><td><code>update_contact_info</code></td><td class="n">19</td><td class="n">100%</td><td class="n">94.7%</td></tr>
+<tr><td><code>add_payee</code></td><td class="n">17</td><td class="n">100%</td><td class="n">94.1%</td></tr>
+</tbody></table></div>
+
+<h2>Why LFM2.5-350M</h2>
+<ol>
+<li>It's a small model (about 400 MB). Its architecture is tuned for edge deployments, so it is free* to run (caveat: unless your company have &gt;$10m in revenue according to LFM license). This matters because the model runs after each word. A larger generative model would be slower and expensive by way of either renting GPUs or token invoices.</li>
+<li>It's quick: ~200ms per response on my MacBook's CPU. Since it runs on every word, keeping this latency low is also key.</li>
+</ol>
+
+<h2>Learnings</h2>
+<ol>
+<li>Let the model label first</li>
+<li>Look at the data yourself to get a deeper sense of what’s happening</li>
+<li>Make your own evaluations app</li>
+<li>Design with the user in mind</li>
+</ol>
+</main>
+</body>
+</html>

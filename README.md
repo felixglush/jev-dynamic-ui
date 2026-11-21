@@ -4,9 +4,15 @@ A chat UI that picks a prebuilt banking form and fills it in from what the custo
 
 ## Demo
 
-<a href="docs/demo.mp4"><img src="docs/demo.gif" alt="Demo: typing a request opens the matching form, pre-filled" width="100%"></a>
+**The app:** typing a request opens the matching form, pre-filled ([video](docs/app-demo.mp4)).
 
-Click for the full-quality video ([docs/demo.mp4](docs/demo.mp4)).
+<a href="docs/app-demo.mp4"><img src="docs/images/app-demo.gif" alt="App demo: typing a request opens the matching form, pre-filled" width="100%"></a>
+
+**How it works:** Jev picks the form, the fine-tuned model fills in the free-text fields ([video](docs/jev-explainer.mp4)).
+
+<a href="docs/jev-explainer.mp4"><img src="docs/images/jev-explainer.gif" alt="Explainer: Jev picks the form, the fine-tuned model fills in the free-text fields" width="100%"></a>
+
+Read how it was built and the results: [write-up](https://felixglush.github.io/jev-dynamic-ui/).
 
 ## Actions
 
@@ -41,38 +47,9 @@ Fourteen actions, one prebuilt form each. Defined in [`src/lib/jev/catalog.ts`](
 2. It's a small model (about 400 MB) that performs well. Its architecture is tuned for edge deployments, so it is free to run locally. That matters because the model runs after each word.
 3. It's acceptably quick: ~300ms per response on my MacBook's CPU, <1s on a slower 4 core machine (see [Latency](#latency)).
 
-## How it was built
+## How it was built, and results
 
-1. Defined the action space: the 14 user actions and their fields in [`catalog.ts`](src/lib/jev/catalog.ts). This is inspired by typical functions in a banking app.
-2. Generated synthetic training data with Opus 5.5.
-3. Human-validated a subset of the data - enough to identify key problems and annotate fixes.
-
-   ![The /annotate page on one message: Jev picked the action and the account, the fine-tuned model read the recipient and amount, and the expected answer is editable](docs/annotate-example.png)
-
-4. Applied what that review taught to the rest of the data.
-5. Fine-tuned the student model (LFM2.5-350M) with supervised fine-tuning (SFT).
-
-Details are in [`docs/sft-dataset.md`](docs/sft-dataset.md) and [`docs/sft-experiments.md`](docs/sft-experiments.md).
-
-## Final experiment result
-
-The extractor model is LFM2.5-350M fine-tuned with LoRA on 1,120 examples. Initial evals showed the model was substituting name for email for instance just because of the order of keys passed into Ollama, so every training row is repeated three times in random key order so it doesn't depend on the order Ollama's JSON schema writes the fields in.
-
-Percentages are the share of messages where the model’s JSON output matched the labelled answer exactly: every field, with no extra or missing fields (key order ignored).
-
-| Measure | Result |
-| --- | --- |
-| Stress set through the real extractor in Ollama (129 messages, Q8_0, schema on) | **125 / 129** |
-| Held-out validation, exact match, any key order (catalog / sorted / reversed) | 98.9 / 98.9 / 99.6 % |
-| Held-out test, same three orders | 96.9 / 96.7 / 97.4 % |
-| Baseline: base LFM2.5-350M, validation / test | 20.8 % / 24.2 % |
-
-Caveats: 
-- about 62 training rows were reviewed by me and the rest were approved/edited by Claude given my annotations.
-- the fine tuned model needs real production messages from users. Initial model trainings revealed the dataset was not sufficiently varied for all possible actions and ways of describing them. Additional examples were added to both the training set and validation/test to ensure the model is improving. The test set was never trained on, but it was scored while hill climbing the eval. This result is that compared to the base Liquid FM model, the fine-tuned model behaves better (e.g. doesn't hallucinate values into the structured output when no value is found in the query) but a fair evaluation requires real production data to create an entirely new, non-synthetic dataset.
-- full method is in [`docs/sft-experiments.md`](docs/sft-experiments.md).
-
-The stress test is a subset of harder examples. They cover typos (“sned 50 to sam”), accented names, odd amounts (“two grand”, “$1,234,567.89”), several numbers in one message, negation (“don’t send $50”), prompt injection, long polite messages, and other non-banking text.
+The write-up covers how the data was generated and reviewed, the training, the results (whole-form match, per-field and per-action precision and recall) and what went wrong along the way: **[felixglush.github.io/jev-dynamic-ui](https://felixglush.github.io/jev-dynamic-ui/)**. An [interactive results page](https://felixglush.github.io/jev-dynamic-ui/results/) lets you slice them by split, model and action. The experiment log is in [`notes/sft-experiments.md`](notes/sft-experiments.md).
 
 ## Latency
 
@@ -115,7 +92,7 @@ Settings, all in `.env.local` (see `.env.example`); only the API key is required
 | --- | --- | --- |
 | `TYPESAFE_API_KEY` | none | Your TypeSafe key for Jev. Server-side only, never prefixed `NEXT_PUBLIC_`. |
 | `OLLAMA_URL` | `http://127.0.0.1:11434` | Where Ollama runs. |
-| `OLLAMA_MODEL` | `lfm25-350m-sft` | The extractor model in Ollama. Only use a model trained with shuffled key order (see [Final experiment result](#final-experiment-result)). |
+| `OLLAMA_MODEL` | `lfm25-350m-sft` | The extractor model in Ollama. Only use a model trained with shuffled key order (see the [write-up](https://felixglush.github.io/jev-dynamic-ui/)). |
 
 ### Run voice mode (experimental)
 

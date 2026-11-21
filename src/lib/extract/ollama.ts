@@ -78,7 +78,7 @@ export async function extractFields(
   // first 350M) falls apart under that: 95/129 on the stress set with the schema against 113/129 without, and
   // 54% against 96% exact on val. The model in use is trained on answers with the keys in random order
   // (training/modal_train.py --order-copies 3), so the order does not matter to it. Do not point this at an
-  // older GGUF without dropping `format` (docs/sft-experiments.md, "Key order").
+  // older GGUF without dropping `format` (notes/sft-experiments.md, "Key order").
   const response = await fetch(`${OLLAMA_URL}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

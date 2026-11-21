@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
 
 import { parseBatch } from "@/lib/sft/batch";
-import { acceptPrediction, annotationsFor, parseAnyDataset, parseDataset, sanitizeAnnotations, serializeDataset, serializeLabels } from "./dataset";
+import { type Annotation, acceptPrediction, annotationsFor, parseAnyDataset, parseDataset, sanitizeAnnotations, serializeDataset, serializeLabels } from "./dataset";
 import { summarize } from "./summary";
 
 // Runs on the real predictions file the annotation page loads, not a hand-made sample.
@@ -42,6 +42,24 @@ describe("the predictions CSV", () => {
 
     expect(reread).toEqual(dataset);
     expect(summarize(reread)).toMatchObject({ reviewed: 3, action: { total: 3, correct: 2 } });
+  });
+
+  test("scores each action's precision and recall and lists what was mixed up", () => {
+    const dataset = parseDataset(text);
+    const [a, b, c] = dataset.predictions;
+    type Expected = Annotation["expectedAction"];
+    dataset.annotations = {
+      [a!.id]: { expectedAction: a!.predictedAction as Expected, expectedParams: {}, note: "" },
+      [b!.id]: { expectedAction: b!.predictedAction as Expected, expectedParams: {}, note: "" },
+      [c!.id]: { expectedAction: (c!.predictedAction === "none" ? "send_etransfer" : "none") as Expected, expectedParams: {}, note: "" },
+    };
+    const summary = summarize(dataset);
+    expect(summary.action).toEqual({ total: 3, correct: 2 });
+    expect(summary.confusions).toEqual([{ expected: dataset.annotations[c!.id]!.expectedAction, predicted: c!.predictedAction, count: 1 }]);
+    const missed = summary.perAction.find((r) => r.action === dataset.annotations[c!.id]!.expectedAction);
+    expect(missed?.recall).toBeLessThan(1);
+    const wrongly = summary.perAction.find((r) => r.action === c!.predictedAction);
+    expect(wrongly?.precision).toBeLessThan(1);
   });
 
   test("refuses a file that would silently lose rows or answers", () => {

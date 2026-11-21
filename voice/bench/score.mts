@@ -13,7 +13,7 @@
  *   - Exact    clips where every entity was found.
  * Add `--misses` to list, per engine, each clip and the values that were not found.
  * Each results file is an object of `{ name: { hyps: [...], median_s?, max_s? } }`, or one such object with `hyps` at
- * the top (stream-results.json). Prints a Markdown table to paste into docs/voice-benchmarks.md.
+ * the top (stream-results.json). Prints a Markdown table to paste into notes/voice-benchmarks.md.
  */
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";

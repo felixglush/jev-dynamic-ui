@@ -127,6 +127,22 @@ def select_train(text: str, subset: str = "all") -> str:
     return "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in keep)
 
 
+def precision_recall(counts: dict) -> dict:
+    """
+    Precision and recall for filling a field, from score()'s counts.
+      precision  of the values the model filled in, how many are right (a fabricated or wrong value hurts it)
+      recall     of the values the message states, how many the model got right (a missed or wrong value hurts it)
+    A wrong value hurts both: it is a value that should not have been given, and the right one was not.
+    Blank-and-blank cells are left out, so a model that blanks everything cannot score well on them.
+    """
+    right = counts["stated"] - counts["missed"] - counts["wrong"]
+    filled = counts["stated"] - counts["missed"] + counts["fabricated"]
+    return {
+        "precision": right / filled if filled else None,
+        "recall": right / counts["stated"] if counts["stated"] else None,
+    }
+
+
 def score(rows: list[dict]) -> dict:
     """
     rows: [{"action": str, "label": {field: value}, "reply": str}]. Per field and overall:
@@ -166,8 +182,9 @@ def score(rows: list[dict]) -> dict:
         # Of the fields that should have a value, how many did it leave blank or get wrong?
         "miss_rate": total["missed"] / total["stated"] if total["stated"] else 0.0,
         "wrong_rate": total["wrong"] / total["stated"] if total["stated"] else 0.0,
+        **precision_recall(total),
         "totals": total,
-        "fields": fields,
+        "fields": {name: {**counts, **precision_recall(counts)} for name, counts in fields.items()},
     }
 
 
@@ -230,7 +247,7 @@ def evaluate(model, tokenizer, files: dict[str, str], other_orders: bool = False
         rows = generate_replies(model, tokenizer, load_records(files[split]))
         result[split] = score(rows)
         result[split].update(breakdowns(rows))
-        # Val is the dev set: keep its misses so they can be read. Test is sealed (docs/sft-experiments.md,
+        # Val is the dev set: keep its misses so they can be read. Test is sealed (notes/sft-experiments.md,
         # "Fair evaluation v2"): only counts leave this function, never the messages or which rows failed.
         if split == "val":
             result[split]["examples"] = [r for r in rows if not record_passes(r)][:40]

@@ -9,6 +9,8 @@ type Props = {
   onOpen: (id: string) => void;
 };
 
+const percent = (value: number | null) => (value === null ? "–" : `${Math.round(value * 100)}%`);
+
 function Stat({ title, value, hint }: { title: string; value: string; hint: string }) {
   return (
     <div className="flex flex-col gap-1 rounded-xl border bg-card p-4">
@@ -70,6 +72,33 @@ export function SummaryView({ summary, onOpen }: Props) {
           </tbody>
         </table>
       </div>
+
+      <table className="h-fit w-full text-sm">
+        <caption className="pb-2 text-left font-medium">Precision and recall, per action</caption>
+        <thead>
+          <tr className="text-left text-muted-foreground">
+            <th scope="col" className="py-1 pr-3 font-normal">Action</th>
+            <th scope="col" className="py-1 pr-3 text-right font-normal" title="Of the messages Jev sent here, how many belonged here">Precision</th>
+            <th scope="col" className="py-1 text-right font-normal" title="Of the messages that belong here, how many Jev sent here">Recall</th>
+          </tr>
+        </thead>
+        <tbody>
+          {summary.perAction.map((row) => (
+            <tr key={row.action} className="border-t">
+              <th scope="row" className="py-1.5 pr-3 text-left font-normal">{label(row.action)}</th>
+              <td className="py-1.5 pr-3 text-right tabular-nums">{percent(row.precision)}</td>
+              <td className="py-1.5 text-right tabular-nums">{percent(row.recall)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {summary.confusions.length > 0 && (
+        <p className="text-sm text-muted-foreground">
+          Most often mixed up:{" "}
+          {summary.confusions.slice(0, 3).map((c) => `${label(c.expected)} → ${label(c.predicted)} (${c.count})`).join(", ")}
+        </p>
+      )}
 
       <div className="flex flex-col gap-2">
         <h3 className="font-medium">Mistakes ({summary.mistakes.length})</h3>

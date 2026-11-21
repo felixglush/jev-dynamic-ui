@@ -14,6 +14,7 @@
     "annotate:preview": "tsx scripts/build-annotate-preview.mts",
     "extract:stress": "tsx --conditions=react-server scripts/extract-stress.mts",
     "latency": "tsx --conditions=react-server scripts/latency.mts",
+    "action:eval": "tsx --conditions=react-server scripts/action-eval.mts",
     "extract:eval": "tsx --conditions=react-server scripts/extract-eval.mts",
     "sft:build": "tsx --conditions=react-server scripts/sft-build.mts",
     "sft:add": "tsx --conditions=react-server scripts/sft-add.mts",
@@ -37,8 +38,8 @@
   "devDependencies": {
     "@playwright/test": "^1.64.1",
     "@tailwindcss/turbopack": "^4",
-    "@types/node": "^22.20.5",
-    "@types/react": "^19",
+    "@types/node": "22.20.5",
+    "@types/react": "19.3.0",
     "@types/react-dom": "^19",
     "@types/ws": "^8.18.2",
     "@typescript/native": "npm:typescript@^7.0.2",
