@@ -1,17 +1,22 @@
 /**
  * Score Jev's action choice on labeled messages: accuracy, precision and recall per action, and what gets mixed up.
  *
- *   npm run action:eval -- [sft-jsonl, default data/sft/test.jsonl] [limit]
+ *   npm run action:eval -- [sft-jsonl, default data/sft/test.jsonl] [limit] [--json out.json]
+ *
+ * With --json, also writes every (message, expected, picked) triple, which the results page uses.
  *
  * Needs TYPESAFE_API_KEY. Each record's expected action is its `meta.action`. Only Jev is called (no extractor).
  * The sft test rows are AI-written, so this is a first read; real messages from /annotate are the better check.
  */
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 
 import { scoreActions, type ActionPair } from "../src/lib/annotate/action-scores";
 import { classify } from "../src/lib/jev/classify";
 
-const [inputPath = "data/sft/test.jsonl", limitArg] = process.argv.slice(2);
+const args = process.argv.slice(2);
+const jsonAt = args.indexOf("--json");
+const jsonPath = jsonAt >= 0 ? args.splice(jsonAt, 2)[1] : undefined;
+const [inputPath = "data/sft/test.jsonl", limitArg] = args;
 const CONCURRENCY = 4;
 
 type Row = { message: string; expected: string };
@@ -40,6 +45,9 @@ await Promise.all(
   }),
 );
 
+if (jsonPath) {
+  await writeFile(jsonPath, JSON.stringify(rows.map((r, i) => ({ message: r.message, expected: r.expected, picked: pairs[i]?.predicted ?? null })), null, 1) + "\n");
+}
 const scored = pairs.filter((p): p is ActionPair => p !== null);
 const result = scoreActions(scored);
 const pct = (v: number | null) => (v === null ? "  –  " : `${(v * 100).toFixed(1).padStart(5)}%`);
