@@ -22,12 +22,13 @@ const KEEP_ALIVE = -1;
 /** Load the model into memory ahead of the first message (an empty request loads it without generating). Never throws. */
 export async function preloadExtractor(): Promise<void> {
   try {
-    await fetch(`${OLLAMA_URL}/api/generate`, {
+    const response = await fetch(`${OLLAMA_URL}/api/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       signal: AbortSignal.timeout(TIMEOUT_MS),
       body: JSON.stringify({ model: OLLAMA_MODEL, keep_alive: KEEP_ALIVE }),
     });
+    if (!response.ok) console.error(`extractor preload failed: Ollama returned ${response.status}: ${await response.text()}`);
   } catch (error) {
     console.error("extractor preload failed (Ollama down?):", error);
   }
