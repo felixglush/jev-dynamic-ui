@@ -41,6 +41,8 @@ const DEBOUNCE_MS = 200;
 const MIN_LIVE_LENGTH = 3;
 /** Matches the fade-out in globals.css; the card's contents are dropped once it has faded. */
 const CLOSE_MS = 280;
+// How long the card swells (1.03x) on confirm before it leaves.
+const CONFIRM_MS = 150;
 
 // Shown when the request itself fails (offline, server restarted), as opposed to Jev failing.
 const NETWORK_ERROR: ClassifyOutcome = {
@@ -59,6 +61,7 @@ export function Chat() {
   const [sttModels, setSttModels] = useState<SttModels>({ default: null, models: [] });
   const [sttChoice, setSttChoice] = useState<string>();
   const [, startTransition] = useTransition();
+  const [confirming, setConfirming] = useState(false);
 
   const composerRef = useRef<HTMLInputElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -250,11 +253,19 @@ export function Chat() {
 
   const host: ActionHost = {
     onConfirm({ title, values }) {
-      if (outcome?.ok && outcome.result.action) {
-        const summary = summarize(outcome.result.action, values);
-        setDone(`${title}${summary ? `: ${summary}` : ""}. Demo only, nothing was submitted.`);
-      }
-      dismiss();
+      const finish = () => {
+        setConfirming(false);
+        if (outcome?.ok && outcome.result.action) {
+          const summary = summarize(outcome.result.action, values);
+          setDone(`${title}${summary ? `: ${summary}` : ""}. Demo only, nothing was submitted.`);
+        }
+        dismiss();
+      };
+      // Swell the card for a moment, then close it. With reduced motion there is no pause.
+      if (confirming) return;
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return finish();
+      setConfirming(true);
+      setTimeout(finish, CONFIRM_MS);
     },
   };
 
@@ -353,6 +364,7 @@ export function Chat() {
           aria-label="Your request"
           data-open={open}
           inert={!open}
+          data-confirming={confirming || undefined}
           className="floating-card absolute inset-x-0 top-full mt-3 max-h-[max(20rem,calc(100dvh-19rem))] overflow-y-auto rounded-[1.75rem] border bg-card text-card-foreground shadow-2xl shadow-black/10"
         >
           <div aria-live="polite" className="py-5">
