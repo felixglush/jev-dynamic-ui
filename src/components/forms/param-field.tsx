@@ -42,9 +42,14 @@ export function ParamField({ name, label, param, required, options, emptyLabel =
   // old one, unless the customer has already changed this field by hand. Setting state during
   // render like this is React's way to "reset state when a prop changes" without an extra pass.
   const [seen, setSeen] = useState(param.value);
+  // Counts the values filled in for the field; a change of the count replays the fill highlight (see globals.css).
+  const [fills, setFills] = useState(param.value ? 1 : 0);
   if (param.value !== seen) {
     setSeen(param.value);
-    if (!edited) setCurrent(param.value ?? "");
+    if (!edited) {
+      setCurrent(param.value ?? "");
+      if (param.value) setFills(fills + 1);
+    }
   }
   // Tell the form what the field holds now, whether Jev or the customer last changed it.
   useEffect(() => {
@@ -77,6 +82,8 @@ export function ParamField({ name, label, param, required, options, emptyLabel =
           </Badge>
         )}
       </div>
+      <div className="relative">
+      {fills > 0 && <span key={fills} aria-hidden className="animate-fill pointer-events-none absolute inset-0 rounded-md" />}
       {options ? (
         <select
           id={id}
@@ -126,6 +133,7 @@ export function ParamField({ name, label, param, required, options, emptyLabel =
           className={type === "number" ? "tabular-nums" : undefined}
         />
       )}
+      </div>
     </div>
   );
 }

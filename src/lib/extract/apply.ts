@@ -16,11 +16,15 @@ export type Extraction = { result: ClassifyResult; extracted: Record<string, str
  */
 export class ExtractorDownError extends Error {}
 
-export async function withExtractedFields(result: ClassifyResult, message: string): Promise<Extraction> {
+/** An extraction started before Jev answered, for the action Jev was expected to pick. */
+export type Speculation = { action: keyof typeof CATALOG; fields: ReturnType<typeof extractFields> };
+
+export async function withExtractedFields(result: ClassifyResult, message: string, speculation?: Speculation, signal?: AbortSignal): Promise<Extraction> {
   if (result.action === null) return { result, extracted: null };
   let fields;
   try {
-    fields = await extractFields(result.action, message);
+    // The guess was right: its answer is (nearly) ready. Otherwise it is wasted and the real action is asked now.
+    fields = speculation && speculation.action === result.action ? await speculation.fields : await extractFields(result.action, message, signal);
   } catch (error) {
     console.error("extractor failed:", error);
     throw new ExtractorDownError("The extractor is down", { cause: error });

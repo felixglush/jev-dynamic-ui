@@ -126,6 +126,37 @@ body {
   --animate-rise: rise 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
+@keyframes fill {
+  0% {
+    opacity: 0;
+    transform: scaleX(0.92);
+    background-color: color-mix(in oklab, var(--ring) 35%, transparent);
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: none;
+    background-color: color-mix(in oklab, var(--ring) 0%, transparent);
+  }
+}
+
+/* A small swell when the form is confirmed with Return, just before the card leaves. */
+@keyframes confirm-pulse {
+  to {
+    transform: scale(1.03);
+  }
+}
+
+.animate-fill {
+  animation: fill 650ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.floating-card[data-confirming="true"] {
+  animation: confirm-pulse 150ms ease-out both;
+}
+
 @keyframes rise {
   from {
     opacity: 0;
@@ -178,7 +209,9 @@ body {
     transition: none;
   }
 
-  .animate-rise {
+  .animate-rise,
+  .animate-fill,
+  .floating-card[data-confirming="true"] {
     animation: none;
   }
 }

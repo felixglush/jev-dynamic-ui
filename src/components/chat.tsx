@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { ArrowUp, Check, Loader2 } from "lucide-react";
 
-import { classifyMessage } from "@/app/actions";
 import { getSpeechConfig, getSttModels, type SpeechConfig } from "@/app/voice-actions";
 import { ActionHostContext, type ActionHost } from "@/components/forms/action-form";
 import { ActionPanel } from "@/components/forms/action-panel";
@@ -41,8 +40,21 @@ const DEBOUNCE_MS = 200;
 const MIN_LIVE_LENGTH = 3;
 /** Matches the fade-out in globals.css; the card's contents are dropped once it has faded. */
 const CLOSE_MS = 280;
+// How long the card swells (1.03x) on confirm before it leaves.
+const CONFIRM_MS = 150;
 
 // Shown when the request itself fails (offline, server restarted), as opposed to Jev failing.
+/** Asks the server for a prediction. A plain fetch, so a newer question can abort it. */
+async function classifyMessage(message: string, sent: boolean, guess?: string, signal?: AbortSignal): Promise<ClassifyOutcome> {
+  const response = await fetch("/api/classify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message, sent, guess }),
+    signal,
+  });
+  return (await response.json()) as ClassifyOutcome;
+}
+
 const NETWORK_ERROR: ClassifyOutcome = {
   ok: false,
   error: "Couldn’t reach the server. Check your connection and try again.",
@@ -59,6 +71,7 @@ export function Chat() {
   const [sttModels, setSttModels] = useState<SttModels>({ default: null, models: [] });
   const [sttChoice, setSttChoice] = useState<string>();
   const [, startTransition] = useTransition();
+  const [confirming, setConfirming] = useState(false);
 
   const composerRef = useRef<HTMLInputElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -66,6 +79,10 @@ export function Chat() {
   // Each question to Jev gets a number. Only the newest one's answer is used, so a slow reply to
   // something typed earlier can never overwrite the card for what is typed now.
   const latestId = useRef(0);
+  // The request for the newest text. Typing or dismissing aborts it, so the server stops work on text nobody will see.
+  const inflight = useRef<AbortController | null>(null);
+  // The action the card shows now; sent along as a guess so the extractor can start before Jev has answered.
+  const shownAction = useRef<string | undefined>(undefined);
   const lastText = useRef("");
   // The text the card's current form was made from, so a form for older text is never taken for this text's.
   const shownText = useRef("");
@@ -104,12 +121,18 @@ export function Chat() {
     const id = ++latestId.current;
     lastText.current = text;
     if (speaking) speakingBusy.current = true;
+    // Speech keeps one question out at a time; typing cancels the older question for a newer one.
+    const controller = speaking ? undefined : new AbortController();
+    if (controller) {
+      inflight.current?.abort();
+      inflight.current = controller;
+    }
 
     // The server action runs on the server; we just await its (plain data) answer.
     startTransition(async () => {
       let answer: ClassifyOutcome;
       try {
-        answer = await classifyMessage(text, explicit);
+        answer = await classifyMessage(text, explicit, shownAction.current, controller?.signal);
       } catch {
         answer = NETWORK_ERROR;
       }
@@ -136,6 +159,7 @@ export function Chat() {
         shownResult.current = answer.ok ? answer.result : null;
       }
       shownText.current = text;
+      shownAction.current = answer.ok ? (answer.result.action ?? undefined) : undefined;
       setOutcome(answer);
       setOpen(true);
     });
@@ -144,6 +168,8 @@ export function Chat() {
   function dismiss() {
     clearTimeout(timer.current);
     latestId.current++; // anything still in flight is now ignored
+    inflight.current?.abort();
+    shownAction.current = undefined;
     lastText.current = "";
     wantFocus.current = false;
     shownResult.current = lastResult.current = null;
@@ -159,6 +185,7 @@ export function Chat() {
     clearTimeout(timer.current);
     // Whatever is still in flight was asked about older text, so its answer must not be shown.
     latestId.current++;
+    inflight.current?.abort();
     lastText.current = "";
     // A Return pressed for the older text no longer applies to this text.
     wantFocus.current = false;
@@ -250,11 +277,19 @@ export function Chat() {
 
   const host: ActionHost = {
     onConfirm({ title, values }) {
-      if (outcome?.ok && outcome.result.action) {
-        const summary = summarize(outcome.result.action, values);
-        setDone(`${title}${summary ? `: ${summary}` : ""}. Demo only, nothing was submitted.`);
-      }
-      dismiss();
+      const finish = () => {
+        setConfirming(false);
+        if (outcome?.ok && outcome.result.action) {
+          const summary = summarize(outcome.result.action, values);
+          setDone(`${title}${summary ? `: ${summary}` : ""}. Demo only, nothing was submitted.`);
+        }
+        dismiss();
+      };
+      // Swell the card for a moment, then close it. With reduced motion there is no pause.
+      if (confirming) return;
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return finish();
+      setConfirming(true);
+      setTimeout(finish, CONFIRM_MS);
     },
   };
 
@@ -353,6 +388,7 @@ export function Chat() {
           aria-label="Your request"
           data-open={open}
           inert={!open}
+          data-confirming={confirming || undefined}
           className="floating-card absolute inset-x-0 top-full mt-3 max-h-[max(20rem,calc(100dvh-19rem))] overflow-y-auto rounded-[1.75rem] border bg-card text-card-foreground shadow-2xl shadow-black/10"
         >
           <div aria-live="polite" className="py-5">
