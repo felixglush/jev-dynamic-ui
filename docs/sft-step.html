@@ -147,7 +147,7 @@ svg{width:100%;height:auto;display:block}
 
   function stageText(x){
     if(x<=0) return 'Before training. This is the untuned base model. It gives the right blank very little probability and tends to fill it in.';
-    if(x<.25) return 'Early steps. The wrong guesses on the blank fields give a big error, so the model's weights get large nudges.';
+    if(x<.25) return 'Early steps. The wrong guesses on the blank fields give a big error, so the weights get large nudges.';
     if(x<.7) return 'Middle steps. The correct tokens climb. The same rule ("blank unless stated") is learned across thousands of rows, not just this one.';
     if(x<1) return 'Late steps. Errors are small, so the nudges are small too. Loss flattens out.';
     return 'After training. The right answer, including the blanks, now gets almost all of the probability.';
