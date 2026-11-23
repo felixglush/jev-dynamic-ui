@@ -40,21 +40,21 @@
 <p class="sub">A chat UI that picks a prebuilt banking form and fills it in from what the customer types. <a href="https://github.com/felixglush/jev-dynamic-ui">Code on GitHub</a> · <a href="results/">Explore the results</a></p>
 
 <h2>Defaulting to Chatbots</h2>
-<p>It’s so easy, it should feel wrong. Offload the interaction to a simple chatbot box. Let users type questions and get text responses back from the AI. I think this is a trap for certain workflows. The user ends up without the normal guidance offered by traditional user interfaces and feels lost. For exploratory tasks where the entire point is creating or figuring out their workflow, or when the user doesn’t want to think through the task end-to-end, this is fine. But when the user knows what to do and the task is narrow, this chatbot design pattern is friction.</p>
-<p>There is a proliferation of many apps that have chat as their main component. Some apps even drop building their own user interfaces and adopt native messaging apps, like <a href="https://instinct.com/">Instinct</a>. One of the topics I like to think about is the role of traditional user interfaces in the age of the chatbot.</p>
+<p>It’s so easy, it should feel wrong. Offload the interaction to a simple chatbot box. Let users type questions and get text responses back from the AI. I think this is a trap for certain workflows. The user ends up without the guidance offered by traditional user interfaces and feels lost. For exploratory tasks where the entire point is creating or figuring out their workflow, or when the user doesn’t need to think through the task end-to-end, this is fine. But when the user knows what to do and the task is narrow, this chatbot design pattern is friction.</p>
+<p>Many apps now have chat as their main component. Some apps even drop building their own user interfaces and adopt native messaging apps, like <a href="https://instinct.com/">Instinct</a>. One of the topics I like to think about is the role of traditional user interfaces in the age of the chatbot.</p>
 
 <h2>Rethinking Interaction</h2>
 <p>This article explores an alternative: what if the right UI materialized in front of the user when they type (or speak) their intent? Linear does this through keyboard shortcuts. Making new user stories, assigning them to people, setting estimates, and putting stories into the right sprint is just a few keyboard taps.</p>
-<p>Inspired by these ideas, this article takes this approach: for tasks that have well-known existing patterns of interaction, a chat interface that can surface the right UI to guide the user through their task, solves the issue of remembering and navigating a multi-screen, multi-dropdown user interface. Executed well, the experience can be fluid.</p>
-<p><b>Principle 1:</b> when selecting a design approach, think about how it makes the user feel. Can they efficiently get the right context and complete their task with minimal friction?</p>
+<p>Inspired by these ideas, this article takes the following approach. For tasks with well-known patterns of interaction, a chat interface can surface the right UI and guide the user through the task, so they don’t have to remember and navigate a multi-screen, multi-dropdown interface. Executed well, the experience can be fluid.</p>
+<p><b>Principle:</b> when selecting a design approach, think about how it makes the user feel. Can they efficiently get the right context and complete their task with minimal friction?</p>
 
 <h2>The Setup</h2>
-<p>Given where I work, banking is top of mind. This is how I think banking apps could look like: a chat UI that picks a prebuilt form and fills it in from what the client types.</p>
+<p>Given where I work, banking is top of mind. This is how I think banking apps could look: a chat UI that picks a prebuilt form and fills it in from what the client types.</p>
 <video controls preload="metadata" poster="images/app-demo-poster.png" src="app-demo.mp4"></video>
 <video controls preload="metadata" poster="images/jev-explainer-poster.png" src="jev-explainer.mp4"></video>
 
 <h3>Define the action space</h3>
-<p>Extract what you typically find in a banking app into intent-based actions. The last two columns denote which parts of the action form are filled out by which model. Jev is good at picking out the right option from a set of options, but can’t generate text so freeform entities can’t easily be picked out and filled out, unless you tokenize the input and apply Jev to each &lt;token, form field&gt; pair. This smells awkward and certain cases where an entity spans multiple tokens might break this. Meanwhile, billion and trillion parameter language models are perceptibly slow and expensive for single phrase data extraction. I had previously read about <a href="https://www.liquid.ai/blog/lfm2-5-350m-no-size-left-behind">Liquid Foundation Models</a> and how easy they are to tune for narrow domain specific tasks, like data extraction. They are very fast and well-suited for edge deployments. More on this later.</p>
+<p>Extract what you typically find in a banking app into intent-based actions. The last two columns denote which parts of the action form are filled out by which model. Jev is good at picking out the right option from a set of options, but can’t generate text so freeform entities can’t easily be picked out and filled out, unless you tokenize the input and apply Jev to each &lt;token, form field&gt; pair. This feels awkward, and it could break when an entity spans several tokens. Meanwhile, billion- and trillion-parameter models are noticeably slow and expensive for extracting data from a single phrase. I had previously read about <a href="https://www.liquid.ai/blog/lfm2-5-350m-no-size-left-behind">Liquid Foundation Models</a> and how easy they are to tune for narrow, domain-specific tasks, like data extraction. They are very fast and well-suited for edge deployments. More on this later.</p>
 <div class="scroll"><table>
 <thead><tr><th>Action</th><th>What it does</th><th>Free-text fields (small fine-tuned model)</th><th>Choice fields (Jev)</th></tr></thead>
 <tbody>
@@ -72,9 +72,19 @@
 <tr><td><code>view_account</code></td><td>Show a balance or transactions</td><td></td><td>account, view</td></tr>
 <tr><td><code>update_contact_info</code></td><td>Change phone, email or address</td><td>new_email, new_phone</td><td>contact_type</td></tr>
 </tbody></table></div>
+<p>In a real system, some of these fields would be matched to internally stored data, such as existing contact lists.</p>
+
+<h3>Northstar Metrics</h3>
+<p>Now that I knew what the goal workflow was, I needed synthetic training and evaluation data. But good training data is linked to what good results look like:</p>
+<ol>
+<li>The right action needs to be picked, consistently.</li>
+<li>The user’s request needs to be translated correctly into the form.</li>
+<li>There should be messy nuance to how the requests are made.</li>
+</ol>
+<p>Additionally, the user is typing and just wants to get a small task done, so it should be fast, under 300ms to show the form and fill out the fields. Since the model is called after every word, it should be cheap to run.</p>
 
 <h3>Generate training data with a strong model</h3>
-<p>I used Opus 5.5 to generate 1,853 command phrases for this action space to mimic people using the app. This dataset let me run the simplest step of model post-training: using a closed-weight model’s outputs to run supervised fine tuning on a smaller open-weight student model. Supervised fine tuning is when a student model learns to mimic a larger model’s output, such as how it translates English into a constrained JSON object per action form. Example:</p>
+<p>I used Opus 5.5 to generate 1,853 command phrases for this action space to mimic people using the app. This dataset let me run the simplest step of model post-training: using a closed-weight model’s outputs to run supervised fine-tuning on a smaller open-weight student model. Supervised fine-tuning is when a student model learns to mimic a larger model’s output, such as how it translates English into a constrained JSON object per action form. Example:</p>
 <pre><code>{
   "messages": [
     {"role": "system",    "content": "Extract these fields from the user's banking message: recipient, recipient_email, amount, date. Only copy information. Never invent names, emails, phone numbers or dates."},
@@ -88,7 +98,7 @@
     "present": ["recipient_email", "amount"]
   }
 }</code></pre>
-<p>The data was split into train, validation, and test sets. The baseline untrained Liquid FM 350m parameter model correctly filled out the JSON ~20% of the time. The main failure mode was hallucinating a value for a field when none was stated.</p>
+<p>The data was split into train, validation, and test sets. The untuned baseline, the 350M-parameter Liquid model, filled out the JSON correctly about 20% of the time. The main failure mode was hallucinating a value for a field when none was stated.</p>
 
 <p>Here is one such example going through training. Drag the slider to watch the model's confidence in the right answer rise and the loss fall. The numbers are illustrative, not from a real run.</p>
 <iframe id="sft-step" src="sft-step.html" title="One SFT training example: prediction and loss as training progresses" loading="lazy" style="width:100%;height:1150px;border:1px solid var(--line);border-radius:8px;margin:16px 0"></iframe>
@@ -102,14 +112,14 @@ window.addEventListener('message', function (e) {
 </script>
 
 <h3>Vibe code an annotation app and label the data</h3>
-<p>Generating UIs is easy now and my use case is pretty simple. I just want to see the English command, the model output colour coded to which model generated the specific field, and the expected answers. So I got Claude to generate an annotation app for me over the 1,853 examples it just made. It closely matches the UI of the actual application, which makes this process reflective of what the user would experience.</p>
-<p>I then spent 30 minutes going through 62 cases — just enough to identify key problems and decide what the answer should have been. This process is called “open-coding”, a technique from qualitative research methods. It involves writing short descriptive labels about the model outputs to let labels inductively emerge from the data. This effort also generated 62 golden answers. I let Claude categorize the notes into a set of labels (“axial-coding”) and then freely review and modify the rest of the dataset’s golden answers conditioned on my labelling feedback. In a real project, I would give axial-coding more review time.</p>
+<p>Generating UIs is easy now and my use case is pretty simple. I just want to see the English command, the model’s output colour-coded by which model filled each field, and the expected answers. So I got Claude to generate an annotation app for me over the 1,853 examples it just made. It closely matches the UI of the actual application, so reviewing examples there feels like using the real product.</p>
+<p>I then spent 30 minutes going through 62 cases — just enough to identify key problems and decide what the answer should have been. This process is called “open-coding”, a technique from qualitative research methods. It involves writing short descriptive labels about the model outputs to let labels inductively emerge from the data. This effort also generated 62 golden answers. I let Claude categorize the notes into a set of labels (“axial-coding”) and then freely review and modify the rest of the dataset’s golden answers conditioned on my labelling feedback. In a work project, I would give axial-coding more review time.</p>
 <img src="images/annotation-app.png" alt="The annotation app: a message, the model's output colour coded by which model produced each field, and the expected answer" width="1100" height="1222">
 <p>Some examples of errors:</p>
 <ul>
-<li>Issues with spelled out dollar amounts (as would happen in future audio transcription), dates that don’t refer to the date on the form, names incorrectly pulled from emails (“abbey.jo@gmail.com”), names used for email field instead of name, incapable of handling edits (“$50, no wait make it $60”).</li>
+<li>Issues with spelled-out dollar amounts (as would happen in future audio transcription), dates that don’t refer to the date on the form, names incorrectly pulled from emails (“abbey.jo@gmail.com”), names put in the email field instead of the name field, and corrections like “$50, no wait make it $60” that the model can’t handle.</li>
 <li><b>Fabrication:</b> the untuned LFM2.5-350M filled 84.5% of fields that should have been blank on the test set. After fine-tuning, it fabricated just 2 values on the test set, and fully correct forms rose from 24.2% to 96.9%.</li>
-<li><b>Train-serving skew:</b> The model learned to write its answers in the same order as the fields on the form, but the serving tool forced an alphabetical order, so the model started inventing values for fields it hadn't yet read during generation. I fixed this by training on answers with randomly shuffled field order, a kind of data augmentation.</li>
+<li><b>Train-serving skew:</b> The model learned to write its answers in the same order as the fields on the form, but the serving tool forced an alphabetical order, so the model had to write a field such as the email before it had written the name it depended on, and started inventing values. I fixed this with SFT on answers with randomly shuffled field order, a kind of data augmentation.</li>
 </ul>
 
 <h2>Results</h2>
@@ -123,8 +133,10 @@ window.addEventListener('message', function (e) {
 
 <h3>Per-field precision and recall</h3>
 <p>I also scored each form field on its own.</p>
-<p><b>Precision</b>: when the model fills a field in, how often is the value right?</p>
-<p><b>Recall</b>: when the <i>user message</i> states a value, how often does the model find it?</p>
+<ul>
+<li><b>Precision</b>: when the model fills a field in, how often is the value right?</li>
+<li><b>Recall</b>: when the <i>user message</i> states a value, how often does the model find it?</li>
+</ul>
 <p>A wrong value counts against both, and fields that are correctly left blank are not counted.</p>
 <div class="scroll"><table>
 <thead><tr><th>Model</th><th class="n">Precision (val)</th><th class="n">Recall (val)</th><th class="n">Precision (test)</th><th class="n">Recall (test)</th></tr></thead>
@@ -137,7 +149,7 @@ window.addEventListener('message', function (e) {
 
 <h3>Picking the action</h3>
 <p>Jev’s choice of action on the 459 test messages: 431 correct (93.9%). Most actions were found 93 to 100% of the time. The weak one is <code>pay_bill</code> (76% recall): 6 of its 42 messages went to <code>send_etransfer</code> and 4 to “none”.</p>
-<p>For each action, <b>recall</b> is how many of its messages Jev sent to it, and <b>precision</b> is how many of the messages Jev sent to it really belonged there.</p>
+<p><b>Recall</b> is the share of an action's messages that Jev sent to it. <b>Precision</b> is the share of messages Jev sent to it that really belonged there.</p>
 <div class="scroll"><table>
 <thead><tr><th>Action</th><th class="n">Test messages</th><th class="n">Precision</th><th class="n">Recall</th></tr></thead>
 <tbody>
@@ -155,21 +167,29 @@ window.addEventListener('message', function (e) {
 <tr><td><code>add_payee</code></td><td class="n">17</td><td class="n">100%</td><td class="n">94.1%</td></tr>
 </tbody></table></div>
 
+<p>Subset analysis is my favourite type of analysis because it’s the most actionable. You can dive deeper to investigate how specific scenarios are struggling and add examples back to the training set, or to Jev’s prompt. For example, here’s what’s going on with <code>pay_bill</code>. The <code>pay_bill</code> messages that went to <code>send_etransfer</code> are mostly commands that name a company but never say “bill”: “<i>pay Bell $89</i>” or “<i>pay Shaw $120 every month</i>”. Messages that said “bill” (for example “pay my Telus bill $80”) almost always went to <code>pay_bill</code> correctly. How can this be fixed? Perhaps Jev is missing some guidance around what is a company (<code>pay_bill</code>) and what is a person (<code>send_etransfer</code>). This could be added to the Jev prompt and re-evaluated. Alternatively, the real world app would have bill payees and e-transfer recipients in the database, so user-stated entities can be matched to the database contents and the likely action chosen from how well the message matches.</p>
+
 <h2>Why LFM2.5-350M</h2>
 <ol>
-<li>It's a small model (about 400 MB). Its architecture is tuned for edge deployments, so it is free* to run (caveat: unless your company have &gt;$10m in revenue according to LFM license). This matters because the model runs after each word. A larger generative model would be slower and expensive by way of either renting GPUs or token invoices.</li>
+<li>It's a small model (about 400 MB). Its architecture is built for edge devices, so it is cheap to run (free*, with a caveat: unless your company has more than $10M in revenue, according to the LFM license). This matters because the model runs on every word typed, and a larger model would be slower and more expensive, whether through GPU rental or token fees.</li>
 <li>It's quick: ~200ms per response on my MacBook's CPU. Since it runs on every word, keeping this latency low is also key.</li>
 </ol>
-<p>It’s interesting to see that such a small model is able to output good structured JSON. Constrained decoding is usually forced to create correct output shapes, but not necessarily correct output values.</p>
-<p>Typically, small models aren’t reliable at creating the right value. Case in point: the untuned 350M model got only 24% of test forms fully right and filled in 84.5% of the fields that should have been blank, so only about half of what it wrote was right. Fine-tuning worked because it taught the core rule: leave a field blank unless the message states it. The untuned model has the language skills to create some plausible looking answers but not the rule, so it filled every field that should be blank.</p>
+<p>It’s interesting to see that such a small model is able to output valid and correct structured JSON. Constrained decoding usually forces the output into a valid shape, but it does not make the values correct.</p>
+<p>Typically, small models aren’t reliable at creating the right value. Case in point: the untuned 350M model got only 24% of test forms fully right and filled in 84.5% of the fields that should have been blank. Fine-tuning worked because it taught the core rule: leave a field blank unless the message states it. The untuned model has the language skills to create some plausible-looking answers but not the domain-specific rule, so it filled in nearly every field that should have been blank.</p>
 
 <h2>Learnings</h2>
-<ol>
-<li>Let the model label first</li>
-<li>Look at the data yourself to get a deeper sense of what’s happening</li>
-<li>Make your own evaluations app</li>
-<li>Design with the user in mind</li>
-</ol>
+<p><b>1. Let the model label first</b></p>
+<p>Given a good description of the task, a strong model can bootstrap the messages and draft answers. Your job becomes checking the output and steering it where needed, which is fast.</p>
+<p><b>2. Look at the data yourself</b></p>
+<p>This is high ROI. Thirty minutes surfaced key problems and developed a deeper intuition for how the system works. Writing a short note on each case, then grouping the notes turned the data into rules I could apply to the rest of the dataset. Each error also points to missing subsets of training data, which you can describe to Claude to generate more examples.</p>
+<p><b>3. Make your own evaluation app when…</b></p>
+<ul>
+<li><a href="https://www.ode.com/engineering/there-is-no-such-thing-as-a-backend-demo#why-now-custom-uis-are-cheap-to-build:~:text=no%20longer%20locked%20into%20a%20generic%20tool%E2%80%99s%20opinions%20about%20layout%2C%20emphasis%2C%20or%20which%20metrics%20deserve%20the%20spotlight">you don’t want to be locked into a generic tool’s opinions about layout, emphasis, or which metrics deserve the spotlight</a></li>
+<li>you want to communicate the experience in the same way as the user would see it</li>
+<li>you want to highlight specific components of the output in custom ways to more effectively diagnose sub-system errors (for example, Jev versus the fine-tuned LFM).</li>
+</ul>
+<p><b>4. A small model can learn a narrow rule well</b></p>
+<p>LFM worked great (fast, cheap, correct) for this task.</p>
 </main>
 </body>
 </html>
