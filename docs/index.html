@@ -90,6 +90,17 @@
 }</code></pre>
 <p>The data was split into train, validation, and test sets. The baseline untrained Liquid FM 350m parameter model correctly filled out the JSON ~20% of the time. The main failure mode was hallucinating a value for a field when none was stated.</p>
 
+<p>Here is one such example going through training. Drag the slider to watch the model's confidence in the right answer rise and the loss fall. The numbers are illustrative, not from a real run.</p>
+<iframe id="sft-step" src="sft-step.html" title="One SFT training example: prediction and loss as training progresses" loading="lazy" style="width:100%;height:1150px;border:1px solid var(--line);border-radius:8px;margin:16px 0"></iframe>
+<script>
+window.addEventListener('message', function (e) {
+  var f = document.getElementById('sft-step');
+  if (f && e.source === f.contentWindow && e.data && typeof e.data.sftStepHeight === 'number') {
+    f.style.height = (e.data.sftStepHeight + 4) + 'px';
+  }
+});
+</script>
+
 <h3>Vibe code an annotation app and label the data</h3>
 <p>Generating UIs is easy now and my use case is pretty simple. I just want to see the English command, the model output colour coded to which model generated the specific field, and the expected answers. So I got Claude to generate an annotation app for me over the 1,853 examples it just made. It closely matches the UI of the actual application, which makes this process reflective of what the user would experience.</p>
 <p>I then spent 30 minutes going through 62 cases — just enough to identify key problems and decide what the answer should have been. This process is called “open-coding”, a technique from qualitative research methods. It involves writing short descriptive labels about the model outputs to let labels inductively emerge from the data. This effort also generated 62 golden answers. I let Claude categorize the notes into a set of labels (“axial-coding”) and then freely review and modify the rest of the dataset’s golden answers conditioned on my labelling feedback. In a real project, I would give axial-coding more review time.</p>
