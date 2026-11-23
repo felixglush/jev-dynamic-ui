@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>One SFT training example</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one narrow column; example on top, probability + loss in the middle below. Cool slate ground, teal for "learned", rose for loss. */
+:root{
+  --bg:#f3f6f8; --surface:#ffffff; --fg:#14202b; --muted:#5b6b79; --line:#d5dee5;
+  --learn:#0f8b8d; --loss:#c2415d; --frozen:#7b8794; --chip:#e8eef2;
+  --f-display:"Space Grotesk",system-ui,sans-serif; --f-body:"Inter",system-ui,sans-serif; --f-mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f161c; --surface:#17212a; --fg:#e6edf2; --muted:#93a3b1; --line:#2a3946;
+  --learn:#3cc4c6; --loss:#f0708b; --frozen:#8a98a6; --chip:#202c36; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f161c; --surface:#17212a; --fg:#e6edf2; --muted:#93a3b1; --line:#2a3946;
+  --learn:#3cc4c6; --loss:#f0708b; --frozen:#8a98a6; --chip:#202c36; color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.55;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 56px}
+.wrap{max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+h1{font-family:var(--f-display);font-size:clamp(26px,5vw,36px);line-height:1.1;margin:0;text-wrap:balance}
+h2{font-family:var(--f-display);font-size:18px;margin:0 0 4px}
+p{margin:0}
+.sub{color:var(--muted);max-width:62ch}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.label{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+code,.mono{font-family:var(--f-mono);font-size:13px}
+.prompt{font-family:var(--f-mono);font-size:13px;background:var(--chip);border-radius:6px;padding:10px 12px;overflow-wrap:anywhere}
+.toks{display:flex;flex-wrap:wrap;gap:6px}
+.tok{font-family:var(--f-mono);font-size:13px;border:1px solid var(--line);border-radius:6px;padding:4px 8px;background:var(--chip);color:var(--fg);cursor:default;display:flex;flex-direction:column;gap:2px;align-items:flex-start;text-align:left}
+button.tok{cursor:pointer}
+.tok small{font-size:11px;color:var(--muted)}
+.tok[aria-pressed="true"]{outline:2px solid var(--fg);outline-offset:1px}
+.tok.s{opacity:.85}
+.controls{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.btn{font:inherit;font-weight:600;font-size:14px;border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:6px;padding:7px 14px;cursor:pointer}
+.btn:focus-visible,.tok:focus-visible,input[type=range]:focus-visible{outline:2px solid var(--learn);outline-offset:2px}
+input[type=range]{flex:1;min-width:160px;accent-color:var(--learn)}
+.stage{font-size:14px;color:var(--fg);min-height:3.2em}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+@media (max-width:700px){.two{grid-template-columns:1fr}}
+.bars{display:flex;flex-direction:column;gap:8px}
+.bar{display:grid;grid-template-columns:minmax(0,150px) 1fr 52px;gap:8px;align-items:center;font-size:13px}
+.bar .name{font-family:var(--f-mono);font-size:12px;overflow-wrap:anywhere}
+.track{height:14px;background:var(--chip);border-radius:3px;overflow:hidden}
+.fill{height:100%;transition:width .12s}
+.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums;text-align:right}
+.big{font-family:var(--f-display);font-size:34px;line-height:1;font-variant-numeric:tabular-nums;color:var(--loss)}
+.eq{font-family:var(--f-mono);font-size:13px;background:var(--chip);border-radius:6px;padding:8px 12px;overflow-x:auto;white-space:nowrap}
+svg{width:100%;height:auto;display:block}
+.mats{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end}
+.mat{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.mat .cap{font-size:12px;color:var(--muted);max-width:170px}
+.grid{display:grid;gap:2px}
+.cell{width:34px;height:30px;display:flex;align-items:center;justify-content:center;font-family:var(--f-mono);font-size:11px;border-radius:3px;font-variant-numeric:tabular-nums}
+@media (max-width:480px){.cell{width:28px;height:26px;font-size:10px}}
+.op{font-family:var(--f-display);font-size:22px;color:var(--muted);padding-bottom:30px}
+.scroll{overflow-x:auto;padding-bottom:4px}
+.note{font-size:13px;color:var(--muted)}
+.tag-frozen{color:var(--frozen)}
+.tag-learn{color:var(--learn);font-weight:600}
+</style>
+
+<body><div class="wrap">
+
+  <section class="card" aria-labelledby="ex">
+    <h2 id="ex">1. The example</h2>
+    <div>
+      <div class="label">Prompt (the model reads this, no loss counted)</div>
+      <div class="prompt">Extract these fields from the user's banking message: recipient, recipient_email, amount, date. Only copy information. Never invent names, emails, phone numbers or dates.<br><b>User:</b> transfer $300 to priya.k@example.com</div>
+    </div>
+    <div>
+      <div class="label">Correct answer (loss is counted on these tokens only). Click a value to inspect it.</div>
+      <div class="toks" id="toks" role="group" aria-label="Answer tokens"></div>
+    </div>
+    <p class="note">The message names no one and gives no date, so those fields must be blank. That is the rule the untuned model has not learned.</p>
+  </section>
+
+  <section class="card" aria-labelledby="ctl">
+    <h2 id="ctl">Training progress</h2>
+    <div class="controls">
+      <button class="btn" id="play" type="button">Play</button>
+      <button class="btn" id="reset" type="button">Reset</button>
+      <label for="slider" class="label" style="white-space:nowrap">Before</label>
+      <input id="slider" type="range" min="0" max="100" value="0" aria-label="Training progress">
+      <span class="label" style="white-space:nowrap">After</span>
+    </div>
+    <p class="stage" id="stage" aria-live="polite"></p>
+  </section>
+
+  <div class="two">
+    <section class="card" aria-labelledby="pr">
+      <h2 id="pr">2. Prediction at the selected token</h2>
+      <div class="label" id="selLabel"></div>
+      <div class="bars" id="bars"></div>
+      <div class="eq" id="gradline"></div>
+      <p class="note">The model scores every possible next token. Training pushes up the score of the correct one and pushes down the wrong ones, in proportion to how wrong they are (prediction minus target).</p>
+    </section>
+
+    <section class="card" aria-labelledby="ls">
+      <h2 id="ls">3. Loss</h2>
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <div class="big" id="lossBig">0.00</div>
+        <div class="note">average over all answer tokens</div>
+      </div>
+      <div class="eq" id="lossline"></div>
+      <svg id="curve" viewBox="0 0 320 150" role="img" aria-label="Loss falling as training progresses"></svg>
+      <p class="note">Loss for a token is −ln(probability of the correct token). A token at 4% costs 3.2; at 97% it costs 0.03.</p>
+    </section>
+  </div>
+
+
+  <p class="note">These probabilities are illustrative, drawn to show the mechanics. They are not read from a real run. In the real runs the loss on the answer fell to about 0.01 in the catalog-order runs.</p>
+</div>
+
+<script>
+(function(){
+  // illustrative numbers, see the note at the bottom of the page
+  var TOKS=[
+    {t:'{"recipient":"',k:'s',p0:.96,p1:.998},
+    {t:'""',k:'v',field:'recipient',truth:'"" (blank)',wrong:'"Priya"',p0:.10,p1:.985,why:'No name in the message, so blank.'},
+    {t:',"recipient_email":"',k:'s',p0:.95,p1:.998},
+    {t:'priya.k@example.com',k:'v',field:'recipient_email',truth:'priya.k@example.com',wrong:'"alex@example.com"',p0:.72,p1:.99,why:'Stated in the message, so copy it.'},
+    {t:',"amount":',k:'s',p0:.95,p1:.998},
+    {t:'300',k:'v',field:'amount',truth:'300',wrong:'3000',p0:.80,p1:.99,why:'Stated, copy as a number.'},
+    {t:',"date":"',k:'s',p0:.94,p1:.998},
+    {t:'""',k:'v',field:'date',truth:'"" (blank)',wrong:'"2023-10-05"',p0:.04,p1:.97,why:'No date in the message, so blank. The untuned model invents one.'},
+    {t:'"}',k:'s',p0:.95,p1:.998}
+  ];
+  var sel=7, s=0, timer=null;
+  function ease(x){return (1-Math.exp(-5*x))/(1-Math.exp(-5));}
+  function prob(t,x){var e=ease(x);return t.p0+(t.p1-t.p0)*e;}
+  function loss(p){return -Math.log(p);}
+  function meanLoss(x){var a=0;TOKS.forEach(function(t){a+=loss(prob(t,x));});return a/TOKS.length;}
+  function f(n,d){return n.toFixed(d);}
+
+
+  function buildToks(){
+    var box=document.getElementById('toks');box.innerHTML='';
+    TOKS.forEach(function(t,i){
+      var b=document.createElement(t.k==='v'?'button':'div');
+      b.className='tok '+t.k;
+      if(t.k==='v'){b.type='button';b.setAttribute('aria-pressed',String(i===sel));b.onclick=function(){sel=i;render();};}
+      b.innerHTML='<span>'+t.t.replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</span><small data-i="'+i+'"></small>';
+      box.appendChild(b);
+    });
+  }
+
+  function stageText(x){
+    if(x<=0) return 'Before training. This is the untuned base model. It gives the right blank very little probability and tends to fill it in.';
+    if(x<.25) return 'Early steps. The wrong guesses on the blank fields give a big error, so the model's weights get large nudges.';
+    if(x<.7) return 'Middle steps. The correct tokens climb. The same rule ("blank unless stated") is learned across thousands of rows, not just this one.';
+    if(x<1) return 'Late steps. Errors are small, so the nudges are small too. Loss flattens out.';
+    return 'After training. The right answer, including the blanks, now gets almost all of the probability.';
+  }
+
+  function drawCurve(x){
+    var svg=document.getElementById('curve'),w=320,h=150,pl=34,pb=24,pt=8,pr=8,pts=[],max=meanLoss(0);
+    // y axis: top = max loss, bottom = 0
+    for(var i=0;i<=60;i++){var u=i/60;pts.push([pl+u*(w-pl-pr), pt+(1-meanLoss(u)/max)*(h-pt-pb)]);}
+    var d='M'+pts.map(function(p){return f(p[0],1)+','+f(p[1],1);}).join(' L');
+    var cx=pl+x*(w-pl-pr), cy=pt+(1-meanLoss(x)/max)*(h-pt-pb);
+    svg.innerHTML=
+      '<line x1="'+pl+'" y1="'+(h-pb)+'" x2="'+(w-pr)+'" y2="'+(h-pb)+'" stroke="var(--line)"/>'+
+      '<line x1="'+pl+'" y1="'+pt+'" x2="'+pl+'" y2="'+(h-pb)+'" stroke="var(--line)"/>'+
+      '<text x="'+(pl-4)+'" y="'+(pt+8)+'" text-anchor="end" font-size="10" fill="var(--muted)">'+f(max,2)+'</text>'+
+      '<text x="'+(pl-4)+'" y="'+(h-pb)+'" text-anchor="end" font-size="10" fill="var(--muted)">0</text>'+
+      '<text x="'+pl+'" y="'+(h-6)+'" font-size="10" fill="var(--muted)">before</text>'+
+      '<text x="'+(w-pr)+'" y="'+(h-6)+'" text-anchor="end" font-size="10" fill="var(--muted)">after</text>'+
+      '<path d="'+d+'" fill="none" stroke="var(--loss)" stroke-width="2"/>'+
+      '<circle cx="'+f(cx,1)+'" cy="'+f(cy,1)+'" r="5" fill="var(--loss)" stroke="var(--surface)" stroke-width="2"/>';
+  }
+
+  function render(){
+    var x=s/100, t=TOKS[sel];
+    document.getElementById('stage').textContent=stageText(x);
+    // token chips
+    document.querySelectorAll('#toks .tok').forEach(function(el,i){
+      var tk=TOKS[i], p=prob(tk,x);
+      if(tk.k==='v') el.setAttribute('aria-pressed',String(i===sel));
+      var mix=Math.min(1,loss(p)/2)*70;
+      el.style.background='color-mix(in srgb, var(--loss) '+mix+'%, var(--chip))';
+      el.querySelector('small').textContent='p='+f(p,2)+' · loss '+f(loss(p),2);
+    });
+    // bars
+    var p=prob(t,x), q=(1-p)*.8, o=(1-p)*.2;
+    document.getElementById('selLabel').textContent='Field: '+t.field+'. '+t.why;
+    function bar(name,v,col,tag){return '<div class="bar"><div class="name">'+name+'<br><span style="color:var(--muted)">'+tag+'</span></div><div class="track"><div class="fill" style="width:'+(v*100)+'%;background:'+col+'"></div></div><div class="num">'+f(v*100,0)+'%</div></div>';}
+    document.getElementById('bars').innerHTML=
+      bar(t.truth,p,'var(--learn)','correct')+bar(t.wrong,q,'var(--loss)','tempting wrong')+bar('anything else',o,'var(--frozen)','other tokens');
+    document.getElementById('gradline').innerHTML=
+      'push on correct = p − 1 = '+f(p-1,2)+' (raise it)<br>push on wrong = q = '+f(q,2)+' (lower it)';
+    // loss
+    var ml=meanLoss(x), parts=TOKS.map(function(k){return f(loss(prob(k,x)),2);});
+    document.getElementById('lossBig').textContent=f(ml,3);
+    document.getElementById('lossline').textContent='mean of '+TOKS.length+' token losses: ('+parts.join(' + ')+') / '+TOKS.length;
+    drawCurve(x);
+  }
+
+  var slider=document.getElementById('slider');
+  slider.oninput=function(){s=+slider.value;render();};
+  document.getElementById('reset').onclick=function(){stop();s=0;slider.value=0;render();};
+  var playBtn=document.getElementById('play');
+  function stop(){if(timer){clearInterval(timer);timer=null;}playBtn.textContent='Play';}
+  playBtn.onclick=function(){
+    if(timer){stop();return;}
+    if(s>=100){s=0;}
+    playBtn.textContent='Pause';
+    timer=setInterval(function(){s++;slider.value=s;render();if(s>=100)stop();},45);
+  };
+  buildToks();
+  s=0;render();
+  function report(){try{parent.postMessage({sftStepHeight:document.documentElement.scrollHeight},'*');}catch(e){}}
+  if(window.ResizeObserver){new ResizeObserver(report).observe(document.body);}
+  window.addEventListener('load',report);
+})();
+</script>
+
+</body>
+</html>
