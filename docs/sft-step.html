@@ -188,7 +188,7 @@ svg{width:100%;height:auto;display:block}
     document.getElementById('bars').innerHTML=
       bar(t.truth,p,'var(--learn)','correct')+bar(t.wrong,q,'var(--loss)','tempting wrong')+bar('anything else',o,'var(--frozen)','other tokens');
     document.getElementById('gradline').innerHTML=
-      'push on correct = p − 1 = '+f(p-1,2)+' (raise it)<br>push on wrong = p = '+f(q,2)+' (lower it)';
+      'push on correct = p − 1 = '+f(p-1,2)+' (raise it)<br>push on wrong = q = '+f(q,2)+' (lower it)';
     // loss
     var ml=meanLoss(x), parts=TOKS.map(function(k){return f(loss(prob(k,x)),2);});
     document.getElementById('lossBig').textContent=f(ml,3);
