@@ -108,7 +108,7 @@ window.addEventListener('message', function (e) {
 <p>Some examples of errors:</p>
 <ul>
 <li>Issues with spelled out dollar amounts (as would happen in future audio transcription), dates that don’t refer to the date on the form, names incorrectly pulled from emails (“abbey.jo@gmail.com”), names used for email field instead of name, incapable of handling edits (“$50, no wait make it $60”).</li>
-<li><b>Fabrication:</b> the base LFM model filled 89% of fields that should have been blank. After the first LoRA run, that fell to 0.8% (val) and 1.6% (test), and correct matches rose from 23.5% to 95.9%.</li>
+<li><b>Fabrication:</b> the untuned LFM2.5-350M filled 84.5% of fields that should have been blank on the test set. After fine-tuning, it fabricated just 2 values on the test set, and fully correct forms rose from 24.2% to 96.9%.</li>
 <li><b>Train-serving skew:</b> The model learned to write its answers in the same order as the fields on the form, but the serving tool forced an alphabetical order, so the model started inventing values for fields it hadn't yet read during generation. I fixed this by training on answers with randomly shuffled field order, a kind of data augmentation.</li>
 </ul>
 
@@ -160,6 +160,8 @@ window.addEventListener('message', function (e) {
 <li>It's a small model (about 400 MB). Its architecture is tuned for edge deployments, so it is free* to run (caveat: unless your company have &gt;$10m in revenue according to LFM license). This matters because the model runs after each word. A larger generative model would be slower and expensive by way of either renting GPUs or token invoices.</li>
 <li>It's quick: ~200ms per response on my MacBook's CPU. Since it runs on every word, keeping this latency low is also key.</li>
 </ol>
+<p>It’s interesting to see that such a small model is able to output good structured JSON. Constrained decoding is usually forced to create correct output shapes, but not necessarily correct output values.</p>
+<p>Typically, small models aren’t reliable at creating the right value. Case in point: the untuned 350M model got only 24% of test forms fully right and filled in 84.5% of the fields that should have been blank, so only about half of what it wrote was right. Fine-tuning worked because it taught the core rule: leave a field blank unless the message states it. The untuned model has the language skills to create some plausible looking answers but not the rule, so it filled every field that should be blank.</p>
 
 <h2>Learnings</h2>
 <ol>
