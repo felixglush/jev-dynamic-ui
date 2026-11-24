@@ -176,7 +176,7 @@ window.addEventListener('message', function (e) {
 <li>It's quick: ~200ms per response on my MacBook's CPU. Since it runs on every word, keeping this latency low is also key.</li>
 </ol>
 <p>It’s interesting to see that such a small model is able to output valid and correct structured JSON. Constrained decoding usually forces the output into a valid shape, but it does not make the values correct.</p>
-<p>Typically, small models aren’t reliable at creating the right value. Case in point: the untuned 350M model got only 24% of test forms fully right and filled in 84.5% of the fields that should have been blank. Fine-tuning worked because it taught the core rule: leave a field blank unless the message states it. The untuned model has the language skills to create some plausible-looking answers but not the domain-specific rule, so it filled in nearly every field that should have been blank.</p>
+<p>Typically, small models aren’t reliable at creating the right value. Case in point: the untuned 350M model got only 24% of test forms fully right and filled in 84.5% of the fields that should have been blank. Fine-tuning worked because it taught the core rule: leave a field blank unless the message states it. The untuned model has the language skills to create some plausible-looking answers but not the domain-specific rule, so it filled in nearly every field that should have been blank. This narrow rule shows a good example where small language models are a good fit.</p>
 
 <h2>Learnings</h2>
 <p><b>1. Let the model label first</b></p>
