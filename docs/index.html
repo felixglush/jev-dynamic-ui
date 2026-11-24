@@ -77,11 +77,11 @@
 <h3>Northstar Metrics</h3>
 <p>Now that I knew what the goal workflow was, I needed synthetic training and evaluation data. But good training data is linked to what good results look like:</p>
 <ol>
-<li>The right action needs to be picked, consistently.</li>
-<li>The user’s request needs to be translated correctly into the form.</li>
-<li>There should be messy nuance to how the requests are made.</li>
+<li><b>The right action.</b> Jev picks the form the user meant, consistently. I measure the share of test messages sent to the right action.</li>
+<li><b>The right form.</b> The user’s request is translated correctly into the form. I measure whole forms with every field right, and precision and recall for each field.</li>
+<li><b>Messy nuance.</b> People don’t type clean commands: spelled-out amounts (“two grand”), typos, corrections (“$50, no wait make it $60”), negations (“don’t send $50 to Sam”), even text that tries to give the model instructions. I measure this on a separate set of hard cases that I kept out of training.</li>
+<li><b>Fast and cheap.</b> The user is typing and just wants to get a small task done, so it should be fast, under 300ms to show the form and fill out the fields. Since the model is called after every word, it should be cheap to run.</li>
 </ol>
-<p>Additionally, the user is typing and just wants to get a small task done, so it should be fast, under 300ms to show the form and fill out the fields. Since the model is called after every word, it should be cheap to run.</p>
 
 <h3>Generate training data with a strong model</h3>
 <p>I used Opus 5.5 to generate 1,853 command phrases for this action space to mimic people using the app. This dataset let me run the simplest step of model post-training: using a closed-weight model’s outputs to run supervised fine-tuning on a smaller open-weight student model. Supervised fine-tuning is when a student model learns to mimic a larger model’s output, such as how it translates English into a constrained JSON object per action form. Example:</p>
@@ -145,6 +145,7 @@ window.addEventListener('message', function (e) {
 <tr><td>SFT LFM2.5-350M</td><td class="n">99.4%</td><td class="n">99.2%</td><td class="n">98.7%</td><td class="n">98.0%</td></tr>
 </tbody></table></div>
 <p>The untuned model finds most values but fills in nearly everything, so only about half of what it writes is right. Tuning fixed that without losing recall. On the test set the fine-tuned model fabricated 2 values, missed 7 and got 6 wrong, across 642 stated values. The weakest fields were <code>open_account.initial_deposit</code> (83% precision) and <code>dispute_transaction.date</code> (83% recall, only 6 cases).</p>
+<p>I also kept 129 hard cases out of training: typos, spelled-out amounts, corrections, negations and instructions hidden in the message. The fine-tuned model got 125 of them fully right, against 17 for the untuned model. These cases were written separately from the training data.</p>
 <p><a href="results/">Explore the per-field and per-action results interactively.</a></p>
 
 <h3>Picking the action</h3>
@@ -175,7 +176,7 @@ window.addEventListener('message', function (e) {
 <li>It's quick: ~200ms per response on my MacBook's CPU. Since it runs on every word, keeping this latency low is also key.</li>
 </ol>
 <p>It’s interesting to see that such a small model is able to output valid and correct structured JSON. Constrained decoding usually forces the output into a valid shape, but it does not make the values correct.</p>
-<p>Typically, small models aren’t reliable at creating the right value. Case in point: the untuned 350M model got only 24% of test forms fully right and filled in 84.5% of the fields that should have been blank. Fine-tuning worked because it taught the core rule: leave a field blank unless the message states it. The untuned model has the language skills to create some plausible-looking answers but not the domain-specific rule, so it filled in nearly every field that should have been blank.</p>
+<p>Typically, small models aren’t reliable at creating the right value. Case in point: the untuned 350M model got only 24% of test forms fully right and filled in 84.5% of the fields that should have been blank. Fine-tuning worked because it taught the core rule: leave a field blank unless the message states it. The untuned model has the language skills to create some plausible-looking answers but not the domain-specific rule, so it filled in nearly every field that should have been blank. This narrow rule shows a good example where small language models are a good fit.</p>
 
 <h2>Learnings</h2>
 <p><b>1. Let the model label first</b></p>
